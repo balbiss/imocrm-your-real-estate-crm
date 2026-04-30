@@ -9,19 +9,61 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TemplatesRouteImport } from './routes/templates'
+import { Route as RelatoriosRouteImport } from './routes/relatorios'
+import { Route as RedistribuicaoRouteImport } from './routes/redistribuicao'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as LeadsRouteImport } from './routes/leads'
+import { Route as FilasRouteImport } from './routes/filas'
+import { Route as EquipeRouteImport } from './routes/equipe'
 import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
 import { Route as CadastroRouteImport } from './routes/cadastro'
 import { Route as IndexRouteImport } from './routes/index'
 
+const TemplatesRoute = TemplatesRouteImport.update({
+  id: '/templates',
+  path: '/templates',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RelatoriosRoute = RelatoriosRouteImport.update({
+  id: '/relatorios',
+  path: '/relatorios',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RedistribuicaoRoute = RedistribuicaoRouteImport.update({
+  id: '/redistribuicao',
+  path: '/redistribuicao',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LeadsRoute = LeadsRouteImport.update({
+  id: '/leads',
+  path: '/leads',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FilasRoute = FilasRouteImport.update({
+  id: '/filas',
+  path: '/filas',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EquipeRoute = EquipeRouteImport.update({
+  id: '/equipe',
+  path: '/equipe',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ConfiguracoesRoute = ConfiguracoesRouteImport.update({
+  id: '/configuracoes',
+  path: '/configuracoes',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CadastroRoute = CadastroRouteImport.update({
@@ -38,39 +80,122 @@ const IndexRoute = IndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/cadastro': typeof CadastroRoute
+  '/configuracoes': typeof ConfiguracoesRoute
   '/dashboard': typeof DashboardRoute
+  '/equipe': typeof EquipeRoute
+  '/filas': typeof FilasRoute
+  '/leads': typeof LeadsRoute
   '/login': typeof LoginRoute
+  '/redistribuicao': typeof RedistribuicaoRoute
+  '/relatorios': typeof RelatoriosRoute
+  '/templates': typeof TemplatesRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/cadastro': typeof CadastroRoute
+  '/configuracoes': typeof ConfiguracoesRoute
   '/dashboard': typeof DashboardRoute
+  '/equipe': typeof EquipeRoute
+  '/filas': typeof FilasRoute
+  '/leads': typeof LeadsRoute
   '/login': typeof LoginRoute
+  '/redistribuicao': typeof RedistribuicaoRoute
+  '/relatorios': typeof RelatoriosRoute
+  '/templates': typeof TemplatesRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/cadastro': typeof CadastroRoute
+  '/configuracoes': typeof ConfiguracoesRoute
   '/dashboard': typeof DashboardRoute
+  '/equipe': typeof EquipeRoute
+  '/filas': typeof FilasRoute
+  '/leads': typeof LeadsRoute
   '/login': typeof LoginRoute
+  '/redistribuicao': typeof RedistribuicaoRoute
+  '/relatorios': typeof RelatoriosRoute
+  '/templates': typeof TemplatesRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/cadastro' | '/dashboard' | '/login'
+  fullPaths:
+    | '/'
+    | '/cadastro'
+    | '/configuracoes'
+    | '/dashboard'
+    | '/equipe'
+    | '/filas'
+    | '/leads'
+    | '/login'
+    | '/redistribuicao'
+    | '/relatorios'
+    | '/templates'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/cadastro' | '/dashboard' | '/login'
-  id: '__root__' | '/' | '/cadastro' | '/dashboard' | '/login'
+  to:
+    | '/'
+    | '/cadastro'
+    | '/configuracoes'
+    | '/dashboard'
+    | '/equipe'
+    | '/filas'
+    | '/leads'
+    | '/login'
+    | '/redistribuicao'
+    | '/relatorios'
+    | '/templates'
+  id:
+    | '__root__'
+    | '/'
+    | '/cadastro'
+    | '/configuracoes'
+    | '/dashboard'
+    | '/equipe'
+    | '/filas'
+    | '/leads'
+    | '/login'
+    | '/redistribuicao'
+    | '/relatorios'
+    | '/templates'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CadastroRoute: typeof CadastroRoute
+  ConfiguracoesRoute: typeof ConfiguracoesRoute
   DashboardRoute: typeof DashboardRoute
+  EquipeRoute: typeof EquipeRoute
+  FilasRoute: typeof FilasRoute
+  LeadsRoute: typeof LeadsRoute
   LoginRoute: typeof LoginRoute
+  RedistribuicaoRoute: typeof RedistribuicaoRoute
+  RelatoriosRoute: typeof RelatoriosRoute
+  TemplatesRoute: typeof TemplatesRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/templates': {
+      id: '/templates'
+      path: '/templates'
+      fullPath: '/templates'
+      preLoaderRoute: typeof TemplatesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/relatorios': {
+      id: '/relatorios'
+      path: '/relatorios'
+      fullPath: '/relatorios'
+      preLoaderRoute: typeof RelatoriosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/redistribuicao': {
+      id: '/redistribuicao'
+      path: '/redistribuicao'
+      fullPath: '/redistribuicao'
+      preLoaderRoute: typeof RedistribuicaoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
@@ -78,11 +203,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/leads': {
+      id: '/leads'
+      path: '/leads'
+      fullPath: '/leads'
+      preLoaderRoute: typeof LeadsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/filas': {
+      id: '/filas'
+      path: '/filas'
+      fullPath: '/filas'
+      preLoaderRoute: typeof FilasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/equipe': {
+      id: '/equipe'
+      path: '/equipe'
+      fullPath: '/equipe'
+      preLoaderRoute: typeof EquipeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/dashboard': {
       id: '/dashboard'
       path: '/dashboard'
       fullPath: '/dashboard'
       preLoaderRoute: typeof DashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/configuracoes': {
+      id: '/configuracoes'
+      path: '/configuracoes'
+      fullPath: '/configuracoes'
+      preLoaderRoute: typeof ConfiguracoesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/cadastro': {
@@ -105,8 +258,15 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CadastroRoute: CadastroRoute,
+  ConfiguracoesRoute: ConfiguracoesRoute,
   DashboardRoute: DashboardRoute,
+  EquipeRoute: EquipeRoute,
+  FilasRoute: FilasRoute,
+  LeadsRoute: LeadsRoute,
   LoginRoute: LoginRoute,
+  RedistribuicaoRoute: RedistribuicaoRoute,
+  RelatoriosRoute: RelatoriosRoute,
+  TemplatesRoute: TemplatesRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
