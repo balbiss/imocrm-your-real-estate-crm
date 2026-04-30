@@ -14,7 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      imobiliarias: {
+        Row: {
+          cnpj: string | null
+          created_at: string
+          email: string
+          id: string
+          nome: string
+          owner_id: string
+          telefone: string | null
+          updated_at: string
+        }
+        Insert: {
+          cnpj?: string | null
+          created_at?: string
+          email: string
+          id?: string
+          nome: string
+          owner_id: string
+          telefone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          cnpj?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          nome?: string
+          owner_id?: string
+          telefone?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
