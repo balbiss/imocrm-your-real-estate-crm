@@ -1,268 +1,243 @@
 import { createFileRoute } from "@tanstack/react-router";
-import {
-  Users,
-  Clock,
-  AlertCircle,
-  TrendingUp,
-  UserPlus,
-  Phone,
-  CheckCircle2,
-  Home as HomeIcon,
-  RefreshCw,
-} from "lucide-react";
 import { MainLayout } from "@/components/layout/MainLayout";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { 
+  Users, 
+  MessageSquare, 
+  TrendingUp, 
+  Clock, 
+  ChevronRight,
+  PlusCircle,
+  Phone,
+  BarChart3,
+  CalendarDays,
+  ArrowUpRight,
+  Zap
+} from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { formatDistanceToNow } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { useAuth } from "@/context/AuthContext";
+import { Loader2 } from "lucide-react";
+
 
 export const Route = createFileRoute("/dashboard")({
-  head: () => ({ meta: [{ title: "Dashboard — ImoCRM" }] }),
-  component: () => (
-    <MainLayout>
-      <DashboardContent />
-    </MainLayout>
-  ),
+  head: () => ({ meta: [{ title: "Dashboard | CRM" }] }),
+  component: DashboardPage,
 });
 
-const kpis = [
-  {
-    label: "Total de Leads",
-    value: 47,
-    icon: Users,
-    color: "#3b82f6",
-    bg: "#dbeafe",
-    sub: "+5 esta semana",
-    subColor: "#10b981",
-  },
-  {
-    label: "Aguardando Follow-up",
-    value: 8,
-    icon: Clock,
-    color: "#f59e0b",
-    bg: "#fef3c7",
-    sub: "precisam de contato",
-    subColor: "#64748b",
-  },
-  {
-    label: "Fila de Redistribuição",
-    value: 3,
-    icon: AlertCircle,
-    color: "#ef4444",
-    bg: "#fee2e2",
-    sub: "tentativas esgotadas",
-    subColor: "#64748b",
-  },
-  {
-    label: "Fechados no mês",
-    value: 12,
-    icon: TrendingUp,
-    color: "#10b981",
-    bg: "#d1fae5",
-    sub: "conversões",
-    subColor: "#64748b",
-  },
-];
+function DashboardPage() {
+  const { user } = useAuth();
 
-const funil = [
-  { etapa: "Novo", valor: 18, color: "#3b82f6" },
-  { etapa: "Contato", valor: 12, color: "#6366f1" },
-  { etapa: "Visita", valor: 8, color: "#8b5cf6" },
-  { etapa: "Proposta", valor: 6, color: "#f59e0b" },
-  { etapa: "Fechado", valor: 3, color: "#10b981" },
-];
+  const { data: profile } = useQuery({
+    queryKey: ["user-profile-dashboard", user?.id],
+    queryFn: async () => {
+      if (!user) return null;
+      const { data, error } = await supabase.from("perfis").select("imobiliaria_id").eq("id", user.id).single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user,
+  });
 
-const atividades = [
-  {
-    icon: UserPlus,
-    color: "#3b82f6",
-    bg: "#dbeafe",
-    text: "Novo lead recebido — Maria Souza",
-    when: "há 2 minutos",
-  },
-  {
-    icon: Phone,
-    color: "#f59e0b",
-    bg: "#fef3c7",
-    text: "Ana Lima entrou em contato com João Pereira",
-    when: "há 18 minutos",
-  },
-  {
-    icon: HomeIcon,
-    color: "#8b5cf6",
-    bg: "#ede9fe",
-    text: "Visita agendada — Apto Vila Mariana",
-    when: "há 1 hora",
-  },
-  {
-    icon: CheckCircle2,
-    color: "#10b981",
-    bg: "#d1fae5",
-    text: "Negócio fechado por Marcos Santos",
-    when: "há 3 horas",
-  },
-  {
-    icon: RefreshCw,
-    color: "#ef4444",
-    bg: "#fee2e2",
-    text: "Lead enviado para redistribuição",
-    when: "há 5 horas",
-  },
-];
+  const { data: dashboardData, isLoading } = useQuery({
+    queryKey: ["dashboard-summary", profile?.imobiliaria_id],
+    queryFn: async () => {
+      if (!profile?.imobiliaria_id) return null;
 
-const corretores = [
-  { nome: "Ana Lima", leads: 14, fechados: 5, conv: 36, online: true },
-  { nome: "Marcos Santos", leads: 12, fechados: 4, conv: 33, online: true },
-  { nome: "Carla Fonseca", leads: 11, fechados: 2, conv: 18, online: false },
-  { nome: "Bruno Rocha", leads: 10, fechados: 1, conv: 10, online: true },
-];
+      const { data: leads, error: leadsError } = await supabase
+        .from("leads")
+        .select("*, corretor:perfis!corretor_id(nome)")
+        .eq("imobiliaria_id", profile.imobiliaria_id)
+        .order("created_at", { ascending: false });
 
-function DashboardContent() {
-  const totalFunil = funil.reduce((s, f) => s + f.valor, 0);
-  const max = Math.max(...funil.map((f) => f.valor));
+      if (leadsError) throw leadsError;
+
+      const stats = {
+        totalLeads: leads.length,
+        newLeads: leads.filter(l => l.status === "novo").length,
+        inProgress: leads.filter(l => l.status === "em_atendimento").length,
+        concluded: leads.filter(l => l.status === "venda_concluida").length,
+        overdueFollowups: leads.filter(l => l.lembrete_follow_up && new Date(l.lembrete_follow_up) <= new Date() && !l.data_fechamento).length,
+        recentLeads: leads.slice(0, 6),
+      };
+
+      return stats;
+    },
+    enabled: !!profile?.imobiliaria_id,
+  });
+
+  if (isLoading || !profile) {
+    return (
+      <MainLayout>
+        <div className="p-8 flex justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6">
-      {/* KPI cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {kpis.map((k) => {
-          const Icon = k.icon;
-          return (
-            <div key={k.label} className="rounded-xl border border-[#e2e8f0] bg-white p-5 shadow-soft">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-xs font-medium text-[#64748b]">{k.label}</p>
-                  <p className="mt-2 text-3xl font-bold tracking-tight" style={{ color: k.color }}>
-                    {k.value}
-                  </p>
-                </div>
-                <div
-                  className="flex h-10 w-10 items-center justify-center rounded-lg"
-                  style={{ backgroundColor: k.bg }}
-                >
-                  <Icon className="h-5 w-5" style={{ color: k.color }} />
-                </div>
-              </div>
-              <p className="mt-3 text-xs font-medium" style={{ color: k.subColor }}>
-                {k.sub}
-              </p>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Funil + Atividade */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="rounded-xl border border-[#e2e8f0] bg-white p-6 shadow-soft lg:col-span-2">
-          <div className="mb-5 flex items-center justify-between">
-            <div>
-              <h2 className="text-base font-semibold text-[#0f172a]">Funil de Conversão</h2>
-              <p className="text-xs text-[#64748b]">Distribuição dos leads por etapa</p>
-            </div>
-            <span className="text-xs font-medium text-[#64748b]">Total: {totalFunil}</span>
+    <MainLayout>
+      <div className="p-4 space-y-6 max-w-7xl mx-auto">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-xl font-bold tracking-tight text-slate-900">Dashboard Executivo</h1>
+            <p className="text-saas-sm text-muted-foreground">Monitoramento de performance e gestão em tempo real.</p>
           </div>
+          <div className="flex gap-2">
+            <Link to="/leads">
+              <Button size="sm" className="h-8 text-[11px] font-bold uppercase tracking-wider px-4">
+                <PlusCircle className="mr-1.5 h-3.5 w-3.5" /> Adicionar Lead
+              </Button>
+            </Link>
+          </div>
+        </div>
 
-          <div className="space-y-3">
-            {funil.map((f) => {
-              const pct = totalFunil ? Math.round((f.valor / totalFunil) * 100) : 0;
-              const width = max ? (f.valor / max) * 100 : 0;
-              return (
-                <div key={f.etapa}>
-                  <div className="mb-1 flex items-center justify-between text-xs">
-                    <span className="font-medium text-[#0f172a]">{f.etapa}</span>
-                    <span className="text-[#64748b]">
-                      <span className="font-semibold text-[#0f172a]">{f.valor}</span> · {pct}%
-                    </span>
+        {/* MÃ‰TRICAS PRINCIPAIS */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[
+            { title: "Total de Leads", value: dashboardData?.totalLeads || 0, icon: Users, color: "text-primary", bg: "bg-primary/5", trend: "" },
+            { title: "Leads Novos", value: dashboardData?.newLeads || 0, icon: Zap, color: "text-amber-500", bg: "bg-amber-50", trend: "" },
+            { title: "Em Negociação", value: dashboardData?.inProgress || 0, icon: Clock, color: "text-blue-500", bg: "bg-blue-50", trend: "" },
+            { title: "Vendas (Mês)", value: dashboardData?.concluded || 0, icon: TrendingUp, color: "text-emerald-500", bg: "bg-emerald-50", trend: "" },
+          ].map((stat, i) => (
+            <Card 
+              key={i} 
+              className="border-none shadow-soft overflow-hidden group hover:shadow-md transition-all animate-fade-in-up hover-lift"
+              style={{ animationDelay: `${i * 100}ms` }}
+            >
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className={`p-2 rounded-lg ${stat.bg}`}>
+                    <stat.icon className={`h-4 w-4 ${stat.color}`} />
                   </div>
-                  <div className="h-7 overflow-hidden rounded-md bg-[#f1f5f9]">
-                    <div
-                      className="flex h-full items-center justify-end rounded-md px-2 text-[11px] font-semibold text-white transition-all"
-                      style={{ width: `${Math.max(width, 8)}%`, backgroundColor: f.color }}
-                    >
-                      {f.valor}
+                  <Badge variant="outline" className="text-[9px] font-bold border-none bg-slate-50 text-slate-400">
+                    {stat.trend}
+                  </Badge>
+                </div>
+                <div>
+                  <p className="text-saas-xs text-slate-500 uppercase tracking-widest mb-1">{stat.title}</p>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-2xl font-bold text-slate-900">{stat.value}</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* LEADS RECENTES */}
+          <Card className="lg:col-span-8 border-none shadow-soft bg-white">
+            <CardHeader className="flex flex-row items-center justify-between py-4 px-5 border-b border-slate-50">
+              <div>
+                <CardTitle className="text-sm font-bold">Atividades de Leads</CardTitle>
+                <CardDescription className="text-saas-xs">Ãšltimos registros e movimentações no funil.</CardDescription>
+              </div>
+              <Button variant="ghost" size="sm" className="h-7 text-[10px] font-bold uppercase text-primary">Ver Todos</Button>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="divide-y divide-slate-50">
+                {dashboardData?.recentLeads.map((lead) => (
+                  <div key={lead.id} className="flex items-center gap-4 p-4 hover:bg-slate-50/50 transition-colors cursor-pointer group">
+                    <Avatar className="h-8 w-8 border border-slate-100 shadow-sm">
+                      <AvatarFallback className="bg-slate-50 text-slate-400 text-xs font-bold">{lead.nome[0]}</AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <p className="text-saas-sm font-bold text-slate-900 truncate">{lead.nome}</p>
+                        <Badge className={`h-4 px-1.5 text-[9px] font-bold uppercase border-none ${
+                          lead.status === 'novo' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'
+                        }`}>
+                          {lead.status.replace("_", " ")}
+                        </Badge>
+                      </div>
+                      <p className="text-saas-xs text-slate-400">
+                        {lead.origem} â€¢ {formatDistanceToNow(new Date(lead.created_at), { addSuffix: true, locale: ptBR })}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Button variant="ghost" size="icon" className="h-8 w-8">
+                        <ChevronRight className="h-4 w-4 text-slate-400" />
+                      </Button>
                     </div>
                   </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* COLUNA LATERAL - AÇÕES E AGENDA */}
+          <div className="lg:col-span-4 space-y-6">
+            <Card className="border-none shadow-soft bg-white">
+              <CardHeader className="py-4 px-5 border-b border-slate-50">
+                <CardTitle className="text-sm font-bold">Ações Prioritárias</CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 space-y-3">
+                <QuickAction 
+                  icon={<Zap className="text-amber-500 h-3.5 w-3.5" />} 
+                  title="Contactar novos leads" 
+                  count={dashboardData?.newLeads || 0}
+                  color="bg-amber-50"
+                />
+                <Link to="/leads">
+                  <QuickAction 
+                    icon={<CalendarDays className="text-primary h-3.5 w-3.5" />} 
+                    title="Follow-ups para hoje" 
+                    count={dashboardData?.overdueFollowups || 0}
+                    color="bg-primary/5"
+                  />
+                </Link>
+                <QuickAction 
+                  icon={<BarChart3 className="text-emerald-500 h-3.5 w-3.5" />} 
+                  title="Metas de conversão" 
+                  count={`${dashboardData?.totalLeads ? Math.round((dashboardData.concluded / dashboardData.totalLeads) * 100) : 0}%`}
+                  color="bg-emerald-50"
+                />
+                <Link to="/relatorios">
+                  <Button className="w-full mt-4 h-9 text-[11px] font-bold uppercase tracking-wider bg-slate-900 hover:bg-slate-800">
+                    Relatório Completo
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-gradient-brand-dark border-none shadow-elegant text-white overflow-hidden relative animate-float">
+              <div className="absolute top-0 right-0 p-4 opacity-10">
+                <ArrowUpRight size={100} />
+              </div>
+              <CardContent className="p-6 relative z-10">
+                <h4 className="text-sm font-bold mb-2">Plano Pro</h4>
+                <p className="text-saas-xs opacity-80 mb-4">Seu funil de vendas está rendendo 15% mais este mês comparado ao anterior.</p>
+                <div className="flex items-center gap-2 text-xs font-bold bg-white/10 p-2 rounded-lg inline-flex">
+                  <TrendingUp className="h-3 w-3" /> 
+                  Alta de Performance
                 </div>
-              );
-            })}
+              </CardContent>
+            </Card>
           </div>
         </div>
-
-        <div className="rounded-xl border border-[#e2e8f0] bg-white p-6 shadow-soft">
-          <h2 className="text-base font-semibold text-[#0f172a]">Atividade Recente</h2>
-          <p className="text-xs text-[#64748b]">Últimos eventos do sistema</p>
-
-          <ul className="mt-4 space-y-3">
-            {atividades.map((a, i) => {
-              const Icon = a.icon;
-              return (
-                <li key={i} className="flex gap-3">
-                  <div
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
-                    style={{ backgroundColor: a.bg }}
-                  >
-                    <Icon className="h-4 w-4" style={{ color: a.color }} />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs leading-snug text-[#0f172a]">{a.text}</p>
-                    <p className="mt-0.5 text-[10px] text-[#94a3b8]">{a.when}</p>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
       </div>
+    </MainLayout>
+  );
+}
 
-      {/* Corretores em destaque */}
-      <div className="rounded-xl border border-[#e2e8f0] bg-white p-6 shadow-soft">
-        <div className="mb-5">
-          <h2 className="text-base font-semibold text-[#0f172a]">Corretores em Destaque</h2>
-          <p className="text-xs text-[#64748b]">Performance da equipe neste mês</p>
+function QuickAction({ icon, title, count, color }: any) {
+  return (
+    <div className="flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 transition-all border border-transparent hover:border-slate-100 cursor-pointer group">
+      <div className="flex items-center gap-3">
+        <div className={`p-2 rounded-lg ${color}`}>
+          {icon}
         </div>
-
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {corretores.map((c) => {
-            const inicial = c.nome.charAt(0);
-            return (
-              <div
-                key={c.nome}
-                className="rounded-lg border border-[#e2e8f0] bg-[#f8fafc] p-4 transition hover:border-[#cbd5e1] hover:bg-white"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-brand text-sm font-semibold text-white">
-                    {inicial}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-[#0f172a]">{c.nome}</p>
-                    <span
-                      className={`mt-0.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                        c.online
-                          ? "bg-[#d1fae5] text-[#065f46]"
-                          : "bg-[#f1f5f9] text-[#64748b]"
-                      }`}
-                    >
-                      <span className={`h-1.5 w-1.5 rounded-full ${c.online ? "bg-[#10b981]" : "bg-[#94a3b8]"}`} />
-                      {c.online ? "Em Plantão" : "Offline"}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="mt-4 grid grid-cols-3 gap-2 border-t border-[#e2e8f0] pt-3">
-                  <div>
-                    <p className="text-[10px] text-[#64748b]">Leads</p>
-                    <p className="text-sm font-bold text-[#0f172a]">{c.leads}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-[#64748b]">Fechados</p>
-                    <p className="text-sm font-bold text-[#10b981]">{c.fechados}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-[#64748b]">Conv.</p>
-                    <p className="text-sm font-bold text-[#3b82f6]">{c.conv}%</p>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        <span className="text-saas-sm font-bold text-slate-700 group-hover:text-primary transition-colors">{title}</span>
       </div>
+      <Badge variant="secondary" className="bg-slate-100 text-slate-500 font-bold text-[10px]">{count}</Badge>
     </div>
   );
 }

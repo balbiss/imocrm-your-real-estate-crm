@@ -19,10 +19,10 @@ export function AuthLayout({ children }: { children: ReactNode }) {
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/10 backdrop-blur ring-1 ring-white/20">
             <Home className="h-5 w-5" />
           </div>
-          <span className="text-xl font-bold tracking-tight">ImoCRM</span>
+          <span className="text-xl font-bold tracking-tight">CRM</span>
         </div>
 
-        <div className="relative z-10 space-y-8">
+        <div className="relative z-10 space-y-8 animate-fade-in-up">
           <h1 className="text-4xl xl:text-5xl font-bold leading-tight tracking-tight">
             Gerencie seus leads<br />imobiliários com<br />
             <span className="bg-gradient-to-r from-blue-300 to-white bg-clip-text text-transparent">
@@ -31,8 +31,8 @@ export function AuthLayout({ children }: { children: ReactNode }) {
           </h1>
 
           <ul className="space-y-3.5">
-            {features.map((f) => (
-              <li key={f} className="flex items-center gap-3 text-blue-50/90">
+            {features.map((f, i) => (
+              <li key={f} className="flex items-center gap-3 text-blue-50/90 animate-fade-in-up" style={{ animationDelay: `${(i + 1) * 150}ms` }}>
                 <CheckCircle2 className="h-5 w-5 text-blue-300 flex-shrink-0" />
                 <span className="text-base">{f}</span>
               </li>
@@ -40,9 +40,9 @@ export function AuthLayout({ children }: { children: ReactNode }) {
           </ul>
         </div>
 
-        <figure className="relative z-10 rounded-xl border border-white/10 bg-white/5 backdrop-blur p-5">
+        <figure className="relative z-10 rounded-xl border border-white/10 bg-white/5 backdrop-blur p-5 animate-float shadow-elegant">
           <blockquote className="text-sm leading-relaxed text-blue-50/90">
-            "Em 3 meses dobramos nossa taxa de conversão. O ImoCRM mudou a forma
+            "Em 3 meses dobramos nossa taxa de conversão. O CRM mudou a forma
             como trabalhamos com leads."
           </blockquote>
           <figcaption className="mt-3 flex items-center gap-3">
@@ -51,7 +51,7 @@ export function AuthLayout({ children }: { children: ReactNode }) {
             </div>
             <div className="text-sm">
               <div className="font-semibold">Marcela Rocha</div>
-              <div className="text-blue-200/70 text-xs">Diretora · Casa Viva Imóveis</div>
+              <div className="text-blue-200/70 text-xs">Diretora Â· Casa Viva Imóveis</div>
             </div>
           </figcaption>
         </figure>
@@ -65,7 +65,7 @@ export function AuthLayout({ children }: { children: ReactNode }) {
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-brand text-white">
               <Home className="h-5 w-5" />
             </div>
-            <span className="text-xl font-bold tracking-tight">ImoCRM</span>
+            <span className="text-xl font-bold tracking-tight">CRM</span>
           </div>
           {children}
         </div>

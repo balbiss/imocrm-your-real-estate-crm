@@ -1,10 +1,25 @@
+import React from "react";
 import { Outlet, Link, createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
 import { Toaster } from "sonner";
 import { AuthProvider } from "@/context/AuthContext";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useFollowUpAlerts } from "@/hooks/useFollowUpAlerts";
 
 import appCss from "../styles.css?url";
 
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60, // Dados permanecem "frescos" por 1 minuto
+      gcTime: 1000 * 60 * 5, // Cache mantido em memória por 5 minutos
+      refetchOnWindowFocus: false, // Evita recarregar toda vez que o usuário volta para a aba
+      retry: 1, // Limita tentativas em caso de erro para não travar a UI
+    },
+  },
+});
+
 function NotFoundComponent() {
+// ... existing code ...
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
@@ -31,7 +46,7 @@ export const Route = createRootRoute({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "ImoCRM — Gestão de Leads Imobiliários" },
+      { title: "CRM — Gestão de Leads Imobiliários" },
       { name: "description", content: "Sistema de gestão de leads para imobiliárias. Funil visual, follow-up automático e relatórios em tempo real." },
     ],
     links: [{ rel: "stylesheet", href: appCss }],
@@ -55,11 +70,19 @@ function RootShell({ children }: { children: React.ReactNode }) {
   );
 }
 
+function AppHooks() {
+  useFollowUpAlerts();
+  return null;
+}
+
 function RootComponent() {
   return (
-    <AuthProvider>
-      <Outlet />
-      <Toaster richColors position="top-right" />
-    </AuthProvider>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <AppHooks />
+        <Outlet />
+        <Toaster richColors position="top-right" />
+      </AuthProvider>
+    </QueryClientProvider>
   );
 }

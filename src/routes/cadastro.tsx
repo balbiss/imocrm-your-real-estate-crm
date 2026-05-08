@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -41,8 +41,8 @@ type FormData = z.infer<typeof fullSchema>;
 export const Route = createFileRoute("/cadastro")({
   head: () => ({
     meta: [
-      { title: "Cadastrar imobiliária — ImoCRM" },
-      { name: "description", content: "Crie sua conta no ImoCRM e comece a gerenciar leads imobiliários hoje mesmo." },
+      { title: "Cadastrar imobiliária — CRM" },
+      { name: "description", content: "Crie sua conta no CRM e comece a gerenciar leads imobiliários hoje mesmo." },
     ],
   }),
   component: CadastroPage,
@@ -100,7 +100,7 @@ function CadastroPage() {
 
   return (
     <AuthLayout>
-      <div className="mb-6 space-y-2">
+      <div className="mb-6 space-y-2 animate-fade-in-up">
         <h2 className="text-3xl font-bold tracking-tight">Crie sua conta</h2>
         <p className="text-sm text-muted-foreground">
           Comece grátis. Sem cartão de crédito.
@@ -108,9 +108,11 @@ function CadastroPage() {
       </div>
 
       {/* Stepper */}
-      <Stepper step={step} />
+      <div className="animate-fade-in-up" style={{ animationDelay: '150ms' }}>
+        <Stepper step={step} />
+      </div>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-5 animate-fade-in-up" style={{ animationDelay: '300ms' }} noValidate>
         {step === 1 && (
           <>
             <Field label="Nome da imobiliária" required error={errors.imobiliariaNome?.message}>

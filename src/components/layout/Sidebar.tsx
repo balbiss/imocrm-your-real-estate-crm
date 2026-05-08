@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
+  Calendar as CalendarIcon,
   Home,
   LayoutDashboard,
   Users,
@@ -11,9 +13,12 @@ import {
   MessageSquare,
   Settings,
   LogOut,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { usePermissions } from "@/hooks/usePermissions";
 
 type Item = {
   to: string;
@@ -23,28 +28,139 @@ type Item = {
   badgeTone?: "red";
 };
 
-const main: Item[] = [
-  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/leads", label: "Leads", icon: Users, badge: 8, badgeTone: "red" },
-  { to: "/filas", label: "Filas", icon: Layers },
-  { to: "/redistribuicao", label: "Fila de Redistribuição", icon: RefreshCw, badge: 3, badgeTone: "red" },
-  { to: "/equipe", label: "Equipe", icon: UsersRound },
-  { to: "/relatorios", label: "Relatórios", icon: BarChart2 },
-];
-
-const tools: Item[] = [
-  { to: "/templates", label: "Templates", icon: MessageSquare },
-  { to: "/configuracoes", label: "Configurações", icon: Settings },
-];
-
 export function Sidebar({ collapsed, onClose }: { collapsed: boolean; onClose?: () => void }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const path = useRouterState({ select: (s) => s.location.pathname });
-  const [plantao, setPlantao] = useState(true);
 
-  const nome = (user?.user_metadata as any)?.nome_completo ?? user?.email ?? "Usuário";
+  // Buscar perfil, status de plantão e dados da imobiliária
+  const { data: profileData, isLoading: isLoadingProfile } = useQuery({
+    queryKey: ["profile-with-imobiliaria", user?.id],
+    queryFn: async () => {
+      if (!user) return null;
+      const { data: profile, error: profileError } = await supabase
+        .from("perfis")
+        .select("*, imobiliarias(*)")
+        .eq("id", user.id)
+        .single();
+      
+      if (profileError) throw profileError;
+      return profile;
+    },
+    enabled: !!user,
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const profile = profileData;
+  const imobiliaria = profileData?.imobiliarias;
+
+  // Mutação para alternar plantão
+  const mutation = useMutation({
+    mutationFn: async (newValue: boolean) => {
+      const { error: profileError } = await supabase
+        .from("perfis")
+        .update({ 
+          em_plantao: newValue,
+          ultimo_checkin: newValue ? new Date().toISOString() : undefined 
+        })
+        .eq("id", user?.id);
+      
+      if (profileError) throw profileError;
+
+      // Sincronizar com a tabela de filas_atendimento
+      if (newValue) {
+        // Buscar última posição
+        const { data: lastPos } = await supabase
+          .from("filas_atendimento")
+          .select("posicao")
+          .order("posicao", { ascending: false })
+          .limit(1);
+        
+        const nextPos = (lastPos?.[0]?.posicao || 0) + 1;
+
+        await supabase.from("filas_atendimento").upsert({
+          imobiliaria_id: profile?.imobiliaria_id,
+          corretor_id: user?.id,
+          posicao: nextPos,
+          status_on: true
+        });
+      } else {
+        await supabase.from("filas_atendimento").delete().eq("corretor_id", user?.id);
+      }
+    },
+    onSuccess: (_, newValue) => {
+      queryClient.invalidateQueries({ queryKey: ["profile-with-imobiliaria"] });
+      toast.success(newValue ? "Check-in realizado! Você está em plantão." : "Check-out realizado.");
+    },
+  });
+
+  // Contagem de leads para badges
+  const { data: counts } = useQuery({
+    queryKey: ["sidebar-counts", profile?.imobiliaria_id],
+    queryFn: async () => {
+      if (!profile?.imobiliaria_id) return { leads: 0, fila: 0 };
+      
+      let query = supabase
+        .from("leads")
+        .select("*", { count: "exact", head: true })
+        .eq("imobiliaria_id", profile.imobiliaria_id);
+
+      // Se for corretor, contar apenas os dele
+      if (profile.role === 'corretor') {
+        query = query.eq("corretor_id", profile.id);
+      }
+
+      const { count: leadsCount } = await query;
+
+      const yesterday = new Date();
+      yesterday.setHours(yesterday.getHours() - 24);
+
+      const { count: filaCount } = await supabase
+        .from("leads")
+        .select("*", { count: "exact", head: true })
+        .eq("imobiliaria_id", profile.imobiliaria_id)
+        .or(`tentativas_contato.gte.5,and(status.eq.novo,created_at.lt.${yesterday.toISOString()})`);
+
+      return { leads: leadsCount || 0, fila: filaCount || 0 };
+    },
+    enabled: !!profile?.imobiliaria_id,
+    staleTime: 1000 * 30,
+    refetchInterval: 60000,
+  });
+
+  const { can } = usePermissions();
+  const main: Item[] = [
+    { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { to: "/leads", label: "Leads", icon: Users, badge: counts?.leads },
+    { to: "/clientes", label: "Clientes", icon: UsersRound },
+    { to: "/imoveis", label: "Imóveis", icon: Home },
+    { to: "/agenda", label: "Agenda", icon: CalendarIcon },
+    { to: "/filas", label: "Roleta", icon: RefreshCw },
+  ];
+
+  const tools: Item[] = [
+    { to: "/redistribuicao", label: "Redistribuição", icon: Layers, badge: counts?.fila, badgeTone: "red" },
+  ];
+
+  if (can('manage_team')) {
+    tools.push({ to: "/equipe", label: "Equipe", icon: UsersRound });
+  }
+
+  if (can('view_reports')) {
+    tools.push({ to: "/relatorios", label: "Relatórios", icon: BarChart2 });
+  }
+
+  tools.push({ to: "/templates", label: "Templates", icon: MessageSquare });
+
+  if (can('configure_system')) {
+    tools.push({ to: "/integracoes", label: "Integrações", icon: Settings });
+    tools.push({ to: "/configuracoes", label: "Ajustes", icon: Settings });
+  }
+
+  const nome = profile?.nome ?? user?.email ?? "Usuário";
   const inicial = String(nome).trim().charAt(0).toUpperCase();
+  const emPlantao = profile?.em_plantao ?? false;
 
   const handleLogout = async () => {
     await logout();
@@ -72,7 +188,7 @@ export function Sidebar({ collapsed, onClose }: { collapsed: boolean; onClose?: 
         <Icon className="h-4.5 w-4.5 shrink-0" />
         {!collapsed && <span className="flex-1 truncate">{item.label}</span>}
         {!collapsed && item.badge ? (
-          <span className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#ef4444] px-1.5 text-[10px] font-bold text-white">
+          <span className={`ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-bold text-white ${item.badgeTone === "red" ? "bg-[#ef4444]" : "bg-primary"}`}>
             {item.badge}
           </span>
         ) : null}
@@ -83,78 +199,82 @@ export function Sidebar({ collapsed, onClose }: { collapsed: boolean; onClose?: 
   return (
     <aside
       className={`flex h-full flex-col bg-[#0f172a] text-white transition-[width] duration-200 ${
-        collapsed ? "w-16" : "w-60"
+        collapsed ? "w-14" : "w-52"
       }`}
     >
       {/* Logo */}
-      <div className={`flex h-[60px] items-center gap-2.5 border-b border-white/5 ${collapsed ? "justify-center px-2" : "px-5"}`}>
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-brand">
-          <Home className="h-4.5 w-4.5" />
+      <div className={`flex h-12 items-center gap-2 border-b border-white/5 ${collapsed ? "justify-center px-1" : "px-4"}`}>
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-gradient-brand">
+          <Home className="h-4 w-4 text-white" />
         </div>
-        {!collapsed && <span className="text-base font-bold tracking-tight">ImoCRM</span>}
+        {!collapsed && <span className="text-sm font-bold tracking-tight">{imobiliaria?.nome || "Carregando..."}</span>}
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 overflow-y-auto px-2 py-4">
+      <nav className="flex-1 overflow-y-auto px-2 py-3 custom-scrollbar">
         {!collapsed && (
-          <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-wider text-[#64748b]">
-            Menu Principal
+          <p className="mb-1.5 px-2 text-[9px] font-bold uppercase tracking-widest text-[#64748b]">
+            Menu
           </p>
         )}
-        <div className="space-y-1">{main.map(renderItem)}</div>
+        <div className="space-y-0.5">{main.map(renderItem)}</div>
 
         {!collapsed && (
-          <p className="mb-2 mt-6 px-3 text-[10px] font-semibold uppercase tracking-wider text-[#64748b]">
+          <p className="mb-1.5 mt-5 px-2 text-[9px] font-bold uppercase tracking-widest text-[#64748b]">
             Ferramentas
           </p>
         )}
-        {collapsed && <div className="my-4 border-t border-white/5" />}
-        <div className="space-y-1">{tools.map(renderItem)}</div>
+        {collapsed && <div className="my-3 border-t border-white/5" />}
+        <div className="space-y-0.5">{tools.map(renderItem)}</div>
       </nav>
 
       {/* Footer */}
-      <div className="border-t border-white/5 p-3">
+      <div className="border-t border-white/5 p-2">
         {!collapsed && (
-          <div className="mb-3 flex items-center justify-between rounded-md bg-[#1e293b] px-3 py-2">
+          <div className="mb-2 flex items-center justify-between rounded bg-[#1e293b] px-2 py-1.5">
             <div className="flex items-center gap-2">
-              <span className={`h-2 w-2 rounded-full ${plantao ? "bg-[#10b981]" : "bg-[#64748b]"}`} />
-              <span className="text-xs font-medium text-white">Em Plantão</span>
+              <span className={`h-1.5 w-1.5 rounded-full ${emPlantao ? "bg-[#10b981]" : "bg-[#64748b]"}`} />
+              <span className="text-[10px] font-semibold text-white/90">{emPlantao ? "No Plantão" : "Offline"}</span>
             </div>
             <button
               type="button"
               role="switch"
-              aria-checked={plantao}
-              onClick={() => setPlantao((v) => !v)}
-              className={`relative h-5 w-9 rounded-full transition-colors ${
-                plantao ? "bg-[#10b981]" : "bg-[#475569]"
-              }`}
+              disabled={mutation.isPending || isLoadingProfile}
+              aria-checked={emPlantao}
+              onClick={() => mutation.mutate(!emPlantao)}
+              className={`relative h-4 w-7 rounded-full transition-colors ${
+                emPlantao ? "bg-[#10b981]" : "bg-[#475569]"
+              } ${mutation.isPending ? "opacity-50 cursor-not-allowed" : ""}`}
             >
-              <span
-                className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${
-                  plantao ? "translate-x-4" : "translate-x-0.5"
-                }`}
-              />
+              {mutation.isPending ? (
+                <Loader2 className="absolute top-0.5 left-0.5 h-3 w-3 animate-spin text-white" />
+              ) : (
+                <span
+                  className={`absolute top-0.5 h-3 w-3 rounded-full bg-white transition-transform ${
+                    emPlantao ? "translate-x-3.5" : "translate-x-0.5"
+                  }`}
+                />
+              )}
             </button>
           </div>
         )}
 
         <div className={`flex items-center gap-2 ${collapsed ? "justify-center" : ""}`}>
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-brand text-sm font-semibold text-white">
-            {inicial}
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-brand text-[10px] font-bold text-white uppercase">
+            {isLoadingProfile ? <Loader2 className="h-3 w-3 animate-spin" /> : inicial}
           </div>
           {!collapsed && (
             <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-semibold text-white">{nome}</p>
-              <p className="truncate text-[10px] text-[#94a3b8]">Dono</p>
+              <p className="truncate text-[11px] font-bold text-white/95">{nome}</p>
+              <p className="truncate text-[9px] text-[#94a3b8] uppercase font-medium">{profile?.role || "Corretor"}</p>
             </div>
           )}
           {!collapsed && (
             <button
               onClick={handleLogout}
-              className="rounded-md p-2 text-[#94a3b8] transition hover:bg-[#1e293b] hover:text-white"
-              title="Sair"
+              className="rounded p-1 text-[#94a3b8] transition hover:bg-[#1e293b] hover:text-white"
             >
-              <LogOut className="h-4 w-4" />
+              <LogOut className="h-3.5 w-3.5" />
             </button>
           )}
         </div>

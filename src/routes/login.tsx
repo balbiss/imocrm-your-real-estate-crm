@@ -18,8 +18,8 @@ type FormData = z.infer<typeof schema>;
 export const Route = createFileRoute("/login")({
   head: () => ({
     meta: [
-      { title: "Entrar — ImoCRM" },
-      { name: "description", content: "Acesse sua conta ImoCRM e gerencie seus leads imobiliários." },
+      { title: "Entrar — CRM" },
+      { name: "description", content: "Acesse sua conta CRM e gerencie seus leads imobiliários." },
     ],
   }),
   component: LoginPage,
@@ -53,14 +53,14 @@ function LoginPage() {
 
   return (
     <AuthLayout>
-      <div className="space-y-2 mb-8">
+      <div className="space-y-2 mb-8 animate-fade-in-up">
         <h2 className="text-3xl font-bold tracking-tight">Bem-vindo de volta</h2>
         <p className="text-sm text-muted-foreground">
           Entre na sua conta para continuar gerenciando seus leads.
         </p>
       </div>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-5 animate-fade-in-up" style={{ animationDelay: '200ms' }} noValidate>
         <div className="space-y-1.5">
           <label htmlFor="email" className="text-sm font-medium">E-mail</label>
           <TextField
@@ -84,7 +84,7 @@ function LoginPage() {
           </div>
           <PasswordInput
             id="senha"
-            placeholder="••••••••"
+            placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
             autoComplete="current-password"
             hasError={!!errors.senha}
             {...register("senha")}

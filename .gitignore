@@ -30,3 +30,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Scratch and Temporary Docs
+scratch/
+*.docx
+*.md
+!README.md

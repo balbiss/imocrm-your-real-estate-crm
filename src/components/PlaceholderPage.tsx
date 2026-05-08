@@ -8,7 +8,7 @@ export function PlaceholderPage({ title }: { title: string }) {
           <Construction className="h-6 w-6" />
         </div>
         <h1 className="text-2xl font-bold tracking-tight text-[#0f172a]">{title}</h1>
-        <p className="mt-2 text-sm text-[#64748b]">Em construção 🚧</p>
+        <p className="mt-2 text-sm text-[#64748b]">Em construção ??</p>
         <p className="mt-1 text-xs text-[#94a3b8]">Esta área está sendo preparada.</p>
       </div>
     </div>

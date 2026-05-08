@@ -7,11 +7,15 @@ import { Topbar } from "./Topbar";
 const TITLES: Record<string, string> = {
   "/dashboard": "Dashboard",
   "/leads": "Leads",
+  "/imoveis": "Imóveis",
+  "/clientes": "Clientes",
+  "/agenda": "Agenda",
   "/filas": "Filas",
   "/redistribuicao": "Fila de Redistribuição",
   "/equipe": "Equipe",
   "/relatorios": "Relatórios",
   "/templates": "Templates",
+  "/integracoes": "Integrações",
   "/configuracoes": "Configurações",
 };
 
@@ -31,7 +35,7 @@ export function MainLayout({ children }: { children: ReactNode }) {
 
   if (!user) return <Navigate to="/login" />;
 
-  const title = TITLES[path] ?? "ImoCRM";
+  const title = TITLES[path] ?? "CRM";
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-[#f8fafc]">
@@ -61,7 +65,7 @@ export function MainLayout({ children }: { children: ReactNode }) {
             else setCollapsed((v) => !v);
           }}
         />
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
+        <main className="flex-1 overflow-y-auto p-4">{children}</main>
       </div>
     </div>
   );

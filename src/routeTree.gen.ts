@@ -14,12 +14,17 @@ import { Route as RelatoriosRouteImport } from './routes/relatorios'
 import { Route as RedistribuicaoRouteImport } from './routes/redistribuicao'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LeadsRouteImport } from './routes/leads'
+import { Route as IntegracoesRouteImport } from './routes/integracoes'
+import { Route as ImoveisRouteImport } from './routes/imoveis'
 import { Route as FilasRouteImport } from './routes/filas'
 import { Route as EquipeRouteImport } from './routes/equipe'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
+import { Route as ClientesRouteImport } from './routes/clientes'
 import { Route as CadastroRouteImport } from './routes/cadastro'
+import { Route as AgendaRouteImport } from './routes/agenda'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as LeadsIdRouteImport } from './routes/leads.$id'
 
 const TemplatesRoute = TemplatesRouteImport.update({
   id: '/templates',
@@ -46,6 +51,16 @@ const LeadsRoute = LeadsRouteImport.update({
   path: '/leads',
   getParentRoute: () => rootRouteImport,
 } as any)
+const IntegracoesRoute = IntegracoesRouteImport.update({
+  id: '/integracoes',
+  path: '/integracoes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ImoveisRoute = ImoveisRouteImport.update({
+  id: '/imoveis',
+  path: '/imoveis',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const FilasRoute = FilasRouteImport.update({
   id: '/filas',
   path: '/filas',
@@ -66,9 +81,19 @@ const ConfiguracoesRoute = ConfiguracoesRouteImport.update({
   path: '/configuracoes',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ClientesRoute = ClientesRouteImport.update({
+  id: '/clientes',
+  path: '/clientes',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CadastroRoute = CadastroRouteImport.update({
   id: '/cadastro',
   path: '/cadastro',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AgendaRoute = AgendaRouteImport.update({
+  id: '/agenda',
+  path: '/agenda',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -76,97 +101,136 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LeadsIdRoute = LeadsIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => LeadsRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/agenda': typeof AgendaRoute
   '/cadastro': typeof CadastroRoute
+  '/clientes': typeof ClientesRoute
   '/configuracoes': typeof ConfiguracoesRoute
   '/dashboard': typeof DashboardRoute
   '/equipe': typeof EquipeRoute
   '/filas': typeof FilasRoute
-  '/leads': typeof LeadsRoute
+  '/imoveis': typeof ImoveisRoute
+  '/integracoes': typeof IntegracoesRoute
+  '/leads': typeof LeadsRouteWithChildren
   '/login': typeof LoginRoute
   '/redistribuicao': typeof RedistribuicaoRoute
   '/relatorios': typeof RelatoriosRoute
   '/templates': typeof TemplatesRoute
+  '/leads/$id': typeof LeadsIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/agenda': typeof AgendaRoute
   '/cadastro': typeof CadastroRoute
+  '/clientes': typeof ClientesRoute
   '/configuracoes': typeof ConfiguracoesRoute
   '/dashboard': typeof DashboardRoute
   '/equipe': typeof EquipeRoute
   '/filas': typeof FilasRoute
-  '/leads': typeof LeadsRoute
+  '/imoveis': typeof ImoveisRoute
+  '/integracoes': typeof IntegracoesRoute
+  '/leads': typeof LeadsRouteWithChildren
   '/login': typeof LoginRoute
   '/redistribuicao': typeof RedistribuicaoRoute
   '/relatorios': typeof RelatoriosRoute
   '/templates': typeof TemplatesRoute
+  '/leads/$id': typeof LeadsIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/agenda': typeof AgendaRoute
   '/cadastro': typeof CadastroRoute
+  '/clientes': typeof ClientesRoute
   '/configuracoes': typeof ConfiguracoesRoute
   '/dashboard': typeof DashboardRoute
   '/equipe': typeof EquipeRoute
   '/filas': typeof FilasRoute
-  '/leads': typeof LeadsRoute
+  '/imoveis': typeof ImoveisRoute
+  '/integracoes': typeof IntegracoesRoute
+  '/leads': typeof LeadsRouteWithChildren
   '/login': typeof LoginRoute
   '/redistribuicao': typeof RedistribuicaoRoute
   '/relatorios': typeof RelatoriosRoute
   '/templates': typeof TemplatesRoute
+  '/leads/$id': typeof LeadsIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/agenda'
     | '/cadastro'
+    | '/clientes'
     | '/configuracoes'
     | '/dashboard'
     | '/equipe'
     | '/filas'
+    | '/imoveis'
+    | '/integracoes'
     | '/leads'
     | '/login'
     | '/redistribuicao'
     | '/relatorios'
     | '/templates'
+    | '/leads/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/agenda'
     | '/cadastro'
+    | '/clientes'
     | '/configuracoes'
     | '/dashboard'
     | '/equipe'
     | '/filas'
+    | '/imoveis'
+    | '/integracoes'
     | '/leads'
     | '/login'
     | '/redistribuicao'
     | '/relatorios'
     | '/templates'
+    | '/leads/$id'
   id:
     | '__root__'
     | '/'
+    | '/agenda'
     | '/cadastro'
+    | '/clientes'
     | '/configuracoes'
     | '/dashboard'
     | '/equipe'
     | '/filas'
+    | '/imoveis'
+    | '/integracoes'
     | '/leads'
     | '/login'
     | '/redistribuicao'
     | '/relatorios'
     | '/templates'
+    | '/leads/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AgendaRoute: typeof AgendaRoute
   CadastroRoute: typeof CadastroRoute
+  ClientesRoute: typeof ClientesRoute
   ConfiguracoesRoute: typeof ConfiguracoesRoute
   DashboardRoute: typeof DashboardRoute
   EquipeRoute: typeof EquipeRoute
   FilasRoute: typeof FilasRoute
-  LeadsRoute: typeof LeadsRoute
+  ImoveisRoute: typeof ImoveisRoute
+  IntegracoesRoute: typeof IntegracoesRoute
+  LeadsRoute: typeof LeadsRouteWithChildren
   LoginRoute: typeof LoginRoute
   RedistribuicaoRoute: typeof RedistribuicaoRoute
   RelatoriosRoute: typeof RelatoriosRoute
@@ -210,6 +274,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LeadsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/integracoes': {
+      id: '/integracoes'
+      path: '/integracoes'
+      fullPath: '/integracoes'
+      preLoaderRoute: typeof IntegracoesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/imoveis': {
+      id: '/imoveis'
+      path: '/imoveis'
+      fullPath: '/imoveis'
+      preLoaderRoute: typeof ImoveisRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/filas': {
       id: '/filas'
       path: '/filas'
@@ -238,11 +316,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ConfiguracoesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/clientes': {
+      id: '/clientes'
+      path: '/clientes'
+      fullPath: '/clientes'
+      preLoaderRoute: typeof ClientesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/cadastro': {
       id: '/cadastro'
       path: '/cadastro'
       fullPath: '/cadastro'
       preLoaderRoute: typeof CadastroRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/agenda': {
+      id: '/agenda'
+      path: '/agenda'
+      fullPath: '/agenda'
+      preLoaderRoute: typeof AgendaRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -252,17 +344,38 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/leads/$id': {
+      id: '/leads/$id'
+      path: '/$id'
+      fullPath: '/leads/$id'
+      preLoaderRoute: typeof LeadsIdRouteImport
+      parentRoute: typeof LeadsRoute
+    }
   }
 }
 
+interface LeadsRouteChildren {
+  LeadsIdRoute: typeof LeadsIdRoute
+}
+
+const LeadsRouteChildren: LeadsRouteChildren = {
+  LeadsIdRoute: LeadsIdRoute,
+}
+
+const LeadsRouteWithChildren = LeadsRoute._addFileChildren(LeadsRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AgendaRoute: AgendaRoute,
   CadastroRoute: CadastroRoute,
+  ClientesRoute: ClientesRoute,
   ConfiguracoesRoute: ConfiguracoesRoute,
   DashboardRoute: DashboardRoute,
   EquipeRoute: EquipeRoute,
   FilasRoute: FilasRoute,
-  LeadsRoute: LeadsRoute,
+  ImoveisRoute: ImoveisRoute,
+  IntegracoesRoute: IntegracoesRoute,
+  LeadsRoute: LeadsRouteWithChildren,
   LoginRoute: LoginRoute,
   RedistribuicaoRoute: RedistribuicaoRoute,
   RelatoriosRoute: RelatoriosRoute,
@@ -271,3 +384,12 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { createStart } from '@tanstack/react-start'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+  }
+}
