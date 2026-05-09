@@ -75,16 +75,16 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
 
   const [editNome, setEditNome] = useState("");
   const [editTelefone, setEditTelefone] = useState("");
+  const [slaTimeLeft, setSlaTimeLeft] = useState<number | null>(null);
 
   // Buscar dados do lead
   const { data: lead, isLoading } = useQuery({
     queryKey: ["lead", leadId],
     queryFn: async () => {
       if (!leadId) return null;
-      // Simplificando query para diagnóstico
       const { data, error } = await supabase
         .from("leads")
-        .select("*")
+        .select("*, interacoes:leads_interacoes(*)")
         .eq("id", leadId)
         .maybeSingle();
       
@@ -97,6 +97,36 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
     enabled: !!leadId && open,
   });
 
+  // Lógica do SLA de 5 minutos
+  useEffect(() => {
+    if (lead && lead.status === 'novo' && lead.ultima_acao_at) {
+      const calculateTimeLeft = () => {
+        const lastAction = new Date(lead.ultima_acao_at).getTime();
+        const now = new Date().getTime();
+        const diff = (lastAction + 5 * 60 * 1000) - now;
+        return diff > 0 ? Math.floor(diff / 1000) : 0;
+      };
+
+      setSlaTimeLeft(calculateTimeLeft());
+
+      const timer = setInterval(() => {
+        const left = calculateTimeLeft();
+        setSlaTimeLeft(left);
+        if (left <= 0) clearInterval(timer);
+      }, 1000);
+
+      return () => clearInterval(timer);
+    } else {
+      setSlaTimeLeft(null);
+    }
+  }, [lead]);
+
+  const formatSlaTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
   useEffect(() => {
     if (lead) {
       setEditNome(lead.nome);
@@ -107,9 +137,15 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
   // Mutação para atualizar lead
   const updateMutation = useMutation({
     mutationFn: async (updates: any) => {
+      // Sempre atualizar ultima_acao_at ao mexer no card
+      const fullUpdates = { 
+        ...updates, 
+        ultima_acao_at: new Date().toISOString() 
+      };
+
       const { error } = await supabase
         .from("leads")
-        .update(updates)
+        .update(fullUpdates)
         .eq("id", leadId);
       if (error) throw error;
     },
@@ -126,13 +162,19 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Usuário não autenticado");
 
-      const { error } = await supabase.from("leads_interacoes").insert({
+      // Registrar interação
+      const { error: interError } = await supabase.from("leads_interacoes").insert({
         lead_id: leadId!,
         autor_id: user.id,
         tipo,
         conteudo,
       });
-      if (error) throw error;
+      if (interError) throw interError;
+
+      // Resetar SLA ao registrar nota/interação
+      await supabase.from("leads").update({
+        ultima_acao_at: new Date().toISOString()
+      }).eq("id", leadId);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["lead", leadId] });
@@ -159,7 +201,8 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
         motivo_descarte: motivoDescarte,
         descartado_por: user.id,
         descartado_em: new Date().toISOString(),
-        status: 'novo' // Volta para o bolsão como novo
+        status: 'novo',
+        ultima_acao_at: new Date().toISOString()
       }).eq("id", leadId);
 
       // 3. Registrar no histórico
@@ -187,9 +230,10 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
       const valorNum = parseFloat(valorFechamento.replace(/[^\d,]/g, '').replace(',', '.'));
 
       await supabase.from("leads").update({
-        etapa: 'fechado',
+        status: 'venda_concluida',
         valor_venda: valorNum,
         data_fechamento: new Date().toISOString(),
+        ultima_acao_at: new Date().toISOString()
       }).eq("id", leadId);
 
       await supabase.from("leads_interacoes").insert({
@@ -221,7 +265,8 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
       });
 
       await supabase.from("leads").update({
-        lembrete_follow_up: followUpDate
+        lembrete_follow_up: followUpDate,
+        ultima_acao_at: new Date().toISOString()
       }).eq("id", leadId);
 
       toast.success("Lembrete agendado!");
@@ -257,7 +302,17 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
       <DialogContent className="max-w-4xl h-[85vh] flex flex-col p-0 overflow-hidden bg-slate-50 border-none shadow-2xl">
         <DialogHeader className="p-4 pb-0 bg-white border-b">
           <DialogTitle className="sr-only">Detalhes do Lead: {lead.nome}</DialogTitle>
-          <div className="flex items-center justify-between mb-3">
+          
+          {/* BARRA DE SLA */}
+          {slaTimeLeft !== null && (
+            <div className={`absolute top-0 left-0 w-full h-1 flex items-center justify-center transition-all ${slaTimeLeft < 60 ? 'bg-red-500' : 'bg-primary'}`}>
+              <div className="absolute top-1 bg-inherit text-white text-[9px] font-black px-2 py-0.5 rounded-b-md shadow-sm animate-bounce">
+                SLA: {formatSlaTime(slaTimeLeft)}
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between mb-3 pt-2">
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-lg bg-gradient-brand flex items-center justify-center text-white text-lg font-bold shadow-sm">
                 {lead.nome[0]}
@@ -301,6 +356,7 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
                 variant="outline" 
                 className="h-8 text-[11px] font-bold bg-green-50 text-green-700 border-green-100 hover:bg-green-100"
                 asChild
+                onClick={() => handleUpdateField("ultima_acao_at", new Date().toISOString())}
               >
                 <a href={`https://wa.me/55${lead.telefone.replace(/\D/g, "")}`} target="_blank" rel="noreferrer">
                   <MessageSquare className="h-3.5 w-3.5 mr-1.5" /> WhatsApp
@@ -311,6 +367,7 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
                 variant="outline" 
                 className="h-8 text-[11px] font-bold bg-blue-50 text-blue-700 border-blue-100"
                 asChild
+                onClick={() => handleUpdateField("ultima_acao_at", new Date().toISOString())}
               >
                 <a href={`tel:+55${lead.telefone.replace(/\D/g, "")}`}>
                   <Phone className="h-3.5 w-3.5 mr-1.5" /> Ligar
@@ -352,209 +409,240 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
 
         <div className="flex-1 overflow-hidden">
           <ScrollArea className="h-full">
-            <div className="p-4">
-              <Tabs value={activeTab} className="w-full">
-                {/* ABA DETALHES */}
-                <TabsContent value="detalhes" className="mt-0 space-y-4">
+            <div className="p-4 space-y-6">
+              {/* BLOCO 1: INFORMAÇÕES DO CONTATO */}
+              <Card className="border-none shadow-sm bg-white overflow-hidden">
+                <CardHeader className="p-4 pb-2 bg-slate-50/50">
+                  <CardTitle className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Bloco 1: Informações de Contato</CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 pt-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Card className="border-none shadow-sm bg-white overflow-hidden">
-                      <CardHeader className="p-4 pb-2 bg-slate-50/50">
-                        <CardTitle className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Informações de Contato</CardTitle>
-                      </CardHeader>
-                      <CardContent className="p-4 pt-4 space-y-4">
-                        <div className="space-y-1.5">
-                          <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Telefone / WhatsApp</Label>
-                          <div className="flex gap-2">
-                            <Input 
-                              value={editTelefone} 
-                              onChange={(e) => setEditTelefone(e.target.value)}
-                              className="h-9 text-sm border-slate-200"
-                            />
-                            <Button 
-                              size="sm" 
-                              variant="outline" 
-                              className="h-9 px-3 text-[10px] font-bold uppercase border-slate-200"
-                              onClick={() => handleUpdateField("telefone", editTelefone)}
-                            >Alt</Button>
-                          </div>
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">E-mail Corporativo</Label>
-                          <Input value={lead.email || ""} placeholder="Adicionar e-mail..." className="h-9 text-sm border-slate-200" onBlur={(e) => handleUpdateField("email", e.target.value)} />
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Referência do Anúncio</Label>
-                          <Input value={lead.referencia || ""} placeholder="Ex: FB-ADS-01" className="h-9 text-sm border-slate-200" onBlur={(e) => handleUpdateField("referencia", e.target.value)} />
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    <Card className="border-none shadow-sm bg-white">
-                      <CardHeader className="p-4 pb-2">
-                        <CardTitle className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Ações e Temperatura</CardTitle>
-                      </CardHeader>
-                      <CardContent className="p-4 pt-0 space-y-4">
-                        <div className="space-y-2">
-                          <Label className="text-[10px] font-bold text-slate-500 uppercase">Temperatura</Label>
-                          <div className="flex gap-2">
-                            <Button 
-                              variant={lead.temperatura === 'quente' ? 'default' : 'outline'} 
-                              size="sm" 
-                              className={`flex-1 h-8 text-[10px] font-bold gap-1.5 ${lead.temperatura === 'quente' ? 'bg-red-500 hover:bg-red-600' : ''}`}
-                              onClick={() => handleUpdateField("temperatura", "quente")}
-                            >
-                              <Flame className="h-3 w-3" /> QUENTE
-                            </Button>
-                            <Button 
-                              variant={lead.temperatura === 'morno' ? 'default' : 'outline'} 
-                              size="sm" 
-                              className={`flex-1 h-8 text-[10px] font-bold gap-1.5 ${lead.temperatura === 'morno' ? 'bg-amber-500 hover:bg-amber-600' : ''}`}
-                              onClick={() => handleUpdateField("temperatura", "morno")}
-                            >
-                              <Sun className="h-3 w-3" /> MORNO
-                            </Button>
-                            <Button 
-                              variant={lead.temperatura === 'frio' ? 'default' : 'outline'} 
-                              size="sm" 
-                              className={`flex-1 h-8 text-[10px] font-bold gap-1.5 ${lead.temperatura === 'frio' ? 'bg-blue-500 hover:bg-blue-600' : ''}`}
-                              onClick={() => handleUpdateField("temperatura", "frio")}
-                            >
-                              <Snowflake className="h-3 w-3" /> FRIO
-                            </Button>
-                          </div>
-                        </div>
-
-                        <div className="flex gap-2 pt-2">
-                          <Button 
-                            variant="outline" 
-                            className="flex-1 h-9 text-[10px] font-bold text-orange-600 border-orange-200 hover:bg-orange-50 gap-2"
-                            onClick={() => setShowDescarteModal(true)}
-                          >
-                            <XCircle className="h-3.5 w-3.5" /> DEVOLVER LEAD
-                          </Button>
-                          <Button 
-                            className="flex-1 h-9 text-[10px] font-bold bg-green-600 hover:bg-green-700 gap-2"
-                            onClick={() => setShowFechamentoModal(true)}
-                          >
-                            <Trophy className="h-3.5 w-3.5" /> FECHAR NEGÃ“CIO
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </div>
-                </TabsContent>
-
-                {/* ABA FOLLOW-UP */}
-                <TabsContent value="followup" className="mt-0 space-y-4">
-                  <div className="bg-white rounded-lg border-none shadow-sm p-4 space-y-3">
-                    <div className="flex items-center gap-2 text-primary">
-                      <Calendar className="h-4 w-4" />
-                      <h4 className="text-sm font-bold">Próximo Contato Agendado</h4>
+                    <div className="space-y-1.5">
+                      <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Referência (ID Anúncio)</Label>
+                      <Input value={lead.referencia || lead.origem || "Não informado"} disabled className="h-9 text-sm border-slate-200 bg-slate-50" />
                     </div>
-                    <div className="space-y-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Nome Completo</Label>
+                      <Input value={editNome} onChange={(e) => setEditNome(e.target.value)} onBlur={() => handleUpdateField("nome", editNome)} className="h-9 text-sm border-slate-200" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Telefone / WhatsApp</Label>
                       <div className="flex gap-2">
-                        <Input 
-                          type="datetime-local" 
-                          value={followUpDate}
-                          onChange={(e) => setFollowUpDate(e.target.value)}
-                          className="h-9 text-sm flex-1 border-slate-200"
-                        />
-                        <Button 
-                          onClick={handleAgendarFollowUp}
-                          disabled={!followUpDate}
-                          className="h-9 text-[11px] font-bold bg-primary text-white"
-                        >
-                          Agendar Agora
+                        <Input value={editTelefone} onChange={(e) => setEditTelefone(e.target.value)} onBlur={() => handleUpdateField("telefone", editTelefone)} className="h-9 text-sm border-slate-200" />
+                        <Button size="sm" variant="outline" className="h-9 px-3 text-green-600 border-green-100 bg-green-50" asChild>
+                          <a href={`https://wa.me/55${lead.telefone.replace(/\D/g, "")}`} target="_blank" rel="noreferrer"><MessageSquare className="h-4 w-4" /></a>
                         </Button>
                       </div>
-                      <Textarea 
-                        placeholder="O que será feito nesse contato?"
-                        value={followUpObs}
-                        onChange={(e) => setFollowUpObs(e.target.value)}
-                        className="text-xs min-h-[60px]"
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">E-mail</Label>
+                      <Input value={lead.email || ""} placeholder="Adicionar e-mail..." className="h-9 text-sm border-slate-200" onBlur={(e) => handleUpdateField("email", e.target.value)} />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* BLOCO 2: AÇÕES E TEMPERATURA */}
+              <Card className="border-none shadow-sm bg-white overflow-hidden">
+                <CardHeader className="p-4 pb-2 bg-slate-50/50">
+                  <CardTitle className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Bloco 2: Ações e Temperatura</CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 pt-4">
+                  <div className="flex flex-col md:flex-row gap-4 items-center">
+                    <div className="flex-1 w-full space-y-2">
+                      <Label className="text-[10px] font-bold text-slate-500 uppercase">Temperatura do Lead</Label>
+                      <div className="flex gap-2">
+                        <Button 
+                          variant={lead.temperatura === 'quente' ? 'default' : 'outline'} 
+                          size="sm" 
+                          className={`flex-1 h-10 text-[10px] font-bold gap-1.5 ${lead.temperatura === 'quente' ? 'bg-red-500 hover:bg-red-600' : ''}`}
+                          onClick={() => handleUpdateField("temperatura", "quente")}
+                        >
+                          <Flame className="h-3.5 w-3.5" /> QUENTE
+                        </Button>
+                        <Button 
+                          variant={lead.temperatura === 'morno' ? 'default' : 'outline'} 
+                          size="sm" 
+                          className={`flex-1 h-10 text-[10px] font-bold gap-1.5 ${lead.temperatura === 'morno' ? 'bg-amber-500 hover:bg-amber-600' : ''}`}
+                          onClick={() => handleUpdateField("temperatura", "morno")}
+                        >
+                          <Sun className="h-3.5 w-3.5" /> MORNO
+                        </Button>
+                        <Button 
+                          variant={lead.temperatura === 'frio' ? 'default' : 'outline'} 
+                          size="sm" 
+                          className={`flex-1 h-10 text-[10px] font-bold gap-1.5 ${lead.temperatura === 'frio' ? 'bg-blue-500 hover:bg-blue-600' : ''}`}
+                          onClick={() => handleUpdateField("temperatura", "frio")}
+                        >
+                          <Snowflake className="h-3.5 w-3.5" /> FRIO
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="flex gap-2 w-full md:w-auto pt-6">
+                      <Button variant="outline" className="h-10 text-[10px] font-bold text-orange-600 border-orange-200 hover:bg-orange-50 gap-2" onClick={() => setShowDescarteModal(true)}>
+                        <XCircle className="h-4 w-4" /> DEVOLVER
+                      </Button>
+                      <Button className="h-10 text-[10px] font-bold bg-green-600 hover:bg-green-700 gap-2" onClick={() => setShowFechamentoModal(true)}>
+                        <Trophy className="h-4 w-4" /> VENDA
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* BLOCO 3: FOLLOW-UP E VISITA */}
+              <Card className="border-none shadow-sm bg-white overflow-hidden">
+                <CardHeader className="p-4 pb-2 bg-slate-50/50">
+                  <CardTitle className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Bloco 3: Follow-up e Visita</CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 pt-4 space-y-6">
+                  <div className="flex flex-col md:flex-row gap-4">
+                    <div className="flex-1 space-y-1.5">
+                      <Label className="text-[10px] font-bold text-slate-500 uppercase">Próximo Contato</Label>
+                      <div className="flex gap-2">
+                        <Input type="datetime-local" value={followUpDate} onChange={(e) => setFollowUpDate(e.target.value)} className="h-10 text-sm border-slate-200" />
+                        <Button onClick={handleAgendarFollowUp} disabled={!followUpDate} className="h-10 text-[11px] font-bold bg-primary px-4">
+                          <Clock className="h-4 w-4 mr-2" /> Agendar
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="flex-1 space-y-1.5">
+                      <Label className="text-[10px] font-bold text-slate-500 uppercase">Agendar Visita (ALERTA)</Label>
+                      <Input 
+                        type="datetime-local" 
+                        value={lead.data_visita ? format(new Date(lead.data_visita), "yyyy-MM-dd'T'HH:mm") : ""} 
+                        onChange={(e) => handleUpdateField("data_visita", e.target.value)}
+                        className="h-10 text-sm border-primary/20 bg-primary/5 font-bold" 
                       />
                     </div>
-                    <p className="text-[10px] text-slate-400 font-medium italic">
-                      O sistema emitirá um alerta visual quando chegar o horário definido.
-                    </p>
                   </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label className="text-[10px] font-bold text-slate-500 uppercase">Cadência de Chamada</Label>
+                      <Select value={String(lead.cadencia_chamada || 0)} onValueChange={(v) => handleUpdateField("cadencia_chamada", parseInt(v))}>
+                        <SelectTrigger className="h-10 text-sm border-slate-200">
+                          <SelectValue placeholder="Selecione a chamada..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {[0, 1, 2, 3, 4, 5, 6, 7].map(n => (
+                            <SelectItem key={n} value={String(n)}>{n === 0 ? "Início" : `Chamada ${n}`}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Última Chamada</Label>
+                      <Input value={lead.data_ultima_chamada ? format(new Date(lead.data_ultima_chamada), "dd/MM/yy HH:mm", { locale: ptBR }) : "Nenhuma"} disabled className="h-10 text-sm bg-slate-50" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
 
-                  <div className="grid grid-cols-3 gap-3">
-                    {[
-                      { label: "Tentativas", value: lead.tentativas_contato || 0, color: "text-slate-700" },
-                      { label: "Primeiro Contato", value: lead.primeiro_contato_em ? format(new Date(lead.primeiro_contato_em), "HH:mm") : "---", color: "text-slate-700" },
-                      { label: "SLA (Atendimento)", value: "08:45", color: "text-emerald-600" },
-                    ].map(stat => (
-                      <div key={stat.label} className="p-3 bg-white rounded-lg shadow-sm text-center">
-                        <p className={`text-base font-bold ${stat.color}`}>{stat.value}</p>
-                        <p className="text-[9px] text-slate-400 uppercase font-bold tracking-tighter">{stat.label}</p>
+              {/* BLOCO 4: PERFIL FINANCEIRO */}
+              <Card className="border-none shadow-sm bg-white overflow-hidden">
+                <CardHeader className="p-4 pb-2 bg-slate-50/50">
+                  <CardTitle className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Bloco 4: Perfil Financeiro</CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 pt-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-1.5">
+                      <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Renda Bruta Familiar</Label>
+                      <div className="relative">
+                        <DollarSign className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                        <Input 
+                          type="number" 
+                          value={lead.renda_familiar || ""} 
+                          placeholder="0.00" 
+                          className="h-9 pl-8 text-sm border-slate-200" 
+                          onBlur={(e) => handleUpdateField("renda_familiar", parseFloat(e.target.value))} 
+                        />
                       </div>
-                    ))}
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Saldo de FGTS</Label>
+                      <div className="relative">
+                        <DollarSign className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                        <Input 
+                          type="number" 
+                          value={lead.saldo_fgts || ""} 
+                          placeholder="0.00" 
+                          className="h-9 pl-8 text-sm border-slate-200" 
+                          onBlur={(e) => handleUpdateField("saldo_fgts", parseFloat(e.target.value))} 
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Valor de Entrada</Label>
+                      <div className="relative">
+                        <DollarSign className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                        <Input 
+                          type="number" 
+                          value={lead.valor_entrada || ""} 
+                          placeholder="0.00" 
+                          className="h-9 pl-8 text-sm border-slate-200" 
+                          onBlur={(e) => handleUpdateField("valor_entrada", parseFloat(e.target.value))} 
+                        />
+                      </div>
+                    </div>
                   </div>
-                </TabsContent>
+                </CardContent>
+              </Card>
 
-                {/* ABA TEMPLATES */}
-                <TabsContent value="templates" className="mt-0">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {[
-                      { id: 1, title: "Apresentação", body: "Olá [nome], sou corretor da Oka Imóveis..." },
-                      { id: 2, title: "Opções de Imóveis", body: "Olá, separei estas opções que encaixam no seu perfil..." },
-                      { id: 3, title: "Follow-up", body: "Ainda tem interesse no imóvel que vimos?" },
-                    ].map(template => (
-                      <Card key={template.id} className="p-3 hover:border-primary/50 cursor-pointer transition-all bg-white border-slate-200 group">
-                        <h5 className="font-bold text-xs mb-1.5 group-hover:text-primary">{template.title}</h5>
-                        <p className="text-[10px] text-slate-400 leading-relaxed line-clamp-2 mb-3">{template.body}</p>
-                        <Button variant="ghost" className="w-full text-[10px] h-7 font-bold uppercase tracking-wider bg-slate-50">Usar Template</Button>
-                      </Card>
-                    ))}
+              {/* BLOCO 5: ARQUIVOS E HISTÓRICO */}
+              <Card className="border-none shadow-sm bg-white overflow-hidden">
+                <CardHeader className="p-4 pb-2 bg-slate-50/50">
+                  <CardTitle className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Bloco 5: Arquivos e Histórico</CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 pt-4 space-y-6">
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Link do Drive (Documentos)</Label>
+                    <div className="flex gap-2">
+                      <Input 
+                        value={lead.link_drive || ""} 
+                        placeholder="https://drive.google.com/..." 
+                        className="h-9 text-sm border-slate-200 flex-1" 
+                        onBlur={(e) => handleUpdateField("link_drive", e.target.value)} 
+                      />
+                      {lead.link_drive && (
+                        <Button size="sm" variant="outline" className="h-9 px-3 border-slate-200" asChild>
+                          <a href={lead.link_drive} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /></a>
+                        </Button>
+                      )}
+                    </div>
                   </div>
-                </TabsContent>
 
-                {/* ABA HISTÃ“RICO */}
-                <TabsContent value="historico" className="mt-0">
-                  <div className="relative pl-6 space-y-4 before:absolute before:left-[7px] before:top-2 before:h-[calc(100%-12px)] before:w-[1px] before:bg-slate-200">
-                    {lead.interacoes?.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map((interacao: any) => (
-                      <div key={interacao.id} className="relative">
-                        <div className={`absolute -left-[24px] top-0 h-4 w-4 rounded-full border-2 border-slate-50 flex items-center justify-center ${
-                          interacao.tipo === 'status' ? 'bg-blue-500' : 'bg-green-500'
-                        }`}>
-                          {interacao.tipo === 'status' ? <RefreshCw className="h-2 w-2 text-white" /> : <MessageSquare className="h-2 w-2 text-white" />}
-                        </div>
-                        <div className="bg-white rounded-lg border border-slate-100 p-2.5 shadow-sm">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">{interacao.tipo}</span>
-                            <span className="text-[9px] text-slate-400 font-medium">
-                              {format(new Date(interacao.created_at), "dd/MM HH:mm", { locale: ptBR })}
-                            </span>
+                  <div className="space-y-4">
+                    <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Histórico de Interações</Label>
+                    <div className="relative pl-6 space-y-4 before:absolute before:left-[7px] before:top-2 before:h-[calc(100%-12px)] before:w-[1px] before:bg-slate-200">
+                      {lead.interacoes?.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map((interacao: any) => (
+                        <div key={interacao.id} className="relative">
+                          <div className={`absolute -left-[24px] top-0 h-4 w-4 rounded-full border-2 border-slate-50 flex items-center justify-center ${
+                            interacao.tipo === 'status' ? 'bg-blue-500' : 'bg-green-500'
+                          }`}>
+                            {interacao.tipo === 'status' ? <RefreshCw className="h-2 w-2 text-white" /> : <MessageSquare className="h-2 w-2 text-white" />}
                           </div>
-                          <p className="text-xs text-slate-600 leading-relaxed">{interacao.conteudo}</p>
+                          <div className="bg-white rounded-lg border border-slate-100 p-2.5 shadow-sm">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">{interacao.tipo}</span>
+                              <span className="text-[9px] text-slate-400 font-medium">
+                                {format(new Date(interacao.created_at), "dd/MM HH:mm", { locale: ptBR })}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-600 leading-relaxed">{interacao.conteudo}</p>
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                    {(!lead.interacoes || lead.interacoes.length === 0) && (
-                      <div className="text-center py-10 opacity-30">
-                        <History className="h-10 w-10 mx-auto mb-2" />
-                        <p className="text-xs font-medium">Sem registros</p>
-                      </div>
-                    )}
+                      ))}
+                      {(!lead.interacoes || lead.interacoes.length === 0) && (
+                        <div className="text-center py-10 opacity-30">
+                          <History className="h-10 w-10 mx-auto mb-2" />
+                          <p className="text-xs font-medium">Sem registros</p>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </TabsContent>
-
-                {/* ABA ANOTAÇÕES */}
-                <TabsContent value="anotacoes" className="mt-0 space-y-3">
-                  <div className="bg-amber-50 border border-amber-100 rounded-lg p-2.5 text-amber-800 text-[11px] font-medium flex gap-2">
-                    <AlertCircle className="h-4 w-4 shrink-0 text-amber-600" />
-                    <p>Anotações estratégicas e observações internas sobre a negociação.</p>
-                  </div>
-                  <Textarea 
-                    className="min-h-[250px] bg-white text-sm p-3 focus-visible:ring-amber-200 border-amber-100 shadow-sm" 
-                    placeholder="Escreva suas observações aqui..."
-                  />
-                  <div className="flex justify-end">
-                    <Button size="sm" className="h-8 text-[11px] font-bold bg-amber-600 hover:bg-amber-700">Salvar Notas</Button>
-                  </div>
-                </TabsContent>
-              </Tabs>
+                </CardContent>
+              </Card>
             </div>
           </ScrollArea>
         </div>
@@ -663,5 +751,6 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
         </Dialog>
       </DialogContent>
     </Dialog>
+
   );
 }

@@ -11,11 +11,14 @@ import { Button } from "@/components/ui/button";
 import { LeadDetailsModal } from "./LeadDetailsModal";
 
 const STAGES = [
-  { id: "novo", title: "Novos", color: "bg-blue-500" },
-  { id: "em_atendimento", title: "Em Atendimento", color: "bg-yellow-500" },
-  { id: "qualificado", title: "Qualificados", color: "bg-purple-500" },
-  { id: "desqualificado", title: "Desqualificados", color: "bg-red-500" },
-  { id: "venda_concluida", title: "Venda Concluída", color: "bg-green-500" },
+  { id: "novo", title: "LEAD NOVO", color: "bg-blue-500" },
+  { id: "rebatida", title: "REBATIDA", color: "bg-orange-500" },
+  { id: "tarefas", title: "TAREFAS", color: "bg-red-500" },
+  { id: "agendado", title: "AGENDADO", color: "bg-purple-500" },
+  { id: "visitou", title: "VISITOU", color: "bg-amber-500" },
+  { id: "pendente", title: "PENDENTE", color: "bg-slate-500" },
+  { id: "aprovado", title: "APROVADO", color: "bg-emerald-500" },
+  { id: "futuros", title: "FUTUROS", color: "bg-indigo-500" },
 ];
 
 interface LeadsKanbanProps {

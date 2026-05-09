@@ -24,12 +24,13 @@ import { CSS } from "@dnd-kit/utilities";
 import { useAuth } from "../context/AuthContext";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { format } from "date-fns";
 
 export const Route = createFileRoute("/filas")({
   component: FilasPage,
 });
 
-function SortableItem({ id, profile, index, isNext }: { id: string, profile: any, index: number, isNext: boolean }) {
+function SortableItem({ id, profile, index, isNext, onToggleStatus }: { id: string, profile: any, index: number, isNext: boolean, onToggleStatus: (id: string, current: boolean) => void }) {
   const {
     attributes,
     listeners,
@@ -43,13 +44,15 @@ function SortableItem({ id, profile, index, isNext }: { id: string, profile: any
     transition,
   };
 
+  const isOnline = profile?.status_roleta === true;
+
   return (
     <div 
       ref={setNodeRef} 
       style={style} 
       className={`relative group bg-white border rounded-xl p-4 mb-3 transition-all ${
         isNext ? "border-primary shadow-md ring-1 ring-primary/20" : "border-slate-200 hover:border-slate-300"
-      }`}
+      } ${!isOnline ? "opacity-60 grayscale-[0.5]" : ""}`}
     >
       <div className="flex items-center gap-4">
         <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500">
@@ -57,7 +60,7 @@ function SortableItem({ id, profile, index, isNext }: { id: string, profile: any
         </div>
 
         <div className={`h-10 w-10 rounded-full flex items-center justify-center font-bold text-lg ${
-          isNext ? "bg-primary text-white" : "bg-slate-100 text-slate-500"
+          isNext && isOnline ? "bg-primary text-white" : "bg-slate-100 text-slate-500"
         }`}>
           {index + 1}
         </div>
@@ -65,26 +68,36 @@ function SortableItem({ id, profile, index, isNext }: { id: string, profile: any
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <h4 className="text-sm font-bold truncate">{profile?.nome || "Corretor"}</h4>
-            {isNext && (
+            {isNext && isOnline && (
               <Badge className="bg-primary hover:bg-primary text-[9px] h-4 px-1.5 font-black uppercase tracking-tighter">
                 PRÃ“XIMO LEAD
+              </Badge>
+            )}
+            {!isOnline && (
+              <Badge variant="outline" className="text-[9px] h-4 px-1.5 font-black uppercase tracking-tighter text-slate-400 border-slate-200">
+                OFFLINE
               </Badge>
             )}
           </div>
           <div className="flex items-center gap-3 mt-1">
             <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wider flex items-center gap-1">
-              <Clock className="h-3 w-3" /> {profile?.ultimo_checkin ? "Logado há pouco" : "Pronto"}
+              <Clock className="h-3 w-3" /> {profile?.ultimo_checkin_roleta ? `Check-in: ${format(new Date(profile.ultimo_checkin_roleta), "HH:mm")}` : "Sem check-in"}
             </span>
           </div>
         </div>
 
         <div className="flex items-center gap-4">
-           <div className="text-right">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Status</p>
-              <div className="flex items-center gap-1.5 text-green-600">
-                <CheckCircle2 className="h-3 w-3" />
-                <span className="text-[10px] font-black">ON</span>
-              </div>
+           <div className="text-right flex flex-col items-end gap-1">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Status Roleta</p>
+              <button 
+                onClick={() => onToggleStatus(profile.id, isOnline)}
+                className={`flex items-center gap-1.5 px-2 py-1 rounded-md transition-colors ${
+                  isOnline ? "text-green-600 bg-green-50 hover:bg-green-100" : "text-slate-400 bg-slate-100 hover:bg-slate-200"
+                }`}
+              >
+                {isOnline ? <CheckCircle2 className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
+                <span className="text-[10px] font-black">{isOnline ? "ON" : "OFF"}</span>
+              </button>
            </div>
         </div>
       </div>
@@ -206,6 +219,41 @@ function FilasPage() {
     },
   });
 
+  const toggleStatusMutation = useMutation({
+    mutationFn: async ({ profileId, status }: { profileId: string, status: boolean }) => {
+      const { error } = await supabase
+        .from("perfis")
+        .update({ 
+          status_roleta: !status,
+          ultimo_checkin_roleta: !status ? new Date().toISOString() : null
+        })
+        .eq("id", profileId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["fila-atendimento"] });
+      toast.success("Status atualizado!");
+    },
+  });
+
+  const checkinMutation = useMutation({
+    mutationFn: async () => {
+      if (!user) return;
+      const { error } = await supabase
+        .from("perfis")
+        .update({ 
+          status_roleta: true,
+          ultimo_checkin_roleta: new Date().toISOString()
+        })
+        .eq("id", user.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["fila-atendimento"] });
+      toast.success("Check-in realizado com sucesso!");
+    },
+  });
+
   const shuffleMutation = useMutation({
     mutationFn: async () => {
       if (!fila) return;
@@ -295,7 +343,7 @@ function FilasPage() {
                   </CardContent>
                </Card>
 
-               <div className="flex items-center justify-end">
+               <div className="flex items-center justify-end gap-2">
                   <Button 
                     variant="outline" 
                     className="font-bold text-xs gap-2 border-slate-200"
@@ -303,6 +351,13 @@ function FilasPage() {
                     disabled={shuffleMutation.isPending}
                   >
                     <Shuffle className="h-3.5 w-3.5" /> EMBARALHAR AGORA
+                  </Button>
+                  <Button 
+                    className="font-bold text-xs gap-2 bg-green-600 hover:bg-green-700"
+                    onClick={() => checkinMutation.mutate()}
+                    disabled={checkinMutation.isPending}
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5" /> FAZER CHECK-IN
                   </Button>
                </div>
             </div>
@@ -324,7 +379,14 @@ function FilasPage() {
                   <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                     <SortableContext items={fila?.map(i => i.id) || []} strategy={verticalListSortingStrategy}>
                       {fila?.map((item, index) => (
-                        <SortableItem key={item.id} id={item.id} profile={item.perfis} index={index} isNext={index === 0} />
+                        <SortableItem 
+                          key={item.id} 
+                          id={item.id} 
+                          profile={item.perfis} 
+                          index={index} 
+                          isNext={index === 0} 
+                          onToggleStatus={(id, status) => toggleStatusMutation.mutate({ profileId: id, status })}
+                        />
                       ))}
                     </SortableContext>
                   </DndContext>

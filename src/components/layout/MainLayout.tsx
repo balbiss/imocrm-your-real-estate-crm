@@ -3,6 +3,7 @@ import { Navigate, useRouterState } from "@tanstack/react-router";
 import { useAuth } from "@/context/AuthContext";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
+import { VisitAlerts } from "./VisitAlerts";
 
 const TITLES: Record<string, string> = {
   "/dashboard": "Dashboard",
@@ -39,6 +40,7 @@ export function MainLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-[#f8fafc]">
+      <VisitAlerts />
       {/* Desktop sidebar */}
       <div className="hidden md:block">
         <Sidebar collapsed={collapsed} />

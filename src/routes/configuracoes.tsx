@@ -11,6 +11,7 @@ import { User, Bell, Settings as SettingsIcon, Shield, CreditCard, Laptop } from
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import { PasswordInput } from "@/components/PasswordInput";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Save } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -268,15 +269,15 @@ function SettingsPage() {
                     <div className="space-y-4 max-w-sm">
                       <div className="space-y-1.5">
                         <Label className="text-saas-xs font-bold text-slate-500 uppercase tracking-wider">Senha Atual</Label>
-                        <Input type="password" className="h-9 text-saas-sm border-slate-200" />
+                        <PasswordInput className="h-9 text-saas-sm border-slate-200" placeholder="••••••••" />
                       </div>
                       <div className="space-y-1.5">
                         <Label className="text-saas-xs font-bold text-slate-500 uppercase tracking-wider">Nova Senha</Label>
-                        <Input type="password" className="h-9 text-saas-sm border-slate-200" />
+                        <PasswordInput className="h-9 text-saas-sm border-slate-200" placeholder="••••••••" />
                       </div>
                       <div className="space-y-1.5">
                         <Label className="text-saas-xs font-bold text-slate-500 uppercase tracking-wider">Confirmar Nova Senha</Label>
-                        <Input type="password" className="h-9 text-saas-sm border-slate-200" />
+                        <PasswordInput className="h-9 text-saas-sm border-slate-200" placeholder="••••••••" />
                       </div>
                     </div>
                     <div className="pt-4 border-t border-slate-50 flex justify-start">
