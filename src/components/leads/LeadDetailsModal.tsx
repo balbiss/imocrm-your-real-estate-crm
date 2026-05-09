@@ -382,6 +382,10 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
                           <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">E-mail Corporativo</Label>
                           <Input value={lead.email || ""} placeholder="Adicionar e-mail..." className="h-9 text-sm border-slate-200" onBlur={(e) => handleUpdateField("email", e.target.value)} />
                         </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Referência do Anúncio</Label>
+                          <Input value={lead.referencia || ""} placeholder="Ex: FB-ADS-01" className="h-9 text-sm border-slate-200" onBlur={(e) => handleUpdateField("referencia", e.target.value)} />
+                        </div>
                       </CardContent>
                     </Card>
 

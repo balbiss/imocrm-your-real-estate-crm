@@ -36,6 +36,7 @@ const formSchema = z.object({
   email: z.string().email("E-mail inválido").optional().or(z.literal("")),
   telefone: z.string().min(10, "Telefone inválido"),
   origem: z.string().min(1, "Selecione a origem"),
+  referencia: z.string().optional().or(z.literal("")),
   status: z.string().default("novo"),
 });
 
@@ -53,6 +54,7 @@ export function NewLeadDialog({ open, onOpenChange }: NewLeadDialogProps) {
       email: "",
       telefone: "",
       origem: "Manual",
+      referencia: "",
       status: "novo",
     },
   });
@@ -165,6 +167,19 @@ export function NewLeadDialog({ open, onOpenChange }: NewLeadDialogProps) {
                   <FormLabel>E-mail (Opcional)</FormLabel>
                   <FormControl>
                     <Input placeholder="email@exemplo.com" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="referencia"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Referência (ID do Anúncio)</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Ex: FB-ADS-01" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

@@ -67,6 +67,7 @@ export function LeadsTable({ leads, isLoading }: LeadsTableProps) {
             <TableHead className="text-[10px] uppercase font-bold text-slate-500 py-3">Lead</TableHead>
             <TableHead className="text-[10px] uppercase font-bold text-slate-500">Status</TableHead>
             <TableHead className="text-[10px] uppercase font-bold text-slate-500">Origem</TableHead>
+            <TableHead className="text-[10px] uppercase font-bold text-slate-500">Referência</TableHead>
             <TableHead className="text-[10px] uppercase font-bold text-slate-500">Corretor</TableHead>
             <TableHead className="text-[10px] uppercase font-bold text-slate-500">Data</TableHead>
             <TableHead className="text-[10px] uppercase font-bold text-slate-500 text-right">Ações</TableHead>
@@ -100,6 +101,11 @@ export function LeadsTable({ leads, isLoading }: LeadsTableProps) {
               <TableCell>
                 <span className="text-[10px] font-medium text-slate-600 uppercase">
                   {lead.origem || "Site"}
+                </span>
+              </TableCell>
+              <TableCell>
+                <span className="text-[10px] font-medium text-slate-600 uppercase">
+                  {lead.referencia || "---"}
                 </span>
               </TableCell>
               <TableCell>

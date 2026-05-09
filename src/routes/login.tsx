@@ -84,7 +84,7 @@ function LoginPage() {
           </div>
           <PasswordInput
             id="senha"
-            placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
+            placeholder="••••••••"
             autoComplete="current-password"
             hasError={!!errors.senha}
             {...register("senha")}

@@ -1,0 +1,41 @@
+version: "3.7"
+
+services:
+  crm_oka:
+    image: inoovaweb/crm-oka:latest
+    
+    networks:
+      - inoovaweb
+
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M
+      labels:
+        - traefik.enable=true
+        - traefik.http.routers.crm_oka.rule=Host(`crm.hinodeimoveis.com.br`)
+        - traefik.http.routers.crm_oka.entrypoints=websecure
+        - traefik.http.routers.crm_oka.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.crm_oka.priority=1
+        - traefik.http.routers.crm_oka.service=crm_oka
+        # Redirecionamento HTTP -> HTTPS
+        - traefik.http.routers.crm_oka_http.rule=Host(`crm.hinodeimoveis.com.br`)
+        - traefik.http.routers.crm_oka_http.entrypoints=web
+        - traefik.http.routers.crm_oka_http.middlewares=redirect-to-https
+        - traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https
+        # Porta 3000 para Node.js SSR
+        - traefik.http.services.crm_oka.loadbalancer.server.port=3000
+        - traefik.http.services.crm_oka.loadbalancer.passHostHeader=true
+        - traefik.http.middlewares.sslheader.headers.customrequestheaders.X-Forwarded-Proto=https
+        - traefik.http.routers.crm_oka.middlewares=sslheader,redirect-to-https
+
+networks:
+  inoovaweb:
+    external: true
+    name: inoovaweb
