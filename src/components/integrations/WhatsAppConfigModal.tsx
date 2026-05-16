@@ -103,7 +103,7 @@ export function WhatsAppConfigModal({
 
   const configureWebhook = async (sanitizedName: string) => {
     try {
-      await fetch(`${apiUrl}/webhook/set/${sanitizedName}`, {
+      const response = await fetch(`${apiUrl}/webhook/set/${sanitizedName}`, {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
@@ -121,15 +121,59 @@ export function WhatsAppConfigModal({
           ]
         })
       });
-      console.log("Webhook configurado automaticamente.");
+      
+      if (!response.ok) {
+        const text = await response.text();
+        console.warn("Aviso ao configurar webhook:", text);
+      } else {
+        console.log("Webhook configurado com sucesso.");
+      }
     } catch (e) {
       console.error("Erro ao configurar webhook:", e);
     }
   };
 
+  // Monitorar status da conexão para fechar o modal
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+
+    if (status === "connecting" && instanceName) {
+      const sanitizedName = instanceName.trim().replace(/\s+/g, "_");
+      
+      interval = setInterval(async () => {
+        try {
+          const res = await fetch(`${apiUrl}/instance/connectionState/${sanitizedName}`, {
+            headers: { "apikey": apiKey }
+          });
+          
+          if (res.ok) {
+            const data = await res.json();
+            if (data.instance?.state === "open") {
+              setStatus("connected");
+              setQrCode(null);
+              toast.success("WhatsApp conectado com sucesso!");
+              clearInterval(interval);
+              
+              // Fechar modal automaticamente após 2 segundos
+              setTimeout(() => {
+                onOpenChange(false);
+              }, 2000);
+            }
+          }
+        } catch (e) {
+          console.error("Erro ao checar status:", e);
+        }
+      }, 5000); // Checa a cada 5 segundos
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [status, instanceName, apiUrl, apiKey, onOpenChange]);
+
   const generateQRCode = async () => {
     if (!instanceName) {
-      toast.error("Informe um nome para a instância (sem espaços)");
+      toast.error("Informe um nome para a instância");
       return;
     }
 
@@ -140,8 +184,8 @@ export function WhatsAppConfigModal({
     const sanitizedInstanceName = instanceName.trim().replace(/\s+/g, "_");
 
     try {
-      // 1. Criar ou Reiniciar Instância na Evolution API
-      await fetch(`${apiUrl}/instance/create`, {
+      // 1. Criar Instância (Simplificado para Evolution Go)
+      const createRes = await fetch(`${apiUrl}/instance/create`, {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
@@ -149,12 +193,17 @@ export function WhatsAppConfigModal({
         },
         body: JSON.stringify({
           instanceName: sanitizedInstanceName,
-          qrcode: true,
-          integration: "WHATSAPP-BAILEYS"
+          qrcode: true
         })
       });
 
-      // 2. Configurar Webhook Automaticamente
+      // Se der erro 400, verificamos se é porque já existe
+      if (!createRes.ok && createRes.status !== 400) {
+        const errorText = await createRes.text();
+        throw new Error(errorText || "Erro ao criar instância");
+      }
+
+      // 2. Configurar Webhook
       await configureWebhook(sanitizedInstanceName);
       
       // 3. Buscar QR Code
@@ -162,26 +211,23 @@ export function WhatsAppConfigModal({
         headers: { "apikey": apiKey }
       });
 
+      if (!connectRes.ok) {
+        const errorText = await connectRes.text();
+        throw new Error(errorText || "Erro ao buscar QR Code");
+      }
+
       const data = await connectRes.json();
 
-      if (connectRes.ok && data.base64) {
+      if (data.base64) {
         setQrCode(data.base64);
-        toast.success("QR Code gerado e Webhook configurado!");
-      } else {
-        // Tentar ver se já está conectado
-        const stateRes = await fetch(`${apiUrl}/instance/connectionState/${sanitizedInstanceName}`, {
-          headers: { "apikey": apiKey }
-        });
-        const stateData = await stateRes.json();
-        
-        if (stateData.instance?.state === "open") {
-          setStatus("connected");
-          toast.success("WhatsApp já está conectado!");
-        } else {
-          throw new Error(data.message || "Erro ao conectar instância");
-        }
+        toast.info("QR Code gerado! Escaneie no seu WhatsApp.");
+      } else if (data.instance?.state === "open") {
+        setStatus("connected");
+        toast.success("WhatsApp já está conectado!");
+        setTimeout(() => onOpenChange(false), 2000);
       }
     } catch (error: any) {
+      console.error("Erro completo:", error);
       toast.error(`Erro: ${error.message}`);
       setStatus("error");
     } finally {
