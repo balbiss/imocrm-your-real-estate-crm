@@ -120,16 +120,12 @@ export function WhatsAppConfigModal({
       const data = await res.json();
 
       if (res.ok) {
-        // A API do Baileys costuma retornar o QR Code em base64 ou via polling
-        // Dependendo da versão, precisamos esperar o evento de QR
         toast.info("Aguardando QR Code...");
         
-        // Simulação de busca do QR (ajuste conforme o retorno real da sua API)
-        // Se a sua API retorna o QR direto no POST, use data.qr
         if (data.qr) {
           setQrCode(data.qr);
         } else {
-          // Fallback: Tentar buscar o QR via GET se não veio no POST
+          // Tentar buscar o QR via GET se não veio no POST
           const qrRes = await fetch(`${apiUrl}/connections/${phoneNumber}`, {
             headers: { "x-api-key": apiKey }
           });
@@ -146,6 +142,39 @@ export function WhatsAppConfigModal({
       setLoading(false);
     }
   };
+
+  // Efeito para verificar status automaticamente quando estiver tentando conectar
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+
+    if (status === "connecting" || qrCode) {
+      interval = setInterval(async () => {
+        try {
+          const res = await fetch(`${apiUrl}/connections/${phoneNumber}`, {
+            headers: { "x-api-key": apiKey }
+          });
+          const data = await res.json();
+
+          // Se a conexão estiver 'open' (aberta), significa que o QR foi lido
+          if (data.status === "open" || data.state === "open") {
+            setStatus("connected");
+            setQrCode(null);
+            clearInterval(interval);
+            toast.success("WhatsApp conectado com sucesso!");
+            
+            // Salvar automaticamente o status no banco
+            await handleSaveConfig();
+          }
+        } catch (e) {
+          console.error("Erro no polling de status:", e);
+        }
+      }, 3000);
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [status, qrCode, apiUrl, apiKey, phoneNumber]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
