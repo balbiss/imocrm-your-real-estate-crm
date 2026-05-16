@@ -182,34 +182,88 @@ export type Database = {
           },
         ]
       }
+      filas_atendimento: {
+        Row: {
+          corretor_id: string | null
+          created_at: string | null
+          id: string
+          imobiliaria_id: string | null
+          posicao: number
+          status_on: boolean | null
+        }
+        Insert: {
+          corretor_id?: string | null
+          created_at?: string | null
+          id?: string
+          imobiliaria_id?: string | null
+          posicao: number
+          status_on?: boolean | null
+        }
+        Update: {
+          corretor_id?: string | null
+          created_at?: string | null
+          id?: string
+          imobiliaria_id?: string | null
+          posicao?: number
+          status_on?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "filas_atendimento_corretor_id_fkey"
+            columns: ["corretor_id"]
+            isOneToOne: true
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "filas_atendimento_imobiliaria_id_fkey"
+            columns: ["imobiliaria_id"]
+            isOneToOne: false
+            referencedRelation: "imobiliarias"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       imobiliarias: {
         Row: {
+          ai_prompt: string | null
+          ai_tone: string | null
           cnpj: string | null
           created_at: string
           email: string
+          global_ai_enabled: boolean | null
           id: string
           nome: string
           owner_id: string
+          papi_instance_id: string | null
           telefone: string | null
           updated_at: string
         }
         Insert: {
+          ai_prompt?: string | null
+          ai_tone?: string | null
           cnpj?: string | null
           created_at?: string
           email: string
+          global_ai_enabled?: boolean | null
           id?: string
           nome: string
           owner_id: string
+          papi_instance_id?: string | null
           telefone?: string | null
           updated_at?: string
         }
         Update: {
+          ai_prompt?: string | null
+          ai_tone?: string | null
           cnpj?: string | null
           created_at?: string
           email?: string
+          global_ai_enabled?: boolean | null
           id?: string
           nome?: string
           owner_id?: string
+          papi_instance_id?: string | null
           telefone?: string | null
           updated_at?: string
         }
@@ -271,12 +325,102 @@ export type Database = {
           },
         ]
       }
+      integracoes_config: {
+        Row: {
+          config: Json | null
+          created_at: string | null
+          id: string
+          imobiliaria_id: string
+          integration_id: string
+          status: string
+          total_leads: number | null
+          ultimo_lead_em: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          config?: Json | null
+          created_at?: string | null
+          id?: string
+          imobiliaria_id: string
+          integration_id: string
+          status?: string
+          total_leads?: number | null
+          ultimo_lead_em?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          config?: Json | null
+          created_at?: string | null
+          id?: string
+          imobiliaria_id?: string
+          integration_id?: string
+          status?: string
+          total_leads?: number | null
+          ultimo_lead_em?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "integracoes_config_imobiliaria_id_fkey"
+            columns: ["imobiliaria_id"]
+            isOneToOne: false
+            referencedRelation: "imobiliarias"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lead_historico_corretores: {
+        Row: {
+          atribuido_em: string | null
+          corretor_id: string
+          id: string
+          lead_id: string
+          motivo: string | null
+          removido_em: string | null
+        }
+        Insert: {
+          atribuido_em?: string | null
+          corretor_id: string
+          id?: string
+          lead_id: string
+          motivo?: string | null
+          removido_em?: string | null
+        }
+        Update: {
+          atribuido_em?: string | null
+          corretor_id?: string
+          id?: string
+          lead_id?: string
+          motivo?: string | null
+          removido_em?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_historico_corretores_corretor_id_fkey"
+            columns: ["corretor_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_historico_corretores_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       leads: {
         Row: {
           bairro_interesse: string | null
+          cadencia_chamada: number | null
           corretor_id: string | null
           created_at: string
+          data_atribuicao: string | null
           data_fechamento: string | null
+          data_ultima_chamada: string | null
+          data_visita: string | null
           descartado_em: string | null
           descartado_por: string | null
           email: string | null
@@ -285,10 +429,14 @@ export type Database = {
           imobiliaria_id: string
           imovel_id: string | null
           lembrete_follow_up: string | null
+          link_drive: string | null
           motivo_descarte: string | null
           nome: string
           origem: string | null
           primeiro_contato_em: string | null
+          referencia: string | null
+          renda_familiar: number | null
+          saldo_fgts: number | null
           score: number | null
           sla_vencido: boolean | null
           status: Database["public"]["Enums"]["lead_status"]
@@ -296,16 +444,22 @@ export type Database = {
           temperatura: Database["public"]["Enums"]["lead_temperatura"] | null
           tentativas_contato: number | null
           tipo_imovel_interesse: string | null
+          ultima_acao_at: string | null
           ultima_interacao: string | null
           updated_at: string
+          valor_entrada: number | null
           valor_estimado: number | null
           valor_venda: number | null
         }
         Insert: {
           bairro_interesse?: string | null
+          cadencia_chamada?: number | null
           corretor_id?: string | null
           created_at?: string
+          data_atribuicao?: string | null
           data_fechamento?: string | null
+          data_ultima_chamada?: string | null
+          data_visita?: string | null
           descartado_em?: string | null
           descartado_por?: string | null
           email?: string | null
@@ -314,10 +468,14 @@ export type Database = {
           imobiliaria_id: string
           imovel_id?: string | null
           lembrete_follow_up?: string | null
+          link_drive?: string | null
           motivo_descarte?: string | null
           nome: string
           origem?: string | null
           primeiro_contato_em?: string | null
+          referencia?: string | null
+          renda_familiar?: number | null
+          saldo_fgts?: number | null
           score?: number | null
           sla_vencido?: boolean | null
           status?: Database["public"]["Enums"]["lead_status"]
@@ -325,16 +483,22 @@ export type Database = {
           temperatura?: Database["public"]["Enums"]["lead_temperatura"] | null
           tentativas_contato?: number | null
           tipo_imovel_interesse?: string | null
+          ultima_acao_at?: string | null
           ultima_interacao?: string | null
           updated_at?: string
+          valor_entrada?: number | null
           valor_estimado?: number | null
           valor_venda?: number | null
         }
         Update: {
           bairro_interesse?: string | null
+          cadencia_chamada?: number | null
           corretor_id?: string | null
           created_at?: string
+          data_atribuicao?: string | null
           data_fechamento?: string | null
+          data_ultima_chamada?: string | null
+          data_visita?: string | null
           descartado_em?: string | null
           descartado_por?: string | null
           email?: string | null
@@ -343,10 +507,14 @@ export type Database = {
           imobiliaria_id?: string
           imovel_id?: string | null
           lembrete_follow_up?: string | null
+          link_drive?: string | null
           motivo_descarte?: string | null
           nome?: string
           origem?: string | null
           primeiro_contato_em?: string | null
+          referencia?: string | null
+          renda_familiar?: number | null
+          saldo_fgts?: number | null
           score?: number | null
           sla_vencido?: boolean | null
           status?: Database["public"]["Enums"]["lead_status"]
@@ -354,8 +522,10 @@ export type Database = {
           temperatura?: Database["public"]["Enums"]["lead_temperatura"] | null
           tentativas_contato?: number | null
           tipo_imovel_interesse?: string | null
+          ultima_acao_at?: string | null
           ultima_interacao?: string | null
           updated_at?: string
+          valor_entrada?: number | null
           valor_estimado?: number | null
           valor_venda?: number | null
         }
@@ -541,8 +711,10 @@ export type Database = {
           imobiliaria_id: string | null
           nome: string
           role: Database["public"]["Enums"]["user_role"]
+          status_roleta: boolean | null
           telefone: string | null
           ultimo_checkin: string | null
+          ultimo_checkin_roleta: string | null
           ultimo_lead_recebido_em: string | null
           updated_at: string
         }
@@ -554,8 +726,10 @@ export type Database = {
           imobiliaria_id?: string | null
           nome: string
           role?: Database["public"]["Enums"]["user_role"]
+          status_roleta?: boolean | null
           telefone?: string | null
           ultimo_checkin?: string | null
+          ultimo_checkin_roleta?: string | null
           ultimo_lead_recebido_em?: string | null
           updated_at?: string
         }
@@ -567,8 +741,10 @@ export type Database = {
           imobiliaria_id?: string | null
           nome?: string
           role?: Database["public"]["Enums"]["user_role"]
+          status_roleta?: boolean | null
           telefone?: string | null
           ultimo_checkin?: string | null
+          ultimo_checkin_roleta?: string | null
           ultimo_lead_recebido_em?: string | null
           updated_at?: string
         }
@@ -638,7 +814,9 @@ export type Database = {
       get_next_broker_on_duty: { Args: never; Returns: string }
       get_next_corretor_rodizio: {
         Args: { p_imobiliaria_id: string }
-        Returns: string
+        Returns: {
+          corretor_id: string
+        }[]
       }
       has_role: {
         Args: {
@@ -646,6 +824,10 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      registrar_lead_integracao: {
+        Args: { p_imobiliaria_id: string; p_integration_id: string }
+        Returns: undefined
       }
     }
     Enums: {
@@ -656,6 +838,13 @@ export type Database = {
         | "qualificado"
         | "desqualificado"
         | "venda_concluida"
+        | "rebatida"
+        | "tarefas"
+        | "agendado"
+        | "visitou"
+        | "pendente"
+        | "aprovado"
+        | "futuros"
       lead_temperatura: "quente" | "morno" | "frio"
       user_role: "dono" | "gerente" | "corretor"
     }
@@ -792,6 +981,13 @@ export const Constants = {
         "qualificado",
         "desqualificado",
         "venda_concluida",
+        "rebatida",
+        "tarefas",
+        "agendado",
+        "visitou",
+        "pendente",
+        "aprovado",
+        "futuros",
       ],
       lead_temperatura: ["quente", "morno", "frio"],
       user_role: ["dono", "gerente", "corretor"],

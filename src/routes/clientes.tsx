@@ -7,7 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Search, Filter, Mail, Phone, MoreVertical, UserCheck, Download, History, Edit, Trash2, Eye } from "lucide-react";
+import { Search, Filter, Mail, Phone, MoreVertical, UserCheck, Download, History, Edit, Trash2, Eye, Upload } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { LeadDetailsModal } from "@/components/leads/LeadDetailsModal";
 import { NewLeadDialog } from "@/components/leads/NewLeadDialog";
+import { ImportClientesDialog } from "@/components/leads/ImportClientesDialog";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -45,6 +46,7 @@ function ClientesPage() {
   const [isDetailsOpen, setIsDetailsOpen] = React.useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = React.useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = React.useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = React.useState(false);
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -116,6 +118,13 @@ function ClientesPage() {
             <p className="text-saas-sm text-muted-foreground">Relacionamento e histórico completo dos seus contatos.</p>
           </div>
           <div className="flex gap-2">
+            <Button 
+              variant="outline" 
+              className="h-9 text-[11px] font-bold uppercase tracking-wider px-4 border-slate-200"
+              onClick={() => setIsImportModalOpen(true)}
+            >
+              <Upload className="mr-1.5 h-3.5 w-3.5 text-slate-400" /> Importar
+            </Button>
             <Button variant="outline" className="h-9 text-[11px] font-bold uppercase tracking-wider px-4 border-slate-200">
               <Download className="mr-1.5 h-3.5 w-3.5 text-slate-400" /> Exportar
             </Button>
@@ -261,6 +270,11 @@ function ClientesPage() {
       <NewLeadDialog 
         open={isAddModalOpen} 
         onOpenChange={setIsAddModalOpen} 
+      />
+
+      <ImportClientesDialog
+        open={isImportModalOpen}
+        onOpenChange={setIsImportModalOpen}
       />
 
       <LeadDetailsModal 
