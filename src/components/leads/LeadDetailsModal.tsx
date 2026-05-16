@@ -43,6 +43,7 @@ import {
   DollarSign,
   ArrowLeftRight,
   Edit3,
+  LayoutGrid,
 } from "lucide-react";
 import { toast } from "sonner";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -487,6 +488,51 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
                       </Button>
                     </div>
                   </div>
+                </CardContent>
+              </Card>
+
+              {/* BLOCO 2.5: STATUS DO KANBAN */}
+              <Card className="border-none shadow-sm bg-white overflow-hidden">
+                <CardHeader className="p-4 pb-2 bg-slate-50/50">
+                  <CardTitle className="text-[11px] font-bold uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                    <LayoutGrid className="h-3.5 w-3.5" /> Mover Coluna do Kanban
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 pt-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                    {([
+                      { value: "novo",            label: "Novo",         color: "bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200" },
+                      { value: "em_atendimento",  label: "Atendimento",  color: "bg-blue-50 text-blue-700 border-blue-100 hover:bg-blue-100" },
+                      { value: "qualificado",     label: "Qualificado",  color: "bg-indigo-50 text-indigo-700 border-indigo-100 hover:bg-indigo-100" },
+                      { value: "agendado",        label: "Agendado",     color: "bg-violet-50 text-violet-700 border-violet-100 hover:bg-violet-100" },
+                      { value: "visitou",         label: "Visitou",      color: "bg-orange-50 text-orange-700 border-orange-100 hover:bg-orange-100" },
+                      { value: "pendente",        label: "Pendente",     color: "bg-yellow-50 text-yellow-700 border-yellow-100 hover:bg-yellow-100" },
+                      { value: "aprovado",        label: "Aprovado",     color: "bg-emerald-50 text-emerald-700 border-emerald-100 hover:bg-emerald-100" },
+                      { value: "venda_concluida", label: "Venda",        color: "bg-green-50 text-green-700 border-green-100 hover:bg-green-100" },
+                    ] as const).map((s) => (
+                      <button
+                        key={s.value}
+                        onClick={() => {
+                          if (lead.status !== s.value) {
+                            handleUpdateField("status", s.value);
+                          }
+                        }}
+                        className={`relative h-10 rounded-lg border text-[10px] font-bold uppercase tracking-wider transition-all ${
+                          lead.status === s.value
+                            ? "ring-2 ring-offset-1 ring-primary shadow-sm scale-[1.03] " + s.color
+                            : s.color + " opacity-70"
+                        }`}
+                      >
+                        {lead.status === s.value && (
+                          <CheckCircle2 className="absolute top-1 right-1 h-3 w-3 text-primary opacity-80" />
+                        )}
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-2 font-medium">
+                    Status atual: <span className="font-bold text-slate-600">{lead.status.replace("_", " ")}</span>
+                  </p>
                 </CardContent>
               </Card>
 
