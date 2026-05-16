@@ -56,6 +56,7 @@ export function Sidebar({ collapsed, onClose }: { collapsed: boolean; onClose?: 
   const imobiliaria = profileData?.imobiliarias;
 
   // Mutação para alternar plantão
+  const mutation = useMutation({
     mutationFn: async (newValue: boolean) => {
       const { error: profileError } = await supabase
         .from("perfis")
