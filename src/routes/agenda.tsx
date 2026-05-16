@@ -14,6 +14,7 @@ import { LeadDetailsModal } from "@/components/leads/LeadDetailsModal";
 import { ScheduleTaskModal } from "@/components/leads/ScheduleTaskModal";
 import { useState } from "react";
 import { Plus } from "lucide-react";
+import { usePermissions } from "@/hooks/usePermissions";
 
 export const Route = createFileRoute("/agenda")({
   head: () => ({ meta: [{ title: "Agenda — CRM" }] }),
