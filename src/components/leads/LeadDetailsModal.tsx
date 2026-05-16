@@ -44,7 +44,9 @@ import {
   ArrowLeftRight,
   Edit3,
   LayoutGrid,
+  MessageCircle,
 } from "lucide-react";
+import { WhatsAppChat } from "./WhatsAppChat";
 import { toast } from "sonner";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { format } from "date-fns";
@@ -394,6 +396,7 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
                 { id: "followup", icon: Calendar, label: "Follow-up" },
                 { id: "templates", icon: FileText, label: "Templates" },
                 { id: "historico", icon: History, label: "Histórico" },
+                { id: "chat", icon: MessageCircle, label: "Chat WhatsApp" },
                 { id: "anotacoes", icon: AlertCircle, label: "Anotações" },
               ].map(tab => (
                 <TabsTrigger 
@@ -689,6 +692,16 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
                   </div>
                 </CardContent>
               </Card>
+
+              {activeTab === "chat" && (
+                <div className="mt-4">
+                  <WhatsAppChat 
+                    leadId={lead.id} 
+                    imobiliariaId={lead.imobiliaria_id} 
+                    phoneNumber={lead.telefone} 
+                  />
+                </div>
+              )}
             </div>
           </ScrollArea>
         </div>
