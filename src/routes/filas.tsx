@@ -70,7 +70,7 @@ function SortableItem({ id, profile, index, isNext, onToggleStatus }: { id: stri
             <h4 className="text-sm font-bold truncate">{profile?.nome || "Corretor"}</h4>
             {isNext && isOnline && (
               <Badge className="bg-primary hover:bg-primary text-[9px] h-4 px-1.5 font-black uppercase tracking-tighter">
-                PRÃ“XIMO LEAD
+                PRÓXIMO LEAD
               </Badge>
             )}
             {!isOnline && (
@@ -107,9 +107,29 @@ function SortableItem({ id, profile, index, isNext, onToggleStatus }: { id: stri
 
 function FilasPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { can, role, isLoading: loadingPerms } = usePermissions();
   const [activeTab, setActiveTab] = useState("roleta");
   const [selectedDay, setSelectedDay] = useState<number>(new Date().getDay() || 7);
+
+  // Proteção de rota: apenas Dono e Gerente podem acessar
+  React.useEffect(() => {
+    if (!loadingPerms && role === 'corretor') {
+      toast.error("Acesso restrito à gestão.");
+      navigate({ to: "/dashboard" });
+    }
+  }, [role, loadingPerms, navigate]);
+
+  if (loadingPerms || role === 'corretor') {
+    return (
+      <MainLayout>
+        <div className="flex h-full items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </MainLayout>
+    );
+  }
 
   const { data: profile } = useQuery({
     queryKey: ["user-profile", user?.id],
@@ -127,11 +147,12 @@ function FilasPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("filas_atendimento")
-        .select("*, perfis(nome, avatar_url)")
+        .select("*, perfis(nome, avatar_url, status_roleta)")
         .order("posicao", { ascending: true });
       if (error) throw error;
       return data;
     },
+    refetchInterval: 5000, // Atualizar a cada 5 segundos para o dono
   });
 
   const { data: escala, isLoading: loadingEscala } = useQuery({

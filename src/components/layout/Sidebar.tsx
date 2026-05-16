@@ -56,13 +56,14 @@ export function Sidebar({ collapsed, onClose }: { collapsed: boolean; onClose?: 
   const imobiliaria = profileData?.imobiliarias;
 
   // Mutação para alternar plantão
-  const mutation = useMutation({
     mutationFn: async (newValue: boolean) => {
       const { error: profileError } = await supabase
         .from("perfis")
         .update({ 
           em_plantao: newValue,
-          ultimo_checkin: newValue ? new Date().toISOString() : undefined 
+          status_roleta: newValue,
+          ultimo_checkin: newValue ? new Date().toISOString() : null,
+          ultimo_checkin_roleta: newValue ? new Date().toISOString() : null
         })
         .eq("id", user?.id);
       
@@ -129,19 +130,24 @@ export function Sidebar({ collapsed, onClose }: { collapsed: boolean; onClose?: 
     refetchInterval: 60000,
   });
 
-  const { can } = usePermissions();
+  const { can, role } = usePermissions();
   const main: Item[] = [
     { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { to: "/leads", label: "Leads", icon: Users, badge: counts?.leads },
     { to: "/clientes", label: "Clientes", icon: UsersRound },
     { to: "/imoveis", label: "Imóveis", icon: Home },
     { to: "/agenda", label: "Agenda", icon: CalendarIcon },
-    { to: "/filas", label: "Roleta", icon: RefreshCw },
   ];
 
-  const tools: Item[] = [
-    { to: "/redistribuicao", label: "Redistribuição", icon: Layers, badge: counts?.fila, badgeTone: "red" },
-  ];
+  if (can('configure_system')) {
+    main.push({ to: "/filas", label: "Roleta", icon: RefreshCw });
+  }
+
+  const tools: Item[] = [];
+
+  if (can('configure_system')) {
+    tools.push({ to: "/redistribuicao", label: "Redistribuição", icon: Layers, badge: counts?.fila, badgeTone: "red" });
+  }
 
   if (can('manage_team')) {
     tools.push({ to: "/equipe", label: "Equipe", icon: UsersRound });

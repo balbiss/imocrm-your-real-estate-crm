@@ -7,10 +7,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, UserCheck, AlertTriangle, Clock, Shuffle, Loader2, Users } from "lucide-react";
-import { toast } from "sonner";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/context/AuthContext";
+import { usePermissions } from "@/hooks/usePermissions";
+import { useNavigate } from "@tanstack/react-router";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -27,10 +26,30 @@ export const Route = createFileRoute("/redistribuicao")({
 
 function RedistributionPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { role, isLoading: loadingPerms } = usePermissions();
   const [selectedLeads, setSelectedLeads] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState("redistribuicao");
   const [isDistributing, setIsDistributing] = useState(false);
+
+  // Proteção de rota
+  React.useEffect(() => {
+    if (!loadingPerms && role === 'corretor') {
+      toast.error("Acesso restrito à gestão.");
+      navigate({ to: "/dashboard" });
+    }
+  }, [role, loadingPerms, navigate]);
+
+  if (loadingPerms || role === 'corretor') {
+    return (
+      <MainLayout>
+        <div className="flex h-full items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </MainLayout>
+    );
+  }
 
   const { data: profile } = useQuery({
     queryKey: ["user-profile", user?.id],
@@ -77,6 +96,7 @@ function RedistributionPage() {
       return data;
     },
     enabled: !!profile?.imobiliaria_id,
+    refetchInterval: 10000, // Atualizar a cada 10 segundos para o dono
     staleTime: 1000 * 30,
   });
 

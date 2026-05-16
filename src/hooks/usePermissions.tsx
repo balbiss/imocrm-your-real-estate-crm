@@ -7,7 +7,7 @@ export type Action = 'view_reports' | 'manage_team' | 'manage_properties' | 'del
 export function usePermissions() {
   const { user } = useAuth();
 
-  const { data: profile } = useQuery({
+  const { data: profile, isLoading } = useQuery({
     queryKey: ["profile", user?.id],
     queryFn: async () => {
       if (!user) return null;
@@ -39,7 +39,7 @@ export function usePermissions() {
     }
   };
 
-  return { can, role: profile?.role };
+  return { can, role: profile?.role, isLoading };
 }
 
 export function PermissionGuard({ action, children, fallback = null }: { action: Action, children: React.ReactNode, fallback?: React.ReactNode }) {
