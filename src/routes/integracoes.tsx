@@ -23,6 +23,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { WhatsAppConfigModal } from "@/components/integrations/WhatsAppConfigModal";
 
 export const Route = createFileRoute("/integracoes")({
   head: () => ({ meta: [{ title: "Integrações — CRM" }] }),
@@ -127,6 +128,7 @@ function IntegrationsPage() {
   const [imobiliariaId, setImobiliariaId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
+  const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
 
   // Carregar imobiliaria_id do usuário logado
   const loadImobiliariaId = useCallback(async () => {
@@ -172,6 +174,13 @@ function IntegrationsPage() {
   // Alternar status da integração
   const toggleIntegration = async (def: IntegrationDef) => {
     if (!imobiliariaId) return;
+
+    // Se for WhatsApp, abre o modal em vez de apenas alternar
+    if (def.id === "whatsapp") {
+      setIsWhatsAppModalOpen(true);
+      return;
+    }
+
     setSaving(def.id);
 
     const current = configs[def.id];
@@ -429,6 +438,19 @@ function IntegrationsPage() {
             </CardContent>
           </Card>
         </div>
+
+        {imobiliariaId && (
+          <WhatsAppConfigModal
+            isOpen={isWhatsAppModalOpen}
+            onClose={() => setIsWhatsAppModalOpen(false)}
+            imobiliariaId={imobiliariaId}
+            currentConfig={configs["whatsapp"]?.config}
+            onSaved={async () => {
+              await loadConfigs(imobiliariaId);
+              setIsWhatsAppModalOpen(false);
+            }}
+          />
+        )}
       </div>
     </MainLayout>
   );

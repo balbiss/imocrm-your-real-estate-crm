@@ -5,7 +5,7 @@ import { NewLeadDialog } from "@/components/leads/NewLeadDialog";
 import { LeadsTable } from "@/components/leads/LeadsTable";
 
 import { Button } from "@/components/ui/button";
-import { Plus, Filter, Search, List, Kanban, AlertCircle, Clock, Flame, Snowflake, Sun } from "lucide-react";
+import { Plus, Filter, Search, List, Kanban, AlertCircle, Clock, Flame, Snowflake, Sun, Loader2 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,6 +19,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/leads")({

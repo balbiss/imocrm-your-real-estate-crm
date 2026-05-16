@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Calendar } from "@/components/ui/calendar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Clock, MessageSquare, Phone, User, Calendar as CalendarIcon } from "lucide-react";
+import { Clock, MessageSquare, Phone, User, Calendar as CalendarIcon, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { LeadDetailsModal } from "@/components/leads/LeadDetailsModal";
@@ -15,6 +15,7 @@ import { ScheduleTaskModal } from "@/components/leads/ScheduleTaskModal";
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useAuth } from "@/context/AuthContext";
 
 export const Route = createFileRoute("/agenda")({
   head: () => ({ meta: [{ title: "Agenda — CRM" }] }),
