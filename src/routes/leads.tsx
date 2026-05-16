@@ -26,33 +26,64 @@ export const Route = createFileRoute("/leads")({
 });
 
 function LeadsPage() {
+  const { user } = useAuth();
+  const { role, isLoading: loadingPerms } = usePermissions();
   const [isNewLeadOpen, setIsNewLeadOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [view, setView] = useState("kanban");
   const [tempFilter, setTempFilter] = useState<string | null>(null);
   const [showOverdueOnly, setShowOverdueOnly] = useState(false);
 
-  const { data: leads, isLoading, error } = useQuery({
-    queryKey: ["leads"],
+  const { data: profile, isLoading: loadingProfile } = useQuery({
+    queryKey: ["user-profile-leads", user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
+      if (!user) return null;
+      const { data, error } = await supabase.from("perfis").select("imobiliaria_id").eq("id", user.id).single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user,
+  });
+
+  const { data: leads, isLoading, error } = useQuery({
+    queryKey: ["leads", profile?.imobiliaria_id, role],
+    queryFn: async () => {
+      if (!profile?.imobiliaria_id || loadingPerms) return [];
+
+      let query = supabase
         .from("leads")
         .select(`
           *,
           corretor:perfis!corretor_id(nome, avatar_url)
         `)
-        .order("created_at", { ascending: false });
+        .eq("imobiliaria_id", profile.imobiliaria_id);
+
+      if (role === 'corretor') {
+        query = query.eq("corretor_id", user?.id);
+      }
+
+      const { data, error } = await query.order("created_at", { ascending: false });
       
       if (error) {
         console.error("Erro ao buscar leads:", error);
         throw error;
       }
       
-      console.log("Leads carregados:", data?.length);
       return data;
     },
+    enabled: !!profile?.imobiliaria_id && !loadingPerms,
     staleTime: 1000 * 60,
   });
+
+  if (isLoading || loadingPerms || loadingProfile) {
+    return (
+      <MainLayout>
+        <div className="flex h-full items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </MainLayout>
+    );
+  }
 
   if (error) {
     return (

@@ -63,6 +63,8 @@ function ClientesPage() {
     }
   });
 
+  const { role, isLoading: loadingPerms } = usePermissions();
+
   const { data: profile } = useQuery({
     queryKey: ["user-profile-clientes", user?.id],
     queryFn: async () => {
@@ -75,18 +77,25 @@ function ClientesPage() {
   });
 
   const { data: leads, isLoading } = useQuery({
-    queryKey: ["clientes-list", profile?.imobiliaria_id],
+    queryKey: ["clientes-list", profile?.imobiliaria_id, role],
     queryFn: async () => {
-      if (!profile?.imobiliaria_id) return [];
-      const { data, error } = await supabase
+      if (!profile?.imobiliaria_id || loadingPerms) return [];
+
+      let query = supabase
         .from("leads")
         .select("*")
-        .eq("imobiliaria_id", profile.imobiliaria_id)
-        .order("nome");
+        .eq("imobiliaria_id", profile.imobiliaria_id);
+
+      if (role === 'corretor') {
+        query = query.eq("corretor_id", user?.id);
+      }
+
+      const { data, error } = await query.order("nome");
+
       if (error) throw error;
       return data;
     },
-    enabled: !!profile?.imobiliaria_id,
+    enabled: !!profile?.imobiliaria_id && !loadingPerms,
   });
 
   const [searchTerm, setSearchTerm] = React.useState("");
@@ -98,7 +107,7 @@ function ClientesPage() {
     cliente.cpf?.includes(searchTerm)
   );
 
-  if (isLoading) return (
+  if (isLoading || loadingPerms) return (
     <MainLayout>
       <div className="p-4 space-y-4 max-w-7xl mx-auto">
         <Skeleton className="h-6 w-48" />

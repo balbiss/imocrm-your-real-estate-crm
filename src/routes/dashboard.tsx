@@ -33,6 +33,7 @@ export const Route = createFileRoute("/dashboard")({
 
 function DashboardPage() {
   const { user } = useAuth();
+  const { role, isLoading: loadingPerms } = usePermissions();
 
   const { data: profile } = useQuery({
     queryKey: ["user-profile-dashboard", user?.id],
@@ -46,15 +47,21 @@ function DashboardPage() {
   });
 
   const { data: dashboardData, isLoading } = useQuery({
-    queryKey: ["dashboard-summary", profile?.imobiliaria_id],
+    queryKey: ["dashboard-summary", profile?.imobiliaria_id, role],
     queryFn: async () => {
-      if (!profile?.imobiliaria_id) return null;
+      if (!profile?.imobiliaria_id || loadingPerms) return null;
 
-      const { data: leads, error: leadsError } = await supabase
+      let query = supabase
         .from("leads")
         .select("*, corretor:perfis!corretor_id(nome)")
-        .eq("imobiliaria_id", profile.imobiliaria_id)
-        .order("created_at", { ascending: false });
+        .eq("imobiliaria_id", profile.imobiliaria_id);
+
+      // Se for corretor, filtrar apenas os dele
+      if (role === 'corretor') {
+        query = query.eq("corretor_id", user?.id);
+      }
+
+      const { data: leads, error: leadsError } = await query.order("created_at", { ascending: false });
 
       if (leadsError) throw leadsError;
 
@@ -69,10 +76,10 @@ function DashboardPage() {
 
       return stats;
     },
-    enabled: !!profile?.imobiliaria_id,
+    enabled: !!profile?.imobiliaria_id && !loadingPerms,
   });
 
-  if (isLoading || !profile) {
+  if (isLoading || loadingPerms || !profile) {
     return (
       <MainLayout>
         <div className="p-8 flex justify-center">
@@ -82,13 +89,21 @@ function DashboardPage() {
     );
   }
 
+  const isBroker = role === 'corretor';
+
   return (
     <MainLayout>
       <div className="p-4 space-y-6 max-w-7xl mx-auto">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-slate-900">Dashboard Executivo</h1>
-            <p className="text-saas-sm text-muted-foreground">Monitoramento de performance e gestão em tempo real.</p>
+            <h1 className="text-xl font-bold tracking-tight text-slate-900">
+              {isBroker ? "Meu Dashboard" : "Dashboard Executivo"}
+            </h1>
+            <p className="text-saas-sm text-muted-foreground">
+              {isBroker 
+                ? "Acompanhe seus leads e atividades individuais." 
+                : "Monitoramento de performance e gestão em tempo real."}
+            </p>
           </div>
           <div className="flex gap-2">
             <Link to="/leads">

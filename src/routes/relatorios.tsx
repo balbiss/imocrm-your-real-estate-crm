@@ -24,6 +24,9 @@ import { Users, Target, CheckCircle, Clock, Calendar, BarChart3, Loader2 } from 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
+import { useNavigate } from "@tanstack/react-router";
+import { usePermissions } from "@/hooks/usePermissions";
+
 export const Route = createFileRoute("/relatorios")({
   head: () => ({ meta: [{ title: "Relatórios — CRM" }] }),
   component: ReportsPage,
@@ -33,6 +36,15 @@ const COLORS = ["#1d4ed8", "#10b981", "#f59e0b", "#3b82f6", "#8b5cf6"];
 
 function ReportsPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const { role, isLoading: loadingPerms } = usePermissions();
+
+  // Proteção de rota
+  React.useEffect(() => {
+    if (!loadingPerms && role === 'corretor') {
+      navigate({ to: "/dashboard" });
+    }
+  }, [role, loadingPerms, navigate]);
 
   const { data: profile } = useQuery({
     queryKey: ["user-profile-reports", user?.id],

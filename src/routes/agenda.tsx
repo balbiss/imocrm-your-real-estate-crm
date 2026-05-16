@@ -21,23 +21,55 @@ export const Route = createFileRoute("/agenda")({
 });
 
 function AgendaPage() {
+  const { user } = useAuth();
+  const { role, isLoading: loadingPerms } = usePermissions();
   const [date, setDate] = useState<Date | undefined>(new Date());
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
 
-  const { data: compromissos, isLoading } = useQuery({
-    queryKey: ["compromissos", date],
+  const { data: profile, isLoading: loadingProfile } = useQuery({
+    queryKey: ["user-profile-agenda", user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("leads")
-        .select("*")
-        .not("lembrete_follow_up", "is", null)
-        .order("lembrete_follow_up");
+      if (!user) return null;
+      const { data, error } = await supabase.from("perfis").select("imobiliaria_id").eq("id", user.id).single();
       if (error) throw error;
       return data;
     },
+    enabled: !!user,
   });
+
+  const { data: compromissos, isLoading } = useQuery({
+    queryKey: ["compromissos", profile?.imobiliaria_id, role],
+    queryFn: async () => {
+      if (!profile?.imobiliaria_id || loadingPerms) return [];
+
+      let query = supabase
+        .from("leads")
+        .select("*")
+        .eq("imobiliaria_id", profile.imobiliaria_id)
+        .not("lembrete_follow_up", "is", null);
+
+      if (role === 'corretor') {
+        query = query.eq("corretor_id", user?.id);
+      }
+
+      const { data, error } = await query.order("lembrete_follow_up");
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!profile?.imobiliaria_id && !loadingPerms,
+  });
+
+  if (isLoading || loadingPerms || loadingProfile) {
+    return (
+      <MainLayout>
+        <div className="flex h-full items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </MainLayout>
+    );
+  }
 
   const filteredCompromissos = compromissos?.filter(item => {
     if (!date) return true;
