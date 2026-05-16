@@ -56,11 +56,14 @@ export function InviteMemberDialog({ open, onOpenChange }: InviteMemberDialogPro
       });
 
       if (error) throw error;
+      return responseData;
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["team-list"] });
-      toast.success("Membro adicionado com sucesso!", {
-        description: "A senha padrão dele é: Hinode@Mudar123",
+      toast.success(data?.message || "Membro adicionado com sucesso!", {
+        description: data?.isNewUser 
+          ? "A senha padrão dele é: Hinode@Mudar123" 
+          : "Este membro já possuía acesso e seus dados de perfil foram atualizados.",
         duration: 10000,
       });
       reset();

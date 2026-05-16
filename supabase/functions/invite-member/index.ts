@@ -25,8 +25,7 @@ Deno.serve(async (req) => {
 
     const { email, nome, role, imobiliaria_id, telefone } = await req.json();
 
-    // Criar o usuário diretamente com uma senha padrão
-    // Isso permite que o corretor logue imediatamente
+    // Tenta criar o usuário
     const { data: userData, error: createError } = await supabaseClient.auth.admin.createUser({
       email,
       password: "Hinode@Mudar123", // Senha padrão para novos membros
@@ -34,31 +33,43 @@ Deno.serve(async (req) => {
       user_metadata: { nome, role, imobiliaria_id },
     });
 
+    let userId = userData?.user?.id;
+
     if (createError) {
-      // Se o usuário já existir, tentamos apenas atualizar o perfil
-      if (createError.message.includes("already registered")) {
-        throw new Error("Este e-mail já está cadastrado no sistema.");
+      // Se o usuário já existir, buscamos o ID dele para atualizar o perfil
+      if (createError.message.includes("already registered") || createError.message.includes("already exists")) {
+        // Como o admin.createUser falhou, buscamos o usuário pelo email
+        const { data: userList, error: listError } = await supabaseClient.auth.admin.listUsers();
+        if (listError) throw listError;
+        
+        const existingUser = userList.users.find(u => u.email === email);
+        if (!existingUser) throw new Error("Erro ao localizar usuário existente.");
+        
+        userId = existingUser.id;
+      } else {
+        throw createError;
       }
-      throw createError;
     }
 
-    // Criar o perfil na tabela 'perfis'
+    // Criar ou atualizar o perfil na tabela 'perfis'
     const { error: profileError } = await supabaseClient
       .from("perfis")
       .upsert({
-        id: userData.user.id,
+        id: userId,
         nome,
         role,
         imobiliaria_id,
         telefone,
+        // Mantemos o status de plantão se já existir, ou definimos como false
         em_plantao: false,
       });
 
     if (profileError) throw profileError;
 
     return new Response(JSON.stringify({ 
-      message: "Membro criado com sucesso!",
-      tempPassword: "Hinode@Mudar123" 
+      message: createError ? "Perfil do membro atualizado com sucesso!" : "Membro convidado com sucesso!",
+      tempPassword: createError ? null : "Hinode@Mudar123",
+      isNewUser: !createError
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
