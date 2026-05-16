@@ -20,22 +20,27 @@ serve(async (req) => {
     const payload = await req.json();
     console.log("Webhook received:", JSON.stringify(payload, null, 2));
 
-    // A estrutura do payload depende da API do Baileys utilizada
-    // Geralmente: { event: "message.upsert", data: { ... } }
-    const { event, data, phoneNumber } = payload;
-
-    if (event === "messages.upsert" || event === "message.upsert") {
+    // Suporte para Evolution API e Baileys API
+    const event = payload.event || payload.type;
+    const data = payload.data || payload;
+    
+    if (event === "messages.upsert" || event === "MESSAGES_UPSERT" || event === "message.upsert") {
       const message = data.messages?.[0] || data;
-      const remoteJid = message.key.remoteJid;
-      const text = message.message?.conversation || message.message?.extendedTextMessage?.text;
-      const isFromMe = message.key.fromMe;
+      
+      // Evolution API pode mandar o remoteJid em lugares diferentes
+      const remoteJid = message.key?.remoteJid || message.remoteJid;
+      const text = message.message?.conversation || 
+                   message.message?.extendedTextMessage?.text || 
+                   message.text || 
+                   message.content ||
+                   "";
+      const isFromMe = message.key?.fromMe || message.fromMe || false;
 
-      if (text && !isFromMe) {
-        // 1. Limpar o número do cliente (remoteJid vem algo como 5511999999999@s.whatsapp.net)
+      if (text && !isFromMe && remoteJid) {
+        // 1. Limpar o número do cliente
         const cleanNumber = remoteJid.split("@")[0];
 
         // 2. Tentar encontrar o lead por telefone
-        // Procuramos por variações (com ou sem 55)
         const { data: leads } = await supabase
           .from("leads")
           .select("id, imobiliaria_id")
@@ -45,17 +50,17 @@ serve(async (req) => {
         if (leads && leads.length > 0) {
           const lead = leads[0];
 
-          // 3. Salvar a mensagem no histórico (direção inbound)
+          // 3. Salvar a mensagem no histórico
           await supabase.from("mensagens_whatsapp").insert({
             lead_id: lead.id,
             imobiliaria_id: lead.imobiliaria_id,
             conteudo: text,
             direcao: "inbound",
-            whatsapp_message_id: message.key.id,
+            whatsapp_message_id: message.key?.id || message.id,
             metadata: message
           });
 
-          // 4. Atualizar última ação do lead para ele subir no Kanban ou disparar alertas
+          // 4. Atualizar última ação do lead
           await supabase.from("leads").update({
             ultima_acao_at: new Date().toISOString()
           }).eq("id", lead.id);

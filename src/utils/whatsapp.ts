@@ -33,28 +33,31 @@ export async function sendWhatsAppMessage(to: string, message: string) {
       return { success: false, fallbackUrl: `https://wa.me/${to.replace(/\D/g, "")}?text=${encodeURIComponent(message)}` };
     }
 
-    const config = configRow.config as unknown as WhatsAppConfig;
+    const config = configRow.config as any;
     
-    // 2. Limpar o número de destino
+    // 2. Limpar o número de destino (Evolution Go prefere sem o '+')
     const cleanTo = to.replace(/\D/g, "");
     const finalTo = cleanTo.startsWith("55") ? cleanTo : `55${cleanTo}`;
 
-    // 3. Chamar a Baileys API
-    const response = await fetch(`${config.apiUrl}/connections/${config.phoneNumber}/send-message`, {
+    // 3. Chamar a Evolution API Go
+    const sanitizedInstanceName = (config.instanceName || "WhatsApp_CRM").trim().replace(/\s+/g, "_");
+    
+    const response = await fetch(`${config.apiUrl}/message/sendText/${sanitizedInstanceName}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": config.apiKey
+        "apikey": config.apiKey
       },
       body: JSON.stringify({
-        to: `+${finalTo}`,
-        text: message
+        number: finalTo,
+        text: message,
+        linkPreview: false
       })
     });
 
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(errorData.message || "Erro ao enviar mensagem");
+      throw new Error(errorData.message || "Erro ao enviar mensagem via Evolution");
     }
 
     return { success: true };

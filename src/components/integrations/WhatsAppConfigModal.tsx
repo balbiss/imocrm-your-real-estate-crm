@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { 
   Loader2, 
   CheckCircle2, 
@@ -39,26 +40,27 @@ export function WhatsAppConfigModal({
   currentConfig,
   onSaved,
 }: WhatsAppConfigModalProps) {
-  const [apiUrl, setApiUrl] = useState(currentConfig?.apiUrl || "https://wa.inoovaweb.com.br");
-  const [apiKey, setApiKey] = useState(currentConfig?.apiKey || "minha_chave_mestra_123");
+  const [instanceName, setInstanceName] = useState(currentConfig?.instanceName || "WhatsApp_CRM");
+  const [apiUrl, setApiUrl] = useState(currentConfig?.apiUrl || "https://evogo.inoovaweb.cloud");
+  const [apiKey, setApiKey] = useState(currentConfig?.apiKey || "2722b3cb9ec5ddba9cc509f0f321e1d8");
   const [phoneNumber, setPhoneNumber] = useState(currentConfig?.phoneNumber || "");
   const [loading, setLoading] = useState(false);
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "connecting" | "connected" | "error">("idle");
   const [checkingStatus, setCheckingStatus] = useState(false);
 
-  // Verificar status atual na API do Baileys
+  // Verificar status atual na Evolution API
   const checkApiStatus = async () => {
-    if (!apiUrl || !apiKey || !phoneNumber) return;
+    if (!apiUrl || !apiKey || !instanceName) return;
     
     setCheckingStatus(true);
     try {
-      const response = await fetch(`${apiUrl}/status`, {
-        headers: { "x-api-key": apiKey }
+      const response = await fetch(`${apiUrl}/instance/connectionState/${instanceName}`, {
+        headers: { "apikey": apiKey }
       });
-      if (response.ok) {
-        // Se a API está OK, podemos tentar ver se o número está conectado futuramente
-        // Por enquanto, apenas validamos a conexão com a API
+      const data = await response.json();
+      if (data.instance?.state === "open") {
+        setStatus("connected");
       }
     } catch (error) {
       console.error("Erro ao validar API:", error);
@@ -81,6 +83,8 @@ export function WhatsAppConfigModal({
               apiUrl,
               apiKey,
               phoneNumber,
+              instanceName,
+              provider: "evolution_go"
             },
           },
           { onConflict: "imobiliaria_id,integration_id" }
@@ -97,9 +101,35 @@ export function WhatsAppConfigModal({
     }
   };
 
+  const configureWebhook = async (sanitizedName: string) => {
+    try {
+      await fetch(`${apiUrl}/webhook/set/${sanitizedName}`, {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          "apikey": apiKey 
+        },
+        body: JSON.stringify({
+          url: "https://osheoeeigahkwsrzfjdw.supabase.co/functions/v1/whatsapp-webhook",
+          webhook_by_events: false,
+          events: [
+            "MESSAGES_UPSERT",
+            "MESSAGES_UPDATE",
+            "MESSAGES_DELETE",
+            "SEND_MESSAGE",
+            "CONNECTION_UPDATE"
+          ]
+        })
+      });
+      console.log("Webhook configurado automaticamente.");
+    } catch (e) {
+      console.error("Erro ao configurar webhook:", e);
+    }
+  };
+
   const generateQRCode = async () => {
-    if (!phoneNumber) {
-      toast.error("Informe o número de telefone (ex: +5511999999999)");
+    if (!instanceName) {
+      toast.error("Informe um nome para a instância (sem espaços)");
       return;
     }
 
@@ -107,33 +137,49 @@ export function WhatsAppConfigModal({
     setStatus("connecting");
     setQrCode(null);
 
+    const sanitizedInstanceName = instanceName.trim().replace(/\s+/g, "_");
+
     try {
-      // 1. Iniciar conexão na Baileys API
-      const res = await fetch(`${apiUrl}/connections/${phoneNumber}`, {
+      // 1. Criar ou Reiniciar Instância na Evolution API
+      await fetch(`${apiUrl}/instance/create`, {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
-          "x-api-key": apiKey 
-        }
+          "apikey": apiKey 
+        },
+        body: JSON.stringify({
+          instanceName: sanitizedInstanceName,
+          qrcode: true,
+          integration: "WHATSAPP-BAILEYS"
+        })
       });
 
-      const data = await res.json();
+      // 2. Configurar Webhook Automaticamente
+      await configureWebhook(sanitizedInstanceName);
+      
+      // 3. Buscar QR Code
+      const connectRes = await fetch(`${apiUrl}/instance/connect/${sanitizedInstanceName}`, {
+        headers: { "apikey": apiKey }
+      });
 
-      if (res.ok) {
-        toast.info("Aguardando QR Code...");
-        
-        if (data.qr) {
-          setQrCode(data.qr);
-        } else {
-          // Tentar buscar o QR via GET se não veio no POST
-          const qrRes = await fetch(`${apiUrl}/connections/${phoneNumber}`, {
-            headers: { "x-api-key": apiKey }
-          });
-          const qrData = await qrRes.json();
-          if (qrData.qr) setQrCode(qrData.qr);
-        }
+      const data = await connectRes.json();
+
+      if (connectRes.ok && data.base64) {
+        setQrCode(data.base64);
+        toast.success("QR Code gerado e Webhook configurado!");
       } else {
-        throw new Error(data.message || "Erro ao iniciar conexão");
+        // Tentar ver se já está conectado
+        const stateRes = await fetch(`${apiUrl}/instance/connectionState/${sanitizedInstanceName}`, {
+          headers: { "apikey": apiKey }
+        });
+        const stateData = await stateRes.json();
+        
+        if (stateData.instance?.state === "open") {
+          setStatus("connected");
+          toast.success("WhatsApp já está conectado!");
+        } else {
+          throw new Error(data.message || "Erro ao conectar instância");
+        }
       }
     } catch (error: any) {
       toast.error(`Erro: ${error.message}`);
@@ -143,164 +189,149 @@ export function WhatsAppConfigModal({
     }
   };
 
-  // Efeito para verificar status automaticamente quando estiver tentando conectar
+  // Polling para verificar se o QR foi lido
   useEffect(() => {
     let interval: NodeJS.Timeout;
 
     if (status === "connecting" || qrCode) {
+      const sanitizedInstanceName = instanceName.trim().replace(/\s+/g, "_");
+      
       interval = setInterval(async () => {
         try {
-          const res = await fetch(`${apiUrl}/connections/${phoneNumber}`, {
-            headers: { "x-api-key": apiKey }
+          const res = await fetch(`${apiUrl}/instance/connectionState/${sanitizedInstanceName}`, {
+            headers: { "apikey": apiKey }
           });
           const data = await res.json();
 
-          // Se a conexão estiver 'open' (aberta), significa que o QR foi lido
-          if (data.status === "open" || data.state === "open") {
+          if (data.instance?.state === "open") {
             setStatus("connected");
             setQrCode(null);
             clearInterval(interval);
             toast.success("WhatsApp conectado com sucesso!");
-            
-            // Salvar automaticamente o status no banco
             await handleSaveConfig();
           }
         } catch (e) {
           console.error("Erro no polling de status:", e);
         }
-      }, 3000);
+      }, 5000);
     }
 
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [status, qrCode, apiUrl, apiKey, phoneNumber]);
+  }, [status, qrCode, apiUrl, apiKey, instanceName]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[500px] bg-white border-none shadow-2xl p-0 overflow-hidden">
-        <div className="bg-gradient-to-r from-emerald-600 to-teal-600 p-6 text-white">
-          <DialogHeader>
-            <div className="flex items-center gap-3 mb-2">
-              <div className="h-10 w-10 rounded-xl bg-white/20 flex items-center justify-center backdrop-blur-sm">
-                <QrCode className="h-6 w-6 text-white" />
-              </div>
-              <div>
-                <DialogTitle className="text-xl font-bold text-white">Configurar WhatsApp</DialogTitle>
-                <DialogDescription className="text-emerald-50/80 text-xs">
-                  Conecte sua instância da Baileys-API para automações.
-                </DialogDescription>
-              </div>
-            </div>
-          </DialogHeader>
+      <DialogContent className="sm:max-w-[450px] max-h-[90vh] bg-white border-none shadow-2xl p-0 overflow-hidden flex flex-col">
+        <div className="bg-gradient-to-r from-emerald-600 to-teal-600 p-4 text-white flex items-center gap-3 shrink-0">
+          <div className="h-10 w-10 rounded-xl bg-white/20 flex items-center justify-center backdrop-blur-sm">
+            <QrCode className="h-6 w-6 text-white" />
+          </div>
+          <div>
+            <DialogTitle className="text-lg font-bold text-white">Conectar WhatsApp</DialogTitle>
+            <DialogDescription className="text-emerald-50/80 text-[10px] uppercase tracking-wider font-bold">
+              Configuração de Instância
+            </DialogDescription>
+          </div>
         </div>
 
-        <div className="p-6 space-y-6">
-          {/* Status da API */}
-          <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
-            <div className="flex items-center gap-2">
-              <Globe className="h-4 w-4 text-slate-400" />
-              <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">Status da Instância</span>
+        <ScrollArea className="flex-1 overflow-y-auto">
+          <div className="p-5 space-y-5">
+            {/* Status da API */}
+            <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className={`h-2 w-2 rounded-full ${status === "connected" ? "bg-emerald-500 animate-pulse" : "bg-slate-300"}`} />
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Status da Instância</span>
+              </div>
+              <Badge variant="outline" className={`h-5 text-[9px] font-black uppercase ${
+                status === "connected" ? "bg-emerald-50 text-emerald-600 border-emerald-100" : "bg-slate-100 text-slate-400 border-slate-200"
+              }`}>
+                {status === "connected" ? "● Online" : "● Offline"}
+              </Badge>
             </div>
-            <Badge variant="outline" className="bg-white text-[10px] font-bold">
-              {checkingStatus ? (
-                <Loader2 className="h-3 w-3 animate-spin mr-1" />
+
+            <div className="space-y-4">
+              <div className="grid gap-1.5">
+                <Label htmlFor="instanceName" className="text-[10px] font-bold text-slate-400 uppercase ml-1">
+                  Nome da Conexão
+                </Label>
+                <Input
+                  id="instanceName"
+                  placeholder="Ex: WhatsApp Comercial"
+                  value={instanceName}
+                  onChange={(e) => setInstanceName(e.target.value)}
+                  className="bg-slate-50 border-slate-200 focus:bg-white transition-all h-10 text-sm"
+                />
+              </div>
+
+              <div className="grid gap-1.5">
+                <Label htmlFor="phone" className="text-[10px] font-bold text-slate-400 uppercase ml-1">
+                  Seu Número (com DDI)
+                </Label>
+                <Input
+                  id="phone"
+                  placeholder="+5591999999999"
+                  value={phoneNumber}
+                  onChange={(e) => setPhoneNumber(e.target.value)}
+                  className="bg-slate-50 border-slate-200 focus:bg-white transition-all h-10 text-sm font-medium"
+                />
+                <p className="text-[9px] text-slate-400 ml-1 italic">* Use o formato com +55</p>
+              </div>
+
+              {/* Campos técnicos escondidos (acessíveis apenas se necessário via código) */}
+              <div className="hidden">
+                <Input value={apiUrl} onChange={(e) => setApiUrl(e.target.value)} />
+                <Input value={apiKey} onChange={(e) => setApiKey(e.target.value)} />
+              </div>
+            </div>
+
+            {/* QR Code Area */}
+            <div className="flex flex-col items-center justify-center p-6 rounded-2xl bg-slate-50 border-2 border-dashed border-slate-200 relative min-h-[220px] transition-all hover:border-emerald-200">
+              {qrCode ? (
+                <div className="bg-white p-3 rounded-xl shadow-lg animate-in zoom-in-95 duration-300">
+                  <img src={qrCode} alt="WhatsApp QR Code" className="w-40 h-40" />
+                </div>
               ) : (
-                <CheckCircle2 className="h-3 w-3 text-emerald-500 mr-1" />
+                <div className="text-center space-y-2">
+                  <div className="h-12 w-12 rounded-full bg-white shadow-sm flex items-center justify-center mx-auto text-slate-200">
+                    <QrCode className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-bold text-slate-500 uppercase">Aguardando geração...</p>
+                    <p className="text-[9px] text-slate-400 max-w-[180px] mx-auto mt-1">
+                      Salve os dados e gere o código para conectar seu celular.
+                    </p>
+                  </div>
+                </div>
               )}
-              ONLINE
-            </Badge>
-          </div>
-
-          <div className="space-y-4">
-            <div className="grid gap-2">
-              <Label htmlFor="apiUrl" className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
-                <Globe className="h-3 w-3" /> URL da API
-              </Label>
-              <Input
-                id="apiUrl"
-                placeholder="https://wa.inoovaweb.com.br"
-                value={apiUrl}
-                onChange={(e) => setApiUrl(e.target.value)}
-                className="bg-slate-50 border-slate-200 focus:bg-white transition-all h-11"
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="apiKey" className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
-                <ShieldCheck className="h-3 w-3" /> API Key (x-api-key)
-              </Label>
-              <Input
-                id="apiKey"
-                type="password"
-                placeholder="Sua chave de acesso"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                className="bg-slate-50 border-slate-200 focus:bg-white transition-all h-11"
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="phone" className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
-                <Smartphone className="h-3 w-3" /> Seu Número (com DDI)
-              </Label>
-              <Input
-                id="phone"
-                placeholder="+5511999999999"
-                value={phoneNumber}
-                onChange={(e) => setPhoneNumber(e.target.value)}
-                className="bg-slate-50 border-slate-200 focus:bg-white transition-all h-11"
-              />
+              
+              {loading && (
+                <div className="absolute inset-0 bg-white/60 backdrop-blur-sm flex items-center justify-center rounded-2xl">
+                  <Loader2 className="h-8 w-8 text-emerald-600 animate-spin" />
+                </div>
+              )}
             </div>
           </div>
+        </ScrollArea>
 
-          {/* QR Code Area */}
-          <div className="flex flex-col items-center justify-center p-8 rounded-2xl bg-slate-50 border-2 border-dashed border-slate-200 relative min-h-[250px]">
-            {qrCode ? (
-              <div className="bg-white p-4 rounded-xl shadow-lg animate-in zoom-in-95 duration-300">
-                <img src={qrCode} alt="WhatsApp QR Code" className="w-48 h-48" />
-              </div>
-            ) : (
-              <div className="text-center space-y-3">
-                <div className="h-16 w-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto">
-                  <QrCode className="h-8 w-8 text-slate-300" />
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-slate-600">Aguardando geração...</p>
-                  <p className="text-[10px] text-slate-400 max-w-[200px] mx-auto">
-                    Salve as configurações e gere o QR Code para parear seu celular.
-                  </p>
-                </div>
-              </div>
-            )}
-            
-            {loading && (
-              <div className="absolute inset-0 bg-white/60 backdrop-blur-sm flex items-center justify-center rounded-2xl">
-                <div className="flex flex-col items-center gap-2">
-                  <RefreshCw className="h-8 w-8 text-emerald-600 animate-spin" />
-                  <span className="text-xs font-bold text-emerald-700 animate-pulse">Processando...</span>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="flex gap-3 pt-2">
-            <Button
-              variant="outline"
-              className="flex-1 h-12 font-bold uppercase tracking-wider text-[11px] border-slate-200"
-              onClick={handleSaveConfig}
-              disabled={loading}
-            >
-              <Save className="mr-2 h-4 w-4" /> Salvar Dados
-            </Button>
-            <Button
-              className="flex-1 h-12 font-bold uppercase tracking-wider text-[11px] bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-100"
-              onClick={generateQRCode}
-              disabled={loading}
-            >
-              <QrCode className="mr-2 h-4 w-4" /> Gerar QR Code
-            </Button>
-          </div>
+        <div className="p-4 bg-slate-50 border-t flex gap-3 shrink-0">
+          <Button
+            variant="outline"
+            className="flex-1 h-11 font-bold uppercase tracking-wider text-[10px] border-slate-200 bg-white"
+            onClick={handleSaveConfig}
+            disabled={loading}
+          >
+            Salvar Dados
+          </Button>
+          <Button
+            className="flex-1 h-11 font-bold uppercase tracking-wider text-[10px] bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-100"
+            onClick={generateQRCode}
+            disabled={loading}
+          >
+            {loading ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <QrCode className="mr-2 h-3.5 w-3.5" />}
+            Gerar QR Code
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
