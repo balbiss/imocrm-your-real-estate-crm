@@ -156,7 +156,7 @@ export function WhatsAppConfigModal({
               
               // Fechar modal automaticamente após 2 segundos
               setTimeout(() => {
-                onOpenChange(false);
+                onClose();
               }, 2000);
             }
           }
@@ -169,7 +169,7 @@ export function WhatsAppConfigModal({
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [status, instanceName, apiUrl, apiKey, onOpenChange]);
+  }, [status, instanceName, apiUrl, apiKey, onClose]);
 
   const generateQRCode = async () => {
     if (!instanceName) {
@@ -224,7 +224,7 @@ export function WhatsAppConfigModal({
       } else if (data.instance?.state === "open") {
         setStatus("connected");
         toast.success("WhatsApp já está conectado!");
-        setTimeout(() => onOpenChange(false), 2000);
+        setTimeout(() => onClose(), 2000);
       }
     } catch (error: any) {
       console.error("Erro completo:", error);

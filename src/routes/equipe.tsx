@@ -93,6 +93,8 @@ function TeamPage() {
           sla_media: avgSLA
         };
       }));
+
+      return teamWithMetrics;
     },
     enabled: !!profile?.imobiliaria_id,
   });
