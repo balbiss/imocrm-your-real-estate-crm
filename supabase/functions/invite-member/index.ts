@@ -23,12 +23,14 @@ Deno.serve(async (req) => {
       }
     );
 
-    const { email, nome, role, imobiliaria_id, telefone } = await req.json();
+    const { email, nome, role, imobiliaria_id, telefone, senha } = await req.json();
+
+    const finalPassword = senha || "Hinode@Mudar123";
 
     // Tenta criar o usuário
     const { data: userData, error: createError } = await supabaseClient.auth.admin.createUser({
       email,
-      password: "Hinode@Mudar123", // Senha padrão para novos membros
+      password: finalPassword,
       email_confirm: true,
       user_metadata: { nome, role, imobiliaria_id },
     });
@@ -68,7 +70,7 @@ Deno.serve(async (req) => {
 
     return new Response(JSON.stringify({ 
       message: createError ? "Perfil do membro atualizado com sucesso!" : "Membro convidado com sucesso!",
-      tempPassword: createError ? null : "Hinode@Mudar123",
+      tempPassword: createError ? null : finalPassword,
       isNewUser: !createError
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

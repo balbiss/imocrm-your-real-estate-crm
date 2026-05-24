@@ -58,6 +58,23 @@ export function Sidebar({ collapsed, onClose }: { collapsed: boolean; onClose?: 
   // Mutação para alternar plantão
   const mutation = useMutation({
     mutationFn: async (newValue: boolean) => {
+      if (newValue) {
+        // Validar horário de check-in
+        const agora = new Date();
+        const horas = agora.getHours();
+        const minutos = agora.getMinutes();
+        const tempoAtual = horas * 60 + minutos;
+        const manhaAbre = 9 * 60 + 30; // 09:30
+        const tardeAbre = 13 * 60 + 45; // 13:45
+
+        if (tempoAtual < manhaAbre) {
+          throw new Error("A fila da manhã só abre às 09:30.");
+        }
+        if (tempoAtual >= 12 * 60 + 30 && tempoAtual < tardeAbre) { // assumindo almoço 12:30 às 13:45
+          throw new Error("A fila da tarde só abre às 13:45.");
+        }
+      }
+
       const { error: profileError } = await supabase
         .from("perfis")
         .update({ 
@@ -90,6 +107,9 @@ export function Sidebar({ collapsed, onClose }: { collapsed: boolean; onClose?: 
       } else {
         await supabase.from("filas_atendimento").delete().eq("corretor_id", user?.id);
       }
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Erro ao realizar check-in.");
     },
     onSuccess: (_, newValue) => {
       queryClient.invalidateQueries({ queryKey: ["profile-with-imobiliaria"] });
@@ -135,12 +155,16 @@ export function Sidebar({ collapsed, onClose }: { collapsed: boolean; onClose?: 
   const main: Item[] = [
     { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { to: "/leads", label: "Leads", icon: Users, badge: counts?.leads },
-    { to: "/clientes", label: "Clientes", icon: UsersRound },
-    { to: "/imoveis", label: "Imóveis", icon: Home },
-    { to: "/agenda", label: "Agenda", icon: CalendarIcon },
   ];
 
-  if (can('configure_system')) {
+  if (can('view_base_leads')) {
+    main.push({ to: "/clientes", label: "Clientes", icon: UsersRound });
+  }
+
+  main.push({ to: "/imoveis", label: "Imóveis", icon: Home });
+  main.push({ to: "/agenda", label: "Tarefas", icon: CalendarIcon });
+
+  if (can('view_roleta')) {
     main.push({ to: "/filas", label: "Roleta", icon: RefreshCw });
   }
 

@@ -413,6 +413,8 @@ export type Database = {
       }
       leads: {
         Row: {
+          alerta_visita_17h_ciente: boolean | null
+          alerta_visita_2h_ciente: boolean | null
           bairro_interesse: string | null
           cadencia_chamada: number | null
           corretor_id: string | null
@@ -422,6 +424,7 @@ export type Database = {
           data_ultima_chamada: string | null
           data_visita: string | null
           descartado_em: string | null
+          descarte_pendente_aprovacao: boolean | null
           descartado_por: string | null
           email: string | null
           fila_tipo: string | null
@@ -444,6 +447,8 @@ export type Database = {
           temperatura: Database["public"]["Enums"]["lead_temperatura"] | null
           tentativas_contato: number | null
           tipo_imovel_interesse: string | null
+          tipo_visita: string | null
+          status_visita: string | null
           ultima_acao_at: string | null
           ultima_interacao: string | null
           updated_at: string
@@ -452,6 +457,8 @@ export type Database = {
           valor_venda: number | null
         }
         Insert: {
+          alerta_visita_17h_ciente?: boolean | null
+          alerta_visita_2h_ciente?: boolean | null
           bairro_interesse?: string | null
           cadencia_chamada?: number | null
           corretor_id?: string | null
@@ -461,6 +468,7 @@ export type Database = {
           data_ultima_chamada?: string | null
           data_visita?: string | null
           descartado_em?: string | null
+          descarte_pendente_aprovacao?: boolean | null
           descartado_por?: string | null
           email?: string | null
           fila_tipo?: string | null
@@ -491,6 +499,8 @@ export type Database = {
           valor_venda?: number | null
         }
         Update: {
+          alerta_visita_17h_ciente?: boolean | null
+          alerta_visita_2h_ciente?: boolean | null
           bairro_interesse?: string | null
           cadencia_chamada?: number | null
           corretor_id?: string | null
@@ -500,6 +510,7 @@ export type Database = {
           data_ultima_chamada?: string | null
           data_visita?: string | null
           descartado_em?: string | null
+          descarte_pendente_aprovacao?: boolean | null
           descartado_por?: string | null
           email?: string | null
           fila_tipo?: string | null

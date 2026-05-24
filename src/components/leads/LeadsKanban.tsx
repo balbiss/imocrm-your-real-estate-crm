@@ -13,7 +13,7 @@ import { LeadDetailsModal } from "./LeadDetailsModal";
 const STAGES = [
   { id: "novo", title: "LEAD NOVO", color: "bg-blue-500" },
   { id: "rebatida", title: "REBATIDA", color: "bg-orange-500" },
-  { id: "tarefas", title: "TAREFAS", color: "bg-red-500" },
+  { id: "tarefas", title: "TAREFAS ATRASADAS / DO DIA", color: "bg-red-500" },
   { id: "agendado", title: "AGENDADO", color: "bg-purple-500" },
   { id: "visitou", title: "VISITOU", color: "bg-amber-500" },
   { id: "pendente", title: "PENDENTE", color: "bg-slate-500" },
@@ -68,7 +68,12 @@ export function LeadsKanban({ leads: initialLeads, isLoading: initialLoading }: 
 
   const leadsByStage = STAGES.reduce((acc, stage) => {
     acc[stage.id] = leads?.filter((lead) => {
-      const status = String(lead.status || "").toLowerCase();
+      if (lead.descarte_pendente_aprovacao) return false;
+      let status = String(lead.status || "").toLowerCase();
+      // Se o status do banco não existir nas 8 colunas oficiais, joga pra "novo" pro lead não sumir
+      if (!STAGES.some(s => s.id === status) && status !== "venda_concluida") {
+        status = "novo";
+      }
       return status === stage.id.toLowerCase();
     }) || [];
     return acc;

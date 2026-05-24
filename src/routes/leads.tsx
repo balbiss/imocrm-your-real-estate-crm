@@ -3,9 +3,11 @@ import { MainLayout } from "@/components/layout/MainLayout";
 import { LeadsKanban } from "@/components/leads/LeadsKanban";
 import { NewLeadDialog } from "@/components/leads/NewLeadDialog";
 import { LeadsTable } from "@/components/leads/LeadsTable";
+import { BolsaoResgateDialog } from "@/components/leads/BolsaoResgateDialog";
+import { AprovacoesDescarteDialog } from "@/components/leads/AprovacoesDescarteDialog";
 
 import { Button } from "@/components/ui/button";
-import { Plus, Filter, Search, List, Kanban, AlertCircle, Clock, Flame, Snowflake, Sun, Loader2 } from "lucide-react";
+import { Plus, Filter, Search, List, Kanban, AlertCircle, Clock, Flame, Snowflake, Sun, Loader2, RefreshCw } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,7 +19,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -31,10 +34,15 @@ function LeadsPage() {
   const { user } = useAuth();
   const { role, isLoading: loadingPerms } = usePermissions();
   const [isNewLeadOpen, setIsNewLeadOpen] = useState(false);
+  const [isBolsaoOpen, setIsBolsaoOpen] = useState(false);
+  const [isAprovacoesOpen, setIsAprovacoesOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [view, setView] = useState("kanban");
   const [tempFilter, setTempFilter] = useState<string | null>(null);
   const [showOverdueOnly, setShowOverdueOnly] = useState(false);
+  
+  const queryClient = useQueryClient();
+  const canMonitor = role === 'gerente' || role === 'dono';
 
   const { data: profile, isLoading: loadingProfile } = useQuery({
     queryKey: ["user-profile-leads", user?.id],
@@ -75,6 +83,78 @@ function LeadsPage() {
     },
     enabled: !!profile?.imobiliaria_id && !loadingPerms,
     staleTime: 1000 * 60,
+  });
+
+  const loteRebatidaMutation = useMutation({
+    mutationFn: async () => {
+      if (!user || !profile?.imobiliaria_id) throw new Error("Não autenticado ou sem imobiliária");
+
+      const { count: tarefasAtrasadasCount } = await supabase
+        .from("leads")
+        .select("*", { count: 'exact', head: true })
+        .eq("corretor_id", user.id)
+        .lte("lembrete_follow_up", new Date().toISOString())
+        .is("data_fechamento", null);
+
+      if (tarefasAtrasadasCount && tarefasAtrasadasCount > 0) throw new Error("Você possui tarefas atrasadas. Zere suas pendências primeiro!");
+
+      const hoje = new Date();
+      hoje.setHours(0, 0, 0, 0);
+      const { count: rebatidasHojeCount } = await supabase
+        .from("leads")
+        .select("*", { count: 'exact', head: true })
+        .eq("corretor_id", user.id)
+        .eq("status", "rebatida")
+        .gte("created_at", hoje.toISOString());
+
+      const atual = rebatidasHojeCount || 0;
+      if (atual >= 30) throw new Error("Limite diário de 30 rebatidas já foi atingido.");
+
+      const vagas = 30 - atual;
+      const quantidadePuxar = Math.min(10, vagas);
+
+      const { data: leadsBolsao, error } = await supabase
+        .from("leads")
+        .select("*")
+        .eq("imobiliaria_id", profile.imobiliaria_id)
+        .is("corretor_id", null)
+        .not("motivo_descarte", "in", '("Descadastrar", "Já Comprou (Outra Empresa)", "Aprovado/Desistiu")')
+        .limit(500);
+
+      if (error) throw error;
+
+      const now = new Date();
+      const leadsDisponiveis = leadsBolsao.filter(lead => {
+        if (!lead.descartado_em) return true;
+        const descartadoDate = new Date(lead.descartado_em);
+        const daysDiff = (now.getTime() - descartadoDate.getTime()) / (1000 * 60 * 60 * 24);
+        if (lead.motivo_descarte === "Sem Resposta" && daysDiff < 3) return false;
+        if (lead.motivo_descarte === "Parou de Responder" && daysDiff < 5) return false;
+        if (lead.motivo_descarte === "Sem Interesse" && daysDiff < 15) return false;
+        return true;
+      });
+
+      const filtrados = leadsDisponiveis.filter(l => !l.historico_corretores?.includes(user.id));
+      if (filtrados.length === 0) throw new Error("O Bolsão está vazio ou você já atendeu todos os leads disponíveis.");
+
+      const shuffled = filtrados.sort(() => 0.5 - Math.random());
+      const lote = shuffled.slice(0, quantidadePuxar);
+      const loteIds = lote.map(l => l.id);
+
+      const { error: updateError } = await supabase
+        .from("leads")
+        .update({ corretor_id: user.id, status: "rebatida", ultima_acao_at: new Date().toISOString() })
+        .in("id", loteIds);
+
+      if (updateError) throw updateError;
+      
+      return lote.length;
+    },
+    onSuccess: (qtd) => {
+      toast.success(`💥 ${qtd} leads puxados do bolsão com sucesso!`);
+      queryClient.invalidateQueries({ queryKey: ["leads"] });
+    },
+    onError: (error: any) => toast.error(error.message)
   });
 
   if (isLoading || loadingPerms || loadingProfile) {
@@ -153,6 +233,29 @@ function LeadsPage() {
               </DropdownMenuContent>
             </DropdownMenu>
 
+            {canMonitor && (
+              <Button 
+                variant="outline" 
+                className="h-9 px-4 font-bold uppercase text-[10px] tracking-wider border-red-200 text-red-600 hover:bg-red-50 bg-white"
+                onClick={() => setIsAprovacoesOpen(true)}
+              >
+                Aprovações
+              </Button>
+            )}
+
+            <Button 
+              className="h-9 px-4 font-black uppercase text-[10px] tracking-widest bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-600/20"
+              onClick={() => loteRebatidaMutation.mutate()}
+              disabled={loteRebatidaMutation.isPending}
+            >
+              {loteRebatidaMutation.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Flame className="mr-1.5 h-3.5 w-3.5" />}
+              MAIS REBATIDA
+            </Button>
+
+            <Button variant="outline" size="sm" className="h-9 px-4 font-bold uppercase text-[10px] tracking-wider border-orange-200 text-orange-600 hover:bg-orange-50 bg-white" onClick={() => setIsBolsaoOpen(true)}>
+              <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Puxar Bolsão
+            </Button>
+
             <Button size="sm" className="h-9 px-4 font-bold uppercase text-[10px] tracking-wider" onClick={() => setIsNewLeadOpen(true)}>
               <Plus className="mr-1.5 h-3.5 w-3.5" /> Novo Lead
             </Button>
@@ -215,6 +318,18 @@ function LeadsPage() {
         <NewLeadDialog 
           open={isNewLeadOpen} 
           onOpenChange={setIsNewLeadOpen} 
+        />
+        
+        <BolsaoResgateDialog 
+          open={isBolsaoOpen}
+          onOpenChange={setIsBolsaoOpen}
+          imobiliariaId={profile?.imobiliaria_id || ""}
+        />
+
+        <AprovacoesDescarteDialog 
+          open={isAprovacoesOpen}
+          onOpenChange={setIsAprovacoesOpen}
+          imobiliariaId={profile?.imobiliaria_id || ""}
         />
       </div>
     </MainLayout>

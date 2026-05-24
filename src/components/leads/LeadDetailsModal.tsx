@@ -155,6 +155,7 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["lead", leadId] });
       queryClient.invalidateQueries({ queryKey: ["leads"] });
+      queryClient.invalidateQueries({ queryKey: ["compromissos"] });
       toast.success("Informações atualizadas!");
     },
   });
@@ -198,28 +199,50 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
         observacao: obsDescarte,
       });
 
-      // 2. Atualizar lead
-      await supabase.from("leads").update({
-        corretor_id: null,
-        motivo_descarte: motivoDescarte,
-        descartado_por: user.id,
-        descartado_em: new Date().toISOString(),
-        status: 'novo',
-        ultima_acao_at: new Date().toISOString()
-      }).eq("id", leadId);
+      const isExtreme = motivoDescarte === "Descadastrar" || motivoDescarte === "Já Comprou (Outra Empresa)";
+      
+      if (isExtreme) {
+        // Fluxo de Aprovação Gerencial (O lead "morre" da tela do corretor mas aguarda aprovação)
+        await supabase.from("leads").update({
+          descarte_pendente_aprovacao: true,
+          motivo_descarte: motivoDescarte,
+          ultima_acao_at: new Date().toISOString()
+          // Mantém o corretor_id para saber de quem veio e o status inalterado por enquanto
+        }).eq("id", leadId);
 
-      // 3. Registrar no histórico
-      await supabase.from("leads_interacoes").insert({
-        lead_id: leadId!,
-        autor_id: user.id,
-        tipo: 'descarte',
-        conteudo: `Lead devolvido: ${motivoDescarte}${obsDescarte ? ' - ' + obsDescarte : ''}`,
-      });
+        await supabase.from("leads_interacoes").insert({
+          lead_id: leadId!,
+          autor_id: user.id,
+          tipo: 'descarte',
+          conteudo: `Solicitação de descarte extremo gerada: ${motivoDescarte} - ${obsDescarte}`,
+        });
+
+        toast.success("Solicitação enviada para aprovação do Gerente!");
+      } else {
+        // Fluxo Normal (Vai pro bolsão/quarentena)
+        await supabase.from("leads").update({
+          corretor_id: null,
+          motivo_descarte: motivoDescarte,
+          descartado_por: user.id,
+          descartado_em: new Date().toISOString(),
+          status: 'novo',
+          ultima_acao_at: new Date().toISOString()
+        }).eq("id", leadId);
+
+        await supabase.from("leads_interacoes").insert({
+          lead_id: leadId!,
+          autor_id: user.id,
+          tipo: 'descarte',
+          conteudo: `Lead devolvido: ${motivoDescarte}${obsDescarte ? ' - ' + obsDescarte : ''}`,
+        });
+        toast.success("Lead devolvido ao bolsão");
+      }
 
       toast.success("Lead devolvido ao bolsão");
       setShowDescarteModal(false);
       onOpenChange(false);
       queryClient.invalidateQueries({ queryKey: ["leads"] });
+      queryClient.invalidateQueries({ queryKey: ["compromissos"] });
     } catch (error) {
       toast.error("Erro ao descartar lead");
     }
@@ -297,7 +320,24 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
   if (!lead) return null;
 
   const handleUpdateField = (field: string, value: any) => {
-    updateMutation.mutate({ [field]: value });
+    const payload: any = { [field]: value };
+    
+    if (field === "cadencia_chamada") {
+      const now = new Date();
+      payload.data_ultima_chamada = now.toISOString();
+      
+      // Agenda a próxima tarefa para +24h
+      const nextDate = new Date();
+      nextDate.setHours(nextDate.getHours() + 24);
+      payload.lembrete_follow_up = nextDate.toISOString();
+      
+      // Move para tarefas (se não for venda ou descarte)
+      if (lead.status !== 'venda_concluida' && !lead.descartado_em) {
+         payload.status = 'tarefas';
+      }
+    }
+    
+    updateMutation.mutate(payload);
   };
 
   return (
@@ -393,11 +433,7 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
             <TabsList className="bg-transparent border-b rounded-none h-9 p-0 gap-5">
               {[
                 { id: "detalhes", icon: User, label: "Detalhes" },
-                { id: "followup", icon: Calendar, label: "Follow-up" },
-                { id: "templates", icon: FileText, label: "Templates" },
-                { id: "historico", icon: History, label: "Histórico" },
                 { id: "chat", icon: MessageCircle, label: "Chat WhatsApp" },
-                { id: "anotacoes", icon: AlertCircle, label: "Anotações" },
               ].map(tab => (
                 <TabsTrigger 
                   key={tab.id}
@@ -414,6 +450,8 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
         <div className="flex-1 overflow-hidden">
           <ScrollArea className="h-full">
             <div className="p-4 space-y-6">
+              {activeTab === "detalhes" && (
+                <>
               {/* BLOCO 1: INFORMAÇÕES DO CONTATO */}
               <Card className="border-none shadow-sm bg-white overflow-hidden">
                 <CardHeader className="p-4 pb-2 bg-slate-50/50">
@@ -422,7 +460,7 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
                 <CardContent className="p-4 pt-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                      <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Referência (ID Anúncio)</Label>
+                      <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Campanha (Origem do lead)</Label>
                       <Input value={lead.referencia || lead.origem || "Não informado"} disabled className="h-9 text-sm border-slate-200 bg-slate-50" />
                     </div>
                     <div className="space-y-1.5">
@@ -504,14 +542,14 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
                 <CardContent className="p-4 pt-3">
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
                     {([
-                      { value: "novo",            label: "Novo",         color: "bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200" },
-                      { value: "em_atendimento",  label: "Atendimento",  color: "bg-blue-50 text-blue-700 border-blue-100 hover:bg-blue-100" },
-                      { value: "qualificado",     label: "Qualificado",  color: "bg-indigo-50 text-indigo-700 border-indigo-100 hover:bg-indigo-100" },
-                      { value: "agendado",        label: "Agendado",     color: "bg-violet-50 text-violet-700 border-violet-100 hover:bg-violet-100" },
-                      { value: "visitou",         label: "Visitou",      color: "bg-orange-50 text-orange-700 border-orange-100 hover:bg-orange-100" },
-                      { value: "pendente",        label: "Pendente",     color: "bg-yellow-50 text-yellow-700 border-yellow-100 hover:bg-yellow-100" },
-                      { value: "aprovado",        label: "Aprovado",     color: "bg-emerald-50 text-emerald-700 border-emerald-100 hover:bg-emerald-100" },
-                      { value: "venda_concluida", label: "Venda",        color: "bg-green-50 text-green-700 border-green-100 hover:bg-green-100" },
+                      { value: "novo",            label: "Novo",         color: "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100" },
+                      { value: "rebatida",        label: "Rebatida",     color: "bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100" },
+                      { value: "tarefas",         label: "Tarefas",      color: "bg-red-50 text-red-700 border-red-200 hover:bg-red-100" },
+                      { value: "agendado",        label: "Agendado",     color: "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100" },
+                      { value: "visitou",         label: "Visitou",      color: "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100" },
+                      { value: "pendente",        label: "Pendente",     color: "bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200" },
+                      { value: "aprovado",        label: "Aprovado",     color: "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100" },
+                      { value: "futuros",         label: "Futuros",      color: "bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100" },
                     ] as const).map((s) => (
                       <button
                         key={s.value}
@@ -554,15 +592,54 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
                           <Clock className="h-4 w-4 mr-2" /> Agendar
                         </Button>
                       </div>
+                      {lead.lembrete_follow_up && (
+                        <p className="text-[11px] font-bold text-primary flex items-center bg-primary/5 p-1.5 rounded-md mt-1">
+                          <Clock className="h-3 w-3 mr-1.5 text-primary" /> 
+                          Agendado: {format(new Date(lead.lembrete_follow_up), "dd/MM/yyyy 'às' HH:mm")}
+                        </p>
+                      )}
                     </div>
                     <div className="flex-1 space-y-1.5">
-                      <Label className="text-[10px] font-bold text-slate-500 uppercase">Agendar Visita (ALERTA)</Label>
-                      <Input 
-                        type="datetime-local" 
-                        value={lead.data_visita ? format(new Date(lead.data_visita), "yyyy-MM-dd'T'HH:mm") : ""} 
-                        onChange={(e) => handleUpdateField("data_visita", e.target.value)}
-                        className="h-10 text-sm border-primary/20 bg-primary/5 font-bold" 
-                      />
+                      <Label className="text-[10px] font-bold text-slate-500 uppercase">Agendar Compromisso (ALERTA)</Label>
+                      <div className="flex gap-2">
+                        <Select 
+                          value={lead.tipo_visita || 'VISITA'} 
+                          onValueChange={(v) => handleUpdateField("tipo_visita", v)}
+                        >
+                          <SelectTrigger className="w-[110px] h-10 text-xs font-bold border-primary/20 bg-primary/5 text-primary">
+                            <SelectValue placeholder="Tipo" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="VISITA" className="font-bold text-blue-600">VISITA</SelectItem>
+                            <SelectItem value="FID" className="font-bold text-green-600">FID</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Input 
+                          type="datetime-local" 
+                          value={lead.data_visita ? format(new Date(lead.data_visita), "yyyy-MM-dd'T'HH:mm") : ""} 
+                          onChange={(e) => handleUpdateField("data_visita", e.target.value)}
+                          className="flex-1 h-10 text-sm border-primary/20 bg-primary/5 font-bold" 
+                        />
+                      </div>
+                      {lead.data_visita && (
+                        <div className="pt-2">
+                          <Select 
+                            value={lead.status_visita || 'AGENDADA'} 
+                            onValueChange={(v) => handleUpdateField("status_visita", v)}
+                          >
+                            <SelectTrigger className="w-full h-8 text-[11px] font-bold border-slate-200 bg-white">
+                              <SelectValue placeholder="Status do Compromisso" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="AGENDADA" className="font-bold text-slate-600">Agendada</SelectItem>
+                              <SelectItem value="REALIZADA" className="font-bold text-green-600">Realizada</SelectItem>
+                              <SelectItem value="DESMARCADA" className="font-bold text-red-600">Desmarcou</SelectItem>
+                              <SelectItem value="REAGENDADA" className="font-bold text-purple-600">Reagendou</SelectItem>
+                              <SelectItem value="FURO" className="font-bold text-orange-600">Furou (Não compareceu)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
                     </div>
                   </div>
                   
@@ -692,6 +769,8 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
                   </div>
                 </CardContent>
               </Card>
+              </>
+              )}
 
               {activeTab === "chat" && (
                 <div className="mt-4">
@@ -746,13 +825,12 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
                     <SelectValue placeholder="Selecione um motivo..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Sem interesse">Sem interesse</SelectItem>
-                    <SelectItem value="Número inválido">Número inválido / não existe</SelectItem>
-                    <SelectItem value="Já comprou com outro">Já comprou com outro corretor</SelectItem>
-                    <SelectItem value="Fora do perfil">Fora do perfil de compra</SelectItem>
-                    <SelectItem value="Não atende">Não atende / sem contato</SelectItem>
-                    <SelectItem value="Duplicado">Lead duplicado</SelectItem>
-                    <SelectItem value="Outro">Outro (especificar)</SelectItem>
+                    <SelectItem value="Sem Resposta">Sem Resposta</SelectItem>
+                    <SelectItem value="Parou de Responder">Parou de Responder</SelectItem>
+                    <SelectItem value="Sem Interesse">Sem Interesse</SelectItem>
+                    <SelectItem value="Aprovado/Desistiu">Aprovado/Desistiu</SelectItem>
+                    <SelectItem value="Descadastrar" className="text-red-600 font-bold">Descadastrar (Requer Aprovação)</SelectItem>
+                    <SelectItem value="Já Comprou (Outra Empresa)" className="text-red-600 font-bold">Já Comprou - Outra Empresa (Requer Aprovação)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -766,7 +844,13 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
               </div>
               <div className="flex gap-3 pt-4">
                 <Button variant="outline" className="flex-1" onClick={() => setShowDescarteModal(false)}>Cancelar</Button>
-                <Button className="flex-1 bg-orange-600 hover:bg-orange-700" onClick={handleDescarte} disabled={!motivoDescarte}>Confirmar Devolução</Button>
+                <Button 
+                  className="flex-1 bg-orange-600 hover:bg-orange-700" 
+                  onClick={handleDescarte} 
+                  disabled={!motivoDescarte || ((motivoDescarte === "Descadastrar" || motivoDescarte === "Já Comprou (Outra Empresa)") && !obsDescarte.trim())}
+                >
+                  Confirmar Devolução
+                </Button>
               </div>
             </div>
           </DialogContent>

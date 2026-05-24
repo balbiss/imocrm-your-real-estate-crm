@@ -15,10 +15,12 @@ import {
   Clock,
   CheckCircle2,
   AlertCircle,
-  Trash2
+  Trash2,
+  Loader2
 } from "lucide-react";
 import { toast } from "sonner";
 import { usePermissions } from "@/hooks/usePermissions";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/context/AuthContext";
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
@@ -32,7 +34,7 @@ export const Route = createFileRoute("/filas")({
   component: FilasPage,
 });
 
-function SortableItem({ id, profile, index, isNext, onToggleStatus }: { id: string, profile: any, index: number, isNext: boolean, onToggleStatus: (id: string, current: boolean) => void }) {
+function SortableItem({ id, profile, index, isNext, canManage, onToggleStatus }: { id: string, profile: any, index: number, isNext: boolean, canManage: boolean, onToggleStatus: (id: string, current: boolean) => void }) {
   const {
     attributes,
     listeners,
@@ -93,12 +95,13 @@ function SortableItem({ id, profile, index, isNext, onToggleStatus }: { id: stri
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Status Roleta</p>
               <button 
                 onClick={() => onToggleStatus(profile.id, isOnline)}
+                disabled={!canManage}
                 className={`flex items-center gap-1.5 px-2 py-1 rounded-md transition-colors ${
                   isOnline ? "text-green-600 bg-green-50 hover:bg-green-100" : "text-slate-400 bg-slate-100 hover:bg-slate-200"
-                }`}
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
               >
                 {isOnline ? <CheckCircle2 className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
-                <span className="text-[10px] font-black">{isOnline ? "ON" : "OFF"}</span>
+                <span className="text-[10px] font-bold uppercase tracking-widest leading-none">{isOnline ? "Online" : "Offline"}</span>
               </button>
            </div>
         </div>
@@ -109,21 +112,13 @@ function SortableItem({ id, profile, index, isNext, onToggleStatus }: { id: stri
 
 function FilasPage() {
   const { user } = useAuth();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { can, role, isLoading: loadingPerms } = usePermissions();
+  const { can, isLoading: loadingPerms } = usePermissions();
   const [activeTab, setActiveTab] = useState("roleta");
   const [selectedDay, setSelectedDay] = useState<number>(new Date().getDay() || 7);
+  const [selectedCorretor, setSelectedCorretor] = useState<string>("");
 
-  // Proteção de rota: apenas Dono e Gerente podem acessar
-  React.useEffect(() => {
-    if (!loadingPerms && role === 'corretor') {
-      toast.error("Acesso restrito à gestão.");
-      navigate({ to: "/dashboard" });
-    }
-  }, [role, loadingPerms, navigate]);
-
-  if (loadingPerms || role === 'corretor') {
+  if (loadingPerms) {
     return (
       <MainLayout>
         <div className="flex h-full items-center justify-center">
@@ -154,7 +149,7 @@ function FilasPage() {
       if (error) throw error;
       return data;
     },
-    refetchInterval: 5000, // Atualizar a cada 5 segundos para o dono
+    refetchInterval: 5000,
   });
 
   const { data: escala, isLoading: loadingEscala } = useQuery({
@@ -206,6 +201,7 @@ function FilasPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["escala-plantao"] });
       toast.success("Corretor adicionado à escala!");
+      setSelectedCorretor("");
     },
   });
 
@@ -266,10 +262,14 @@ function FilasPage() {
         .from("perfis")
         .update({ 
           status_roleta: true,
-          ultimo_checkin_roleta: new Date().toISOString()
+          ultimo_checkin_roleta: new Date().toISOString(),
+          em_plantao: true
         })
         .eq("id", user.id);
       if (error) throw error;
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Erro ao realizar check-in.");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["fila-atendimento"] });
@@ -306,6 +306,8 @@ function FilasPage() {
       }
     }
   }
+
+  const corretoresNoDiaAtual = escala?.filter(e => e.dia_semana === selectedDay) || [];
 
   const diasSemana = [
     { id: 1, nome: "Segunda" },
@@ -371,16 +373,16 @@ function FilasPage() {
                     variant="outline" 
                     className="font-bold text-xs gap-2 border-slate-200"
                     onClick={() => shuffleMutation.mutate()}
-                    disabled={shuffleMutation.isPending}
+                    disabled={shuffleMutation.isPending || !can('manage_roleta')}
                   >
-                    <Shuffle className="h-3.5 w-3.5" /> EMBARALHAR AGORA
+                    <Shuffle className="h-3.5 w-3.5" /> EMBARALHAR
                   </Button>
                   <Button 
                     className="font-bold text-xs gap-2 bg-green-600 hover:bg-green-700"
                     onClick={() => checkinMutation.mutate()}
                     disabled={checkinMutation.isPending}
                   >
-                    <CheckCircle2 className="h-3.5 w-3.5" /> FAZER CHECK-IN
+                    <CheckCircle2 className="h-3.5 w-3.5" /> CHECK-IN
                   </Button>
                </div>
             </div>
@@ -388,9 +390,11 @@ function FilasPage() {
             <div className="flex-1 bg-white rounded-2xl border border-slate-200 shadow-sm p-6 overflow-hidden flex flex-col">
               <div className="flex items-center justify-between mb-6">
                  <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Ordem de Prioridade</h3>
-                 <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-tighter">
-                    <AlertCircle className="h-3 w-3" /> Arraste para reordenar
-                 </div>
+                 {can('manage_roleta') && (
+                   <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-tighter">
+                      <AlertCircle className="h-3 w-3" /> Arraste para reordenar
+                   </div>
+                 )}
               </div>
 
               <ScrollArea className="flex-1 pr-4">
@@ -408,6 +412,7 @@ function FilasPage() {
                           profile={item.perfis} 
                           index={index} 
                           isNext={index === 0} 
+                          canManage={can('manage_roleta')}
                           onToggleStatus={(id, status) => toggleStatusMutation.mutate({ profileId: id, status })}
                         />
                       ))}
@@ -440,7 +445,7 @@ function FilasPage() {
                   <div className="flex items-center justify-between mb-6">
                      <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Corretores Escalados</h3>
                      <Badge className="bg-slate-100 text-slate-500 hover:bg-slate-100 font-bold border-none">
-                       {escala?.filter(e => e.dia_semana === selectedDay).length || 0} Ativos
+                       {corretoresNoDiaAtual.length} Ativos
                      </Badge>
                   </div>
                   
@@ -448,13 +453,13 @@ function FilasPage() {
                      <div className="space-y-3">
                         {loadingEscala ? (
                           <div className="flex items-center justify-center py-10"><RefreshCw className="h-6 w-6 animate-spin text-slate-200" /></div>
-                        ) : escala?.filter(e => e.dia_semana === selectedDay).length === 0 ? (
+                        ) : corretoresNoDiaAtual.length === 0 ? (
                           <div className="text-center py-20 opacity-30">
                              <Clock className="h-10 w-10 mx-auto mb-3" />
                              <p className="text-[10px] font-black uppercase tracking-widest">Ninguém escalado</p>
                           </div>
                         ) : (
-                          escala?.filter(e => e.dia_semana === selectedDay).map((item) => (
+                          corretoresNoDiaAtual.map((item) => (
                             <div key={item.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100 group">
                                <div className="flex items-center gap-3">
                                   <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary">
@@ -462,14 +467,16 @@ function FilasPage() {
                                   </div>
                                   <span className="text-sm font-bold text-slate-700">{item.corretor?.nome || "Corretor"}</span>
                                </div>
-                               <Button 
-                                  size="icon" 
-                                  variant="ghost" 
-                                  className="h-8 w-8 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                                  onClick={() => removeFromEscalaMutation.mutate(item.id)}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                               </Button>
+                               {can('manage_roleta') && (
+                                 <Button 
+                                    size="icon" 
+                                    variant="ghost" 
+                                    className="h-8 w-8 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    onClick={() => removeFromEscalaMutation.mutate(item.id)}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                 </Button>
+                               )}
                             </div>
                           ))
                         )}
@@ -477,23 +484,30 @@ function FilasPage() {
                   </ScrollArea>
                </div>
 
-               <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 flex flex-col">
-                  <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">Adicionar à Escala</h3>
-                  <ScrollArea className="flex-1">
-                     <div className="grid grid-cols-1 gap-2">
-                        {todosCorretores?.filter(c => !escala?.some(e => e.dia_semana === selectedDay && e.corretor_id === c.id)).map(corretor => (
-                           <button
-                             key={corretor.id}
-                             onClick={() => addToEscalaMutation.mutate({ corretorId: corretor.id, dia: selectedDay })}
-                             className="flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-all text-left"
-                           >
-                              <span className="text-sm font-bold text-slate-600">{corretor.nome}</span>
-                              <UserPlus className="h-4 w-4 text-slate-300" />
-                           </button>
-                        ))}
-                     </div>
-                  </ScrollArea>
-               </div>
+            {can('manage_roleta') && (
+              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4 items-end">
+                <div className="flex-1 w-full space-y-1.5">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Adicionar Corretor à Escala</p>
+                  <Select value={selectedCorretor} onValueChange={setSelectedCorretor}>
+                    <SelectTrigger className="h-10 text-sm border-slate-200">
+                      <SelectValue placeholder="Selecione um corretor..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {todosCorretores?.filter(c => !corretoresNoDiaAtual.some(e => e.corretor_id === c.id)).map((corretor) => (
+                        <SelectItem key={corretor.id} value={corretor.id}>{corretor.nome}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button 
+                  className="h-10 px-6 font-bold uppercase text-[11px] tracking-wider bg-primary w-full md:w-auto"
+                  disabled={!selectedCorretor || addToEscalaMutation.isPending}
+                  onClick={() => selectedCorretor && addToEscalaMutation.mutate({ corretorId: selectedCorretor, dia: selectedDay })}
+                >
+                  <UserPlus className="h-4 w-4 mr-2" /> Adicionar à Escala
+                </Button>
+              </div>
+            )}
             </div>
           </TabsContent>
         </Tabs>

@@ -26,12 +26,12 @@ export function ImportClientesDialog({ open, onOpenChange }: ImportClientesDialo
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const downloadTemplate = () => {
-    const csvContent = "nome,email,telefone,origem,valor_estimado\nJoão Silva,joao@exemplo.com,11999999999,Manual,500000\nMaria Oliveira,maria@exemplo.com,11888888888,Site,750000";
+    const csvContent = "ID,DATA,CLIENTE,WHATSAPP,EMAIL\n1,2023-10-01,João Silva,11999999999,joao@exemplo.com\n2,2023-10-02,Maria Oliveira,11888888888,maria@exemplo.com";
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", "modelo_importacao_clientes.csv");
+    link.setAttribute("download", "modelo_importacao.csv");
     link.style.visibility = "hidden";
     document.body.appendChild(link);
     link.click();
@@ -71,16 +71,37 @@ export function ImportClientesDialog({ open, onOpenChange }: ImportClientesDialo
 
       if (!perfil) throw new Error("Perfil não encontrado");
 
-      const leadsToInsert = previewData.map(item => ({
-        nome: item.nome || "Sem Nome",
-        email: item.email || null,
-        telefone: item.telefone || "",
-        origem: item.origem || "Importação",
-        valor_estimado: parseFloat(item.valor_estimado) || 0,
-        imobiliaria_id: perfil.imobiliaria_id,
-        corretor_id: user.id,
-        status: "novo"
-      }));
+      const leadsToInsert = previewData.map(item => {
+        // Tentar formatar a data, se não conseguir usa a atual
+        let parsedDate = new Date().toISOString();
+        if (item.DATA) {
+          try {
+             // Aceitar formatos DD/MM/YYYY ou YYYY-MM-DD
+             let d = item.DATA;
+             if (d.includes('/')) {
+               const parts = d.split('/');
+               if (parts.length === 3) {
+                 d = `${parts[2]}-${parts[1]}-${parts[0]}`;
+               }
+             }
+             const dt = new Date(d);
+             if (!isNaN(dt.getTime())) {
+               parsedDate = dt.toISOString();
+             }
+          } catch (e) {}
+        }
+
+        return {
+          nome: item.CLIENTE || "Sem Nome",
+          email: item.EMAIL || null,
+          telefone: item.WHATSAPP || "",
+          origem: item.ID ? `Importação (ID: ${item.ID})` : "Importação",
+          created_at: parsedDate,
+          imobiliaria_id: perfil.imobiliaria_id,
+          corretor_id: user.id,
+          status: "novo"
+        };
+      });
 
       const { error } = await supabase.from("leads").insert(leadsToInsert);
 
@@ -114,22 +135,24 @@ export function ImportClientesDialog({ open, onOpenChange }: ImportClientesDialo
         <div className="space-y-4 py-4">
           <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 flex items-start gap-3">
             <AlertCircle className="h-5 w-5 text-slate-400 mt-0.5" />
-            <div className="space-y-1">
+            <div className="space-y-2">
               <p className="text-saas-sm font-bold text-slate-700">Atenção ao formato</p>
-              <p className="text-saas-xs text-slate-500 leading-relaxed">
-                Certifique-se de que seu arquivo CSV possui as colunas: 
-                <code className="bg-slate-200 px-1 rounded mx-1">nome</code>, 
-                <code className="bg-slate-200 px-1 rounded mx-1">email</code>, 
-                <code className="bg-slate-200 px-1 rounded mx-1">telefone</code>, 
-                <code className="bg-slate-200 px-1 rounded mx-1">origem</code> e 
-                <code className="bg-slate-200 px-1 rounded mx-1">valor_estimado</code>.
-              </p>
+              
+              <div className="text-saas-xs text-slate-500 space-y-2">
+                <p><strong>Para leads novos:</strong></p>
+                <p><code className="bg-slate-200 px-1.5 py-0.5 rounded text-slate-700">ID, DATA, CLIENTE, WHATSAPP, EMAIL</code></p>
+                
+                <p className="pt-2"><strong>Para rebatida:</strong></p>
+                <p><code className="bg-slate-200 px-1.5 py-0.5 rounded text-slate-700">ID, DATA, CLIENTE, WHATSAPP, EMAIL</code></p>
+                <p className="text-[10px] text-slate-400 italic">* Na rebatida, a "DATA" refere-se a quando o corretor puxou a rebatida.</p>
+              </div>
+
               <Button 
                 variant="link" 
-                className="h-auto p-0 text-primary text-saas-xs font-bold"
+                className="h-auto p-0 mt-2 text-primary text-saas-xs font-bold"
                 onClick={downloadTemplate}
               >
-                <Download className="h-3 w-3 mr-1" /> Baixar modelo de exemplo
+                <Download className="h-3 w-3 mr-1" /> Baixar modelo CSV
               </Button>
             </div>
           </div>
