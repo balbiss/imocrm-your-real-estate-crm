@@ -48,6 +48,14 @@ Deno.serve(async (req) => {
         if (!existingUser) throw new Error("Erro ao localizar usuário existente.");
         
         userId = existingUser.id;
+        
+        // Atualiza a senha se foi passada uma nova
+        if (senha) {
+          const { error: updateAuthError } = await supabaseClient.auth.admin.updateUserById(userId, {
+            password: senha
+          });
+          if (updateAuthError) console.error("Erro ao atualizar senha:", updateAuthError);
+        }
       } else {
         throw createError;
       }

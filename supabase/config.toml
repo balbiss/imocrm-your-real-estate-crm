@@ -9,3 +9,14 @@ entrypoint = "./functions/get-team-emails/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/get-team-emails/*.html" ]
+
+[functions.delete-member]
+enabled = true
+verify_jwt = false
+import_map = "./functions/delete-member/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/delete-member/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/delete-member/*.html" ]

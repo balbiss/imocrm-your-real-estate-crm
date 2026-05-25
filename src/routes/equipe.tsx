@@ -122,16 +122,10 @@ function TeamPage() {
   const removeMemberMutation = useMutation({
     mutationFn: async ({ id, hardDelete }: { id: string, hardDelete?: boolean }) => {
       if (hardDelete) {
-        // Exclusão definitiva: limpar dependências primeiro para evitar erro de Foreign Key
-        await supabase.from("descartes_leads").delete().eq("usuario_id", id);
-        await supabase.from("distribuicao_log").delete().eq("corretor_id", id);
-        await supabase.from("escala_plantao").delete().eq("corretor_id", id);
-        await supabase.from("filas_atendimento").delete().eq("corretor_id", id);
-        await supabase.from("lead_historico_corretores").delete().eq("corretor_id", id);
-        await supabase.from("leads").update({ corretor_id: null }).eq("corretor_id", id);
-        
-        // Agora sim deleta o perfil do banco
-        const { error } = await supabase.from("perfis").delete().eq("id", id);
+        // Exclusão definitiva: usar Edge Function para garantir a deleção no Auth
+        const { error } = await supabase.functions.invoke("delete-member", {
+          body: { id },
+        });
         if (error) throw error;
       } else {
         // Soft delete: apenas remove o acesso
