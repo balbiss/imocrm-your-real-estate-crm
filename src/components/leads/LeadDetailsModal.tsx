@@ -785,31 +785,33 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
           </ScrollArea>
         </div>
 
-        <div className="p-3 bg-white border-t flex items-center gap-2">
-          <Input 
-            placeholder="Registrar mensagem rápida..." 
-            className="flex-1 h-9 text-xs border-slate-200"
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                addInteractionMutation.mutate({ tipo: 'nota', conteudo: e.currentTarget.value });
-                e.currentTarget.value = '';
-              }
-            }}
-          />
-          <Button 
-            size="sm" 
-            className="h-9 px-4 text-[11px] font-bold uppercase tracking-wider"
-            onClick={() => {
-              const input = document.querySelector('input[placeholder="Registrar mensagem rápida..."]') as HTMLInputElement;
-              if (input.value) {
-                addInteractionMutation.mutate({ tipo: 'nota', conteudo: input.value });
-                input.value = '';
-              }
-            }}
-          >
-            Registrar
-          </Button>
-        </div>
+        {activeTab !== "chat" && (
+          <div className="p-3 bg-white border-t flex items-center gap-2">
+            <Input 
+              placeholder="Registrar mensagem rápida..." 
+              className="flex-1 h-9 text-xs border-slate-200"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  addInteractionMutation.mutate({ tipo: 'nota', conteudo: e.currentTarget.value });
+                  e.currentTarget.value = '';
+                }
+              }}
+            />
+            <Button 
+              size="sm" 
+              className="h-9 px-4 text-[11px] font-bold uppercase tracking-wider"
+              onClick={() => {
+                const input = document.querySelector('input[placeholder="Registrar mensagem rápida..."]') as HTMLInputElement;
+                if (input.value) {
+                  addInteractionMutation.mutate({ tipo: 'nota', conteudo: input.value });
+                  input.value = '';
+                }
+              }}
+            >
+              Registrar
+            </Button>
+          </div>
+        )}
 
         {/* MODAL DE DESCARTE */}
         <Dialog open={showDescarteModal} onOpenChange={setShowDescarteModal}>

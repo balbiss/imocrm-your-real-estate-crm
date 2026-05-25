@@ -23,7 +23,8 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { WhatsAppConfigModal } from "@/components/integrations/WhatsAppConfigModal";
+import { WhatsAppIntegrationCard } from "@/components/integrations/WhatsAppIntegrationCard";
+import { useAuth } from "@/context/AuthContext";
 
 export const Route = createFileRoute("/integracoes")({
   head: () => ({ meta: [{ title: "Integrações — CRM" }] }),
@@ -124,23 +125,27 @@ function StatusBadge({ status }: { status: IntegrationStatus }) {
 
 // ----- Componente Principal -----
 function IntegrationsPage() {
+  const { user } = useAuth();
   const [configs, setConfigs] = useState<Record<string, IntegrationConfig>>({});
   const [imobiliariaId, setImobiliariaId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
-  const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
+  const [userName, setUserName] = useState("Corretor");
 
   // Carregar imobiliaria_id do usuário logado
   const loadImobiliariaId = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
     const { data: perfil } = await supabase
       .from("perfis")
-      .select("imobiliaria_id")
+      .select("imobiliaria_id, nome")
       .eq("id", user.id)
       .single();
+    
+    if (perfil) {
+      setUserName(perfil.nome);
+    }
     return perfil?.imobiliaria_id ?? null;
-  }, []);
+  }, [user]);
 
   // Carregar configurações do banco
   const loadConfigs = useCallback(async (imobId: string) => {
@@ -159,7 +164,7 @@ function IntegrationsPage() {
       map[row.integration_id] = row as IntegrationConfig;
     }
     setConfigs(map);
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     (async () => {
@@ -171,15 +176,9 @@ function IntegrationsPage() {
     })();
   }, [loadImobiliariaId, loadConfigs]);
 
-  // Alternar status da integração
+  // Alternar status da integração genérica
   const toggleIntegration = async (def: IntegrationDef) => {
     if (!imobiliariaId) return;
-
-    // Se for WhatsApp, abre o modal em vez de apenas alternar
-    if (def.id === "whatsapp") {
-      setIsWhatsAppModalOpen(true);
-      return;
-    }
 
     setSaving(def.id);
 
@@ -213,7 +212,7 @@ function IntegrationsPage() {
   };
 
   // Mesclar definições estáticas com dados do banco
-  const integrations = INTEGRATION_DEFS.map((def) => {
+  const integrations = INTEGRATION_DEFS.filter(d => d.id !== "whatsapp").map((def) => {
     const dbConfig = configs[def.id];
     return {
       ...def,
@@ -292,6 +291,8 @@ function IntegrationsPage() {
 
         {/* Cards de integrações */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {user && <WhatsAppIntegrationCard userId={user.id} userName={userName} />}
+          
           {integrations.map((item) => (
             <Card
               key={item.id}
@@ -438,19 +439,6 @@ function IntegrationsPage() {
             </CardContent>
           </Card>
         </div>
-
-        {imobiliariaId && (
-          <WhatsAppConfigModal
-            isOpen={isWhatsAppModalOpen}
-            onClose={() => setIsWhatsAppModalOpen(false)}
-            imobiliariaId={imobiliariaId}
-            currentConfig={configs["whatsapp"]?.config}
-            onSaved={async () => {
-              await loadConfigs(imobiliariaId);
-              setIsWhatsAppModalOpen(false);
-            }}
-          />
-        )}
       </div>
     </MainLayout>
   );
