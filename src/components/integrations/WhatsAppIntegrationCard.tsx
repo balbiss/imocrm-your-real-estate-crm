@@ -87,8 +87,8 @@ export function WhatsAppIntegrationCard({ userId, userName }: WhatsAppIntegratio
       const sanitizedName = userName.trim().replace(/\s+/g, "_") + "_" + userId.substring(0, 5);
       const wuzapiUser = await createWuzapiUser(sanitizedName);
 
-      // Configurar o Webhook usando a URL do Supabase atual
-      const webhookUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-webhook`;
+      // Configurar o Webhook usando a URL solicitada
+      const webhookUrl = "https://osheoeeigahkwsrzfjdw.supabase.co/functions/v1/whatsapp-webhook";
       await setWuzapiWebhook(wuzapiUser.token, webhookUrl).catch(e => console.warn("Erro ao setar webhook:", e));
 
       const newInstance = {
