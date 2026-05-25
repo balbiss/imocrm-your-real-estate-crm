@@ -184,8 +184,10 @@ export function Sidebar({ collapsed, onClose }: { collapsed: boolean; onClose?: 
 
   tools.push({ to: "/templates", label: "Templates", icon: MessageSquare });
 
+  // Todo mundo tem acesso à página de integrações (para conectar seu próprio WhatsApp)
+  tools.push({ to: "/integracoes", label: "Integrações", icon: Settings });
+
   if (can('configure_system')) {
-    tools.push({ to: "/integracoes", label: "Integrações", icon: Settings });
     tools.push({ to: "/configuracoes", label: "Ajustes", icon: Settings });
   }
 

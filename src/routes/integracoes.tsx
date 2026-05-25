@@ -25,6 +25,7 @@ import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { WhatsAppIntegrationCard } from "@/components/integrations/WhatsAppIntegrationCard";
 import { useAuth } from "@/context/AuthContext";
+import { usePermissions } from "@/hooks/usePermissions";
 
 export const Route = createFileRoute("/integracoes")({
   head: () => ({ meta: [{ title: "Integrações — CRM" }] }),
@@ -126,6 +127,7 @@ function StatusBadge({ status }: { status: IntegrationStatus }) {
 // ----- Componente Principal -----
 function IntegrationsPage() {
   const { user } = useAuth();
+  const { can } = usePermissions();
   const [configs, setConfigs] = useState<Record<string, IntegrationConfig>>({});
   const [imobiliariaId, setImobiliariaId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -293,7 +295,7 @@ function IntegrationsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {user && <WhatsAppIntegrationCard userId={user.id} userName={userName} />}
           
-          {integrations.map((item) => (
+          {can('configure_system') && integrations.map((item) => (
             <Card
               key={item.id}
               className="border-none shadow-soft bg-white hover:shadow-md transition-all overflow-hidden group"
