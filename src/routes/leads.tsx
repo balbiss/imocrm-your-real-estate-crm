@@ -7,7 +7,7 @@ import { BolsaoResgateDialog } from "@/components/leads/BolsaoResgateDialog";
 import { AprovacoesDescarteDialog } from "@/components/leads/AprovacoesDescarteDialog";
 
 import { Button } from "@/components/ui/button";
-import { Plus, Filter, Search, List, Kanban, AlertCircle, Clock, Flame, Snowflake, Sun, Loader2, RefreshCw } from "lucide-react";
+import { Plus, Filter, Search, List, Kanban, AlertCircle, Clock, Flame, Snowflake, Sun, Loader2, RefreshCw, User } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,6 +39,7 @@ function LeadsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [view, setView] = useState("kanban");
   const [tempFilter, setTempFilter] = useState<string | null>(null);
+  const [corretorFilter, setCorretorFilter] = useState<string>('todos');
   const [showOverdueOnly, setShowOverdueOnly] = useState(false);
   
   const queryClient = useQueryClient();
@@ -188,10 +189,14 @@ function LeadsPage() {
     
     const matchesTemp = tempFilter ? lead.temperatura === tempFilter : true;
     
+    const matchesCorretor = corretorFilter === 'meus' ? lead.corretor_id === user?.id 
+      : corretorFilter !== 'todos' ? lead.corretor_id === corretorFilter 
+      : true;
+
     const isOverdue = lead.lembrete_follow_up && new Date(lead.lembrete_follow_up) <= new Date() && !lead.data_fechamento;
     const matchesOverdue = showOverdueOnly ? isOverdue : true;
     
-    return matchesSearch && matchesTemp && matchesOverdue;
+    return matchesSearch && matchesTemp && matchesCorretor && matchesOverdue;
   });
 
   const leadsVencidosCount = leads?.filter(l => 
@@ -232,6 +237,31 @@ function LeadsPage() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+
+            {canMonitor && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className={`h-9 px-3 border-slate-200 ${corretorFilter !== 'todos' ? 'bg-primary/5 border-primary/20' : ''}`}>
+                    <User className={`h-3.5 w-3.5 mr-1.5 ${corretorFilter !== 'todos' ? 'text-primary' : 'text-slate-400'}`} /> 
+                    <span className="text-[10px] font-bold uppercase">
+                      {corretorFilter === 'meus' ? 'Meus Leads' : corretorFilter !== 'todos' ? 'Filtro Corretor' : 'Corretor'}
+                    </span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48 max-h-64 overflow-y-auto">
+                  <DropdownMenuLabel className="text-[10px] uppercase font-bold text-slate-400">Filtrar por</DropdownMenuLabel>
+                  <DropdownMenuItem onClick={() => setCorretorFilter('todos')} className="text-xs cursor-pointer font-bold">Todos os Leads</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setCorretorFilter('meus')} className="text-xs cursor-pointer font-bold text-primary">Meus Leads</DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel className="text-[10px] uppercase font-bold text-slate-400">Equipe</DropdownMenuLabel>
+                  {Array.from(new Map(leads?.filter(l => l.corretor && l.corretor_id).map(l => [l.corretor_id, l.corretor])).entries()).map(([id, c]: any) => (
+                    <DropdownMenuItem key={id} onClick={() => setCorretorFilter(id)} className="text-xs cursor-pointer">
+                      {c.nome}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
 
             {canMonitor && (
               <Button 

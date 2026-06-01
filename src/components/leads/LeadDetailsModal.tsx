@@ -513,8 +513,10 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
                       { value: "tarefas",         label: "Tarefas",      color: "bg-red-50 text-red-700 border-red-200 hover:bg-red-100" },
                       { value: "agendado",        label: "Agendado",     color: "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100" },
                       { value: "visitou",         label: "Visitou",      color: "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100" },
+                      { value: "cobrar_doc",      label: "Cobrar Doc",   color: "bg-cyan-50 text-cyan-700 border-cyan-200 hover:bg-cyan-100" },
                       { value: "pendente",        label: "Pendente",     color: "bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200" },
                       { value: "aprovado",        label: "Aprovado",     color: "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100" },
+                      { value: "reprovado",       label: "Reprovado",    color: "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100" },
                       { value: "futuros",         label: "Futuros",      color: "bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100" },
                     ] as const).map((s) => (
                       <button
@@ -553,7 +555,21 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
                     <div className="flex-1 space-y-1.5">
                       <Label className="text-[10px] font-bold text-slate-500 uppercase">Próximo Contato</Label>
                       <div className="flex gap-2">
-                        <Input type="datetime-local" value={followUpDate} onChange={(e) => setFollowUpDate(e.target.value)} className="h-10 text-sm border-slate-200" />
+                        <Input 
+                          type="date" 
+                          value={followUpDate ? followUpDate.split('T')[0] : ""} 
+                          onChange={(e) => setFollowUpDate(`${e.target.value}T${followUpDate && followUpDate.includes('T') ? followUpDate.split('T')[1].substring(0,5) : "09:00"}`)} 
+                          className="h-10 text-sm border-slate-200" 
+                        />
+                        <Select 
+                          value={followUpDate && followUpDate.includes('T') ? followUpDate.split('T')[1].substring(0,5) : "09:00"} 
+                          onValueChange={(v) => setFollowUpDate(`${followUpDate ? followUpDate.split('T')[0] : new Date().toISOString().split('T')[0]}T${v}`)}
+                        >
+                          <SelectTrigger className="w-[90px] h-10 text-xs border-slate-200"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {Array.from({length: 15}).map((_, i) => { const h = (i + 7).toString().padStart(2, '0') + ":00"; return <SelectItem key={h} value={h}>{h}</SelectItem> })}
+                          </SelectContent>
+                        </Select>
                         <Button onClick={handleAgendarFollowUp} disabled={!followUpDate} className="h-10 text-[11px] font-bold bg-primary px-4">
                           <Clock className="h-4 w-4 mr-2" /> Agendar
                         </Button>
@@ -581,11 +597,22 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
                           </SelectContent>
                         </Select>
                         <Input 
-                          type="datetime-local" 
-                          value={lead.data_visita ? format(new Date(lead.data_visita), "yyyy-MM-dd'T'HH:mm") : ""} 
-                          onChange={(e) => handleUpdateField("data_visita", e.target.value)}
+                          type="date" 
+                          value={lead.data_visita ? format(new Date(lead.data_visita), "yyyy-MM-dd") : ""} 
+                          onChange={(e) => handleUpdateField("data_visita", `${e.target.value}T${lead.data_visita ? format(new Date(lead.data_visita), "HH:mm") : "09:00"}`)}
                           className="flex-1 h-10 text-sm border-primary/20 bg-primary/5 font-bold" 
                         />
+                        <Select 
+                          value={lead.data_visita ? format(new Date(lead.data_visita), "HH:mm") : "09:00"} 
+                          onValueChange={(v) => handleUpdateField("data_visita", `${lead.data_visita ? format(new Date(lead.data_visita), "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd")}T${v}`)}
+                        >
+                          <SelectTrigger className="w-[90px] h-10 text-xs font-bold border-primary/20 bg-primary/5">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Array.from({length: 15}).map((_, i) => { const h = (i + 7).toString().padStart(2, '0') + ":00"; return <SelectItem key={h} value={h}>{h}</SelectItem> })}
+                          </SelectContent>
+                        </Select>
                       </div>
                       {lead.data_visita && (
                         <div className="pt-2">

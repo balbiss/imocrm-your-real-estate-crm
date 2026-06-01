@@ -35,11 +35,32 @@ serve(async (req)=>{
 
       const info = msgEvent.Info;
       let text = "";
+      let msgType = "text";
       
       if (msgEvent.Message) {
         text = msgEvent.Message.conversation || 
                (msgEvent.Message.extendedTextMessage && msgEvent.Message.extendedTextMessage.text) || 
                "";
+               
+        if (msgEvent.Message.imageMessage) {
+          msgType = "image";
+          const caption = msgEvent.Message.imageMessage.caption ? `\nLegenda: ${msgEvent.Message.imageMessage.caption}` : "";
+          text = `📷 Imagem recebida (ver no WhatsApp)${caption}`;
+        } else if (msgEvent.Message.audioMessage) {
+          msgType = "audio";
+          text = `🎵 Áudio recebido (ouvir no WhatsApp)`;
+        } else if (msgEvent.Message.videoMessage) {
+          msgType = "video";
+          const caption = msgEvent.Message.videoMessage.caption ? `\nLegenda: ${msgEvent.Message.videoMessage.caption}` : "";
+          text = `🎥 Vídeo recebido (ver no WhatsApp)${caption}`;
+        } else if (msgEvent.Message.documentMessage) {
+          msgType = "document";
+          const filename = msgEvent.Message.documentMessage.fileName || "Anexo";
+          text = `📎 Documento recebido: ${filename} (ver no WhatsApp)`;
+        } else if (msgEvent.Message.stickerMessage) {
+          msgType = "sticker";
+          text = `✨ Figurinha recebida`;
+        }
       }
       
       const isFromMe = info.IsFromMe;
@@ -48,7 +69,7 @@ serve(async (req)=>{
       const remoteJid = info.SenderAlt || info.Sender || info.Chat;
       const messageId = info.ID;
       
-      if (text && !isFromMe && remoteJid) {
+      if (!isFromMe && remoteJid) {
         // Extrair apenas os dígitos
         const cleanNumber = remoteJid.split("@")[0].split(":")[0];
         

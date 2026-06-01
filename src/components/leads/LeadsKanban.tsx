@@ -16,8 +16,10 @@ const STAGES = [
   { id: "tarefas", title: "TAREFAS ATRASADAS / DO DIA", color: "bg-red-500" },
   { id: "agendado", title: "AGENDADO", color: "bg-purple-500" },
   { id: "visitou", title: "VISITOU", color: "bg-amber-500" },
+  { id: "cobrar_doc", title: "COBRAR DOC", color: "bg-cyan-500" },
   { id: "pendente", title: "PENDENTE", color: "bg-slate-500" },
   { id: "aprovado", title: "APROVADO", color: "bg-emerald-500" },
+  { id: "reprovado", title: "REPROVADO", color: "bg-rose-600" },
   { id: "futuros", title: "FUTUROS", color: "bg-indigo-500" },
 ];
 
