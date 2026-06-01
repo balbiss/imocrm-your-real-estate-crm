@@ -393,40 +393,6 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-1.5 mr-6">
-              <Button 
-                size="sm" 
-                variant="outline" 
-                className="h-8 text-[11px] font-bold bg-green-50 text-green-700 border-green-100 hover:bg-green-100"
-                asChild
-                onClick={() => handleUpdateField("ultima_acao_at", new Date().toISOString())}
-              >
-                <a href={`https://wa.me/55${lead.telefone.replace(/\D/g, "")}`} target="_blank" rel="noreferrer">
-                  <MessageSquare className="h-3.5 w-3.5 mr-1.5" /> WhatsApp
-                </a>
-              </Button>
-              <Button 
-                size="sm" 
-                variant="outline" 
-                className="h-8 text-[11px] font-bold bg-blue-50 text-blue-700 border-blue-100"
-                asChild
-                onClick={() => handleUpdateField("ultima_acao_at", new Date().toISOString())}
-              >
-                <a href={`tel:+55${lead.telefone.replace(/\D/g, "")}`}>
-                  <Phone className="h-3.5 w-3.5 mr-1.5" /> Ligar
-                </a>
-              </Button>
-              <Button 
-                size="sm" 
-                variant="outline" 
-                className="h-8 text-[11px] font-bold bg-slate-50 text-slate-700 border-slate-200"
-                asChild
-              >
-                <a href={`mailto:${lead.email}`}>
-                  <Mail className="h-3.5 w-3.5 mr-1.5" /> E-mail
-                </a>
-              </Button>
-            </div>
           </div>
 
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -678,7 +644,7 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
                         <DollarSign className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
                         <Input 
                           type="number" 
-                          value={lead.renda_familiar || ""} 
+                          defaultValue={lead.renda_familiar || ""} 
                           placeholder="0.00" 
                           className="h-9 pl-8 text-sm border-slate-200" 
                           onBlur={(e) => handleUpdateField("renda_familiar", parseFloat(e.target.value))} 
@@ -691,7 +657,7 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
                         <DollarSign className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
                         <Input 
                           type="number" 
-                          value={lead.saldo_fgts || ""} 
+                          defaultValue={lead.saldo_fgts || ""} 
                           placeholder="0.00" 
                           className="h-9 pl-8 text-sm border-slate-200" 
                           onBlur={(e) => handleUpdateField("saldo_fgts", parseFloat(e.target.value))} 
@@ -704,7 +670,7 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
                         <DollarSign className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
                         <Input 
                           type="number" 
-                          value={lead.valor_entrada || ""} 
+                          defaultValue={lead.valor_entrada || ""} 
                           placeholder="0.00" 
                           className="h-9 pl-8 text-sm border-slate-200" 
                           onBlur={(e) => handleUpdateField("valor_entrada", parseFloat(e.target.value))} 
@@ -725,7 +691,7 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
                     <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Link do Drive (Documentos)</Label>
                     <div className="flex gap-2">
                       <Input 
-                        value={lead.link_drive || ""} 
+                        defaultValue={lead.link_drive || ""} 
                         placeholder="https://drive.google.com/..." 
                         className="h-9 text-sm border-slate-200 flex-1" 
                         onBlur={(e) => handleUpdateField("link_drive", e.target.value)} 
