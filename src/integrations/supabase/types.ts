@@ -322,6 +322,7 @@ export type Database = {
           imobiliaria_id: string
           preco: number | null
           quartos: number | null
+          caracteristicas: Json | null
           tipo: string | null
           titulo: string
           updated_at: string
@@ -340,6 +341,7 @@ export type Database = {
           imobiliaria_id: string
           preco?: number | null
           quartos?: number | null
+          caracteristicas?: Json | null
           tipo?: string | null
           titulo: string
           updated_at?: string
@@ -358,6 +360,7 @@ export type Database = {
           imobiliaria_id?: string
           preco?: number | null
           quartos?: number | null
+          caracteristicas?: Json | null
           tipo?: string | null
           titulo?: string
           updated_at?: string
@@ -503,6 +506,7 @@ export type Database = {
           valor_entrada: number | null
           valor_estimado: number | null
           valor_venda: number | null
+          favorito: boolean | null
         }
         Insert: {
           alerta_visita_17h_ciente?: boolean | null
@@ -548,6 +552,7 @@ export type Database = {
           valor_entrada?: number | null
           valor_estimado?: number | null
           valor_venda?: number | null
+          favorito?: boolean | null
         }
         Update: {
           alerta_visita_17h_ciente?: boolean | null
@@ -593,6 +598,7 @@ export type Database = {
           valor_entrada?: number | null
           valor_estimado?: number | null
           valor_venda?: number | null
+          favorito?: boolean | null
         }
         Relationships: [
           {

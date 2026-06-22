@@ -23,7 +23,7 @@ import {
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import { Upload, X, Image as ImageIcon } from "lucide-react";
+import { Upload, X, Image as ImageIcon, Plus, Trash2 } from "lucide-react";
 
 interface NewPropertyDialogProps {
   open: boolean;
@@ -38,6 +38,21 @@ export function NewPropertyDialog({ open, onOpenChange }: NewPropertyDialogProps
   const [uploading, setUploading] = React.useState(false);
   const [previews, setPreviews] = React.useState<string[]>([]);
   const [selectedFiles, setSelectedFiles] = React.useState<File[]>([]);
+  const [customFields, setCustomFields] = React.useState<Array<{ key: string; value: string }>>([]);
+
+  const handleAddCustomField = () => {
+    setCustomFields((prev) => [...prev, { key: "", value: "" }]);
+  };
+
+  const handleRemoveCustomField = (index: number) => {
+    setCustomFields((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleCustomFieldChange = (index: number, field: "key" | "value", val: string) => {
+    setCustomFields((prev) =>
+      prev.map((item, i) => (i === index ? { ...item, [field]: val } : item))
+    );
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -91,11 +106,19 @@ export function NewPropertyDialog({ open, onOpenChange }: NewPropertyDialogProps
           uploadedUrls.push(publicUrl);
         }
 
+        const caracteristicasObj = customFields.reduce((acc, field) => {
+          if (field.key.trim()) {
+            acc[field.key.trim()] = field.value;
+          }
+          return acc;
+        }, {} as Record<string, string>);
+
         const { error } = await supabase.from("imoveis").insert({
           ...data,
           imobiliaria_id: profile.imobiliaria_id,
           preco: parseFloat(data.preco) || 0,
           fotos: uploadedUrls,
+          caracteristicas: caracteristicasObj,
         });
 
         if (error) throw error;
@@ -109,6 +132,7 @@ export function NewPropertyDialog({ open, onOpenChange }: NewPropertyDialogProps
       reset();
       setPreviews([]);
       setSelectedFiles([]);
+      setCustomFields([]);
       onOpenChange(false);
     },
     onError: (error: any) => {
@@ -219,6 +243,53 @@ export function NewPropertyDialog({ open, onOpenChange }: NewPropertyDialogProps
                 {...register("descricao")}
                 className="min-h-[80px] text-sm border-slate-200 focus:border-primary transition-all resize-none"
               />
+            </div>
+
+            {/* Seção de Campos Personalizados */}
+            <div className="space-y-3 p-4 bg-slate-50/50 rounded-xl border border-slate-100/50">
+              <div className="flex items-center justify-between">
+                <Label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Características Adicionais</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAddCustomField}
+                  className="h-7 px-2 text-[9px] font-bold uppercase tracking-wider border-slate-200 hover:bg-slate-50 text-slate-600 rounded-lg"
+                >
+                  <Plus className="h-3.5 w-3.5 mr-1" /> Adicionar
+                </Button>
+              </div>
+
+              <div className="space-y-2">
+                {customFields.map((field, idx) => (
+                  <div key={idx} className="flex gap-2 items-center">
+                    <Input
+                      placeholder="Nome (ex: Suítes)"
+                      value={field.key}
+                      onChange={(e) => handleCustomFieldChange(idx, "key", e.target.value)}
+                      className="h-9 text-xs border-slate-200 flex-1"
+                    />
+                    <Input
+                      placeholder="Valor (ex: 2)"
+                      value={field.value}
+                      onChange={(e) => handleCustomFieldChange(idx, "value", e.target.value)}
+                      className="h-9 text-xs border-slate-200 flex-1"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleRemoveCustomField(idx)}
+                      className="h-9 w-9 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg flex-shrink-0"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+                {customFields.length === 0 && (
+                  <p className="text-[11px] text-slate-400 text-center py-2">Nenhum campo personalizado adicionado.</p>
+                )}
+              </div>
             </div>
 
             <div className="space-y-3">

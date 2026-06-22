@@ -25,7 +25,7 @@ FROM node:20-slim
 WORKDIR /app
 
 # Instalar dependências básicas
-RUN apt-get update && apt-get install -y libc6 && rm -rf /var/lib/apt/lists/*
+
 
 # Copiar os arquivos compilados (mantendo a estrutura client/server)
 COPY --from=build /app/dist ./dist

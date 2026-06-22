@@ -45,6 +45,7 @@ import {
   Edit3,
   LayoutGrid,
   MessageCircle,
+  Star,
 } from "lucide-react";
 import { WhatsAppChat } from "./WhatsAppChat";
 import { toast } from "sonner";
@@ -428,9 +429,19 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
                     >Salvar</Button>
                   </div>
                 ) : (
-                  <div className="flex items-center gap-2 group cursor-pointer" onClick={() => setIsEditing(true)}>
-                    <h2 className="text-lg font-bold leading-none truncate group-hover:text-primary transition-colors">{lead.nome}</h2>
-                    <Edit3 className="h-3 w-3 text-slate-300 group-hover:text-primary opacity-0 group-hover:opacity-100 transition-all" />
+                  <div className="flex items-center gap-2 group">
+                    <div className="flex items-center gap-2 cursor-pointer" onClick={() => setIsEditing(true)}>
+                      <h2 className="text-lg font-bold leading-none truncate group-hover:text-primary transition-colors">{lead.nome}</h2>
+                      <Edit3 className="h-3 w-3 text-slate-300 group-hover:text-primary opacity-0 group-hover:opacity-100 transition-all" />
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 text-yellow-500 hover:text-yellow-600 hover:bg-yellow-50 rounded-full"
+                      onClick={() => handleUpdateField("favorito", !lead.favorito)}
+                    >
+                      <Star className={`h-4 w-4 ${lead.favorito ? "fill-yellow-400 text-yellow-500" : "text-slate-300"}`} />
+                    </Button>
                   </div>
                 )}
                 <div className="flex items-center gap-2 mt-1">

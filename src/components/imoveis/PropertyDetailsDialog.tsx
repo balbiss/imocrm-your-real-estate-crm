@@ -23,7 +23,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { 
   Loader2, Trash2, Upload, X, ChevronLeft, ChevronRight, 
-  MapPin, Bed, Bath, Square, DollarSign, Info, Edit3
+  MapPin, Bed, Bath, Square, DollarSign, Info, Edit3, Plus
 } from "lucide-react";
 
 interface PropertyDetailsDialogProps {
@@ -39,6 +39,7 @@ export function PropertyDetailsDialog({ imovel, open, onOpenChange }: PropertyDe
   const [currentPhotoIndex, setCurrentPhotoIndex] = React.useState(0);
   const [previews, setPreviews] = React.useState<string[]>(imovel?.fotos || []);
   const [newFiles, setNewFiles] = React.useState<File[]>([]);
+  const [customFields, setCustomFields] = React.useState<Array<{ key: string; value: string }>>([]);
 
   const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm({
     defaultValues: imovel
@@ -49,8 +50,30 @@ export function PropertyDetailsDialog({ imovel, open, onOpenChange }: PropertyDe
       reset(imovel);
       setPreviews(imovel.fotos || []);
       setCurrentPhotoIndex(0);
+      
+      const fields = imovel.caracteristicas 
+        ? Object.entries(imovel.caracteristicas).map(([key, value]) => ({
+            key,
+            value: String(value)
+          }))
+        : [];
+      setCustomFields(fields);
     }
   }, [imovel, reset]);
+
+  const handleAddCustomField = () => {
+    setCustomFields((prev) => [...prev, { key: "", value: "" }]);
+  };
+
+  const handleRemoveCustomField = (index: number) => {
+    setCustomFields((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleCustomFieldChange = (index: number, field: "key" | "value", val: string) => {
+    setCustomFields((prev) =>
+      prev.map((item, i) => (i === index ? { ...item, [field]: val } : item))
+    );
+  };
 
   const updateMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -76,12 +99,20 @@ export function PropertyDetailsDialog({ imovel, open, onOpenChange }: PropertyDe
           uploadedUrls.push(publicUrl);
         }
 
+        const caracteristicasObj = customFields.reduce((acc, field) => {
+          if (field.key.trim()) {
+            acc[field.key.trim()] = field.value;
+          }
+          return acc;
+        }, {} as Record<string, string>);
+
         const { error } = await supabase
           .from("imoveis")
           .update({
             ...data,
             preco: parseFloat(data.preco) || 0,
             fotos: uploadedUrls,
+            caracteristicas: caracteristicasObj,
           })
           .eq("id", imovel.id);
 
@@ -330,17 +361,83 @@ export function PropertyDetailsDialog({ imovel, open, onOpenChange }: PropertyDe
                     <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col items-center justify-center gap-1.5 hover:shadow-md transition-all col-span-2 sm:col-span-1">
                       {isEditing ? (
                         <div className="w-full space-y-1 text-center">
-                          <Label className="text-[9px] font-black text-slate-400 uppercase">Área (mÂ²)</Label>
+                          <Label className="text-[9px] font-black text-slate-400 uppercase">Área (m²)</Label>
                           <Input type="number" {...register("area")} className="h-8 text-center font-bold" />
                         </div>
                       ) : (
                         <>
                           <Square className="h-5 w-5 text-primary/60" />
-                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Área Ãštil</span>
-                          <span className="text-sm font-bold text-slate-800">{imovel.area ? `${imovel.area}mÂ²` : "0mÂ²"}</span>
+                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Área Útil</span>
+                          <span className="text-sm font-bold text-slate-800">{imovel.area ? `${imovel.area}m²` : "0m²"}</span>
                         </>
                       )}
                     </div>
+                  </div>
+
+                  {/* Seção de Campos Personalizados */}
+                  <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm space-y-4">
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="h-7 w-1 bg-primary rounded-full" />
+                        <h4 className="text-[11px] font-black uppercase tracking-widest text-slate-900">Características Adicionais</h4>
+                      </div>
+                      {isEditing && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={handleAddCustomField}
+                          className="h-7 px-2 text-[9px] font-bold uppercase tracking-wider border-slate-200 hover:bg-slate-50 text-slate-600 rounded-lg"
+                        >
+                          <Plus className="h-3 w-3 mr-1" /> Adicionar
+                        </Button>
+                      )}
+                    </div>
+
+                    {isEditing ? (
+                      <div className="space-y-3">
+                        {customFields.map((field, idx) => (
+                          <div key={idx} className="flex gap-2 items-center">
+                            <Input
+                              placeholder="Nome (ex: Suítes)"
+                              value={field.key}
+                              onChange={(e) => handleCustomFieldChange(idx, "key", e.target.value)}
+                              className="h-10 text-xs border-slate-200 flex-1"
+                            />
+                            <Input
+                              placeholder="Valor (ex: 2)"
+                              value={field.value}
+                              onChange={(e) => handleCustomFieldChange(idx, "value", e.target.value)}
+                              className="h-10 text-xs border-slate-200 flex-1"
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleRemoveCustomField(idx)}
+                              className="h-9 w-9 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg flex-shrink-0"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                        {customFields.length === 0 && (
+                          <p className="text-xs text-slate-400 text-center py-4">Nenhum campo personalizado adicionado.</p>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-4">
+                        {customFields.map((field, idx) => (
+                          <div key={idx} className="space-y-1 p-3 bg-slate-50/50 rounded-xl border border-slate-100/50">
+                            <Label className="text-[9px] font-bold uppercase tracking-wider text-slate-400">{field.key}</Label>
+                            <p className="text-sm font-bold text-slate-800">{field.value}</p>
+                          </div>
+                        ))}
+                        {customFields.length === 0 && (
+                          <p className="text-xs text-slate-400 col-span-2 py-2">Sem características adicionais cadastradas.</p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
 
