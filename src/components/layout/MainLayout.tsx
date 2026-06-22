@@ -18,6 +18,8 @@ const TITLES: Record<string, string> = {
   "/templates": "Templates",
   "/integracoes": "Integrações",
   "/configuracoes": "Configurações",
+  "/links-uteis": "Links Úteis",
+  "/treinamentos": "Treinamentos",
 };
 
 export function MainLayout({ children }: { children: ReactNode }) {

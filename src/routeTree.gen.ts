@@ -9,10 +9,12 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TreinamentosRouteImport } from './routes/treinamentos'
 import { Route as TemplatesRouteImport } from './routes/templates'
 import { Route as RelatoriosRouteImport } from './routes/relatorios'
 import { Route as RedistribuicaoRouteImport } from './routes/redistribuicao'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as LinksUteisRouteImport } from './routes/links-uteis'
 import { Route as LeadsRouteImport } from './routes/leads'
 import { Route as IntegracoesRouteImport } from './routes/integracoes'
 import { Route as ImoveisRouteImport } from './routes/imoveis'
@@ -26,6 +28,11 @@ import { Route as AgendaRouteImport } from './routes/agenda'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as LeadsIdRouteImport } from './routes/leads.$id'
 
+const TreinamentosRoute = TreinamentosRouteImport.update({
+  id: '/treinamentos',
+  path: '/treinamentos',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TemplatesRoute = TemplatesRouteImport.update({
   id: '/templates',
   path: '/templates',
@@ -44,6 +51,11 @@ const RedistribuicaoRoute = RedistribuicaoRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LinksUteisRoute = LinksUteisRouteImport.update({
+  id: '/links-uteis',
+  path: '/links-uteis',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LeadsRoute = LeadsRouteImport.update({
@@ -119,10 +131,12 @@ export interface FileRoutesByFullPath {
   '/imoveis': typeof ImoveisRoute
   '/integracoes': typeof IntegracoesRoute
   '/leads': typeof LeadsRouteWithChildren
+  '/links-uteis': typeof LinksUteisRoute
   '/login': typeof LoginRoute
   '/redistribuicao': typeof RedistribuicaoRoute
   '/relatorios': typeof RelatoriosRoute
   '/templates': typeof TemplatesRoute
+  '/treinamentos': typeof TreinamentosRoute
   '/leads/$id': typeof LeadsIdRoute
 }
 export interface FileRoutesByTo {
@@ -137,10 +151,12 @@ export interface FileRoutesByTo {
   '/imoveis': typeof ImoveisRoute
   '/integracoes': typeof IntegracoesRoute
   '/leads': typeof LeadsRouteWithChildren
+  '/links-uteis': typeof LinksUteisRoute
   '/login': typeof LoginRoute
   '/redistribuicao': typeof RedistribuicaoRoute
   '/relatorios': typeof RelatoriosRoute
   '/templates': typeof TemplatesRoute
+  '/treinamentos': typeof TreinamentosRoute
   '/leads/$id': typeof LeadsIdRoute
 }
 export interface FileRoutesById {
@@ -156,10 +172,12 @@ export interface FileRoutesById {
   '/imoveis': typeof ImoveisRoute
   '/integracoes': typeof IntegracoesRoute
   '/leads': typeof LeadsRouteWithChildren
+  '/links-uteis': typeof LinksUteisRoute
   '/login': typeof LoginRoute
   '/redistribuicao': typeof RedistribuicaoRoute
   '/relatorios': typeof RelatoriosRoute
   '/templates': typeof TemplatesRoute
+  '/treinamentos': typeof TreinamentosRoute
   '/leads/$id': typeof LeadsIdRoute
 }
 export interface FileRouteTypes {
@@ -176,10 +194,12 @@ export interface FileRouteTypes {
     | '/imoveis'
     | '/integracoes'
     | '/leads'
+    | '/links-uteis'
     | '/login'
     | '/redistribuicao'
     | '/relatorios'
     | '/templates'
+    | '/treinamentos'
     | '/leads/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -194,10 +214,12 @@ export interface FileRouteTypes {
     | '/imoveis'
     | '/integracoes'
     | '/leads'
+    | '/links-uteis'
     | '/login'
     | '/redistribuicao'
     | '/relatorios'
     | '/templates'
+    | '/treinamentos'
     | '/leads/$id'
   id:
     | '__root__'
@@ -212,10 +234,12 @@ export interface FileRouteTypes {
     | '/imoveis'
     | '/integracoes'
     | '/leads'
+    | '/links-uteis'
     | '/login'
     | '/redistribuicao'
     | '/relatorios'
     | '/templates'
+    | '/treinamentos'
     | '/leads/$id'
   fileRoutesById: FileRoutesById
 }
@@ -231,14 +255,23 @@ export interface RootRouteChildren {
   ImoveisRoute: typeof ImoveisRoute
   IntegracoesRoute: typeof IntegracoesRoute
   LeadsRoute: typeof LeadsRouteWithChildren
+  LinksUteisRoute: typeof LinksUteisRoute
   LoginRoute: typeof LoginRoute
   RedistribuicaoRoute: typeof RedistribuicaoRoute
   RelatoriosRoute: typeof RelatoriosRoute
   TemplatesRoute: typeof TemplatesRoute
+  TreinamentosRoute: typeof TreinamentosRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/treinamentos': {
+      id: '/treinamentos'
+      path: '/treinamentos'
+      fullPath: '/treinamentos'
+      preLoaderRoute: typeof TreinamentosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/templates': {
       id: '/templates'
       path: '/templates'
@@ -265,6 +298,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/links-uteis': {
+      id: '/links-uteis'
+      path: '/links-uteis'
+      fullPath: '/links-uteis'
+      preLoaderRoute: typeof LinksUteisRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/leads': {
@@ -376,10 +416,12 @@ const rootRouteChildren: RootRouteChildren = {
   ImoveisRoute: ImoveisRoute,
   IntegracoesRoute: IntegracoesRoute,
   LeadsRoute: LeadsRouteWithChildren,
+  LinksUteisRoute: LinksUteisRoute,
   LoginRoute: LoginRoute,
   RedistribuicaoRoute: RedistribuicaoRoute,
   RelatoriosRoute: RelatoriosRoute,
   TemplatesRoute: TemplatesRoute,
+  TreinamentosRoute: TreinamentosRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -14,6 +14,44 @@ export type Database = {
   }
   public: {
     Tables: {
+      colunas_kanban: {
+        Row: {
+          cor: string
+          created_at: string
+          id: string
+          imobiliaria_id: string
+          nome: string
+          posicao: number
+          updated_at: string
+        }
+        Insert: {
+          cor?: string
+          created_at?: string
+          id?: string
+          imobiliaria_id: string
+          nome: string
+          posicao?: number
+          updated_at?: string
+        }
+        Update: {
+          cor?: string
+          created_at?: string
+          id?: string
+          imobiliaria_id?: string
+          nome?: string
+          posicao?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "colunas_kanban_imobiliaria_id_fkey"
+            columns: ["imobiliaria_id"]
+            isOneToOne: false
+            referencedRelation: "imobiliarias"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       configuracoes_distribuicao: {
         Row: {
           created_at: string
@@ -271,6 +309,8 @@ export type Database = {
       }
       imoveis: {
         Row: {
+          area: number | null
+          banheiros: number | null
           cidade: string | null
           created_at: string
           descricao: string | null
@@ -281,11 +321,14 @@ export type Database = {
           id: string
           imobiliaria_id: string
           preco: number | null
+          quartos: number | null
           tipo: string | null
           titulo: string
           updated_at: string
         }
         Insert: {
+          area?: number | null
+          banheiros?: number | null
           cidade?: string | null
           created_at?: string
           descricao?: string | null
@@ -296,11 +339,14 @@ export type Database = {
           id?: string
           imobiliaria_id: string
           preco?: number | null
+          quartos?: number | null
           tipo?: string | null
           titulo: string
           updated_at?: string
         }
         Update: {
+          area?: number | null
+          banheiros?: number | null
           cidade?: string | null
           created_at?: string
           descricao?: string | null
@@ -311,6 +357,7 @@ export type Database = {
           id?: string
           imobiliaria_id?: string
           preco?: number | null
+          quartos?: number | null
           tipo?: string | null
           titulo?: string
           updated_at?: string
@@ -417,6 +464,7 @@ export type Database = {
           alerta_visita_2h_ciente: boolean | null
           bairro_interesse: string | null
           cadencia_chamada: number | null
+          coluna_kanban_id: string | null
           corretor_id: string | null
           created_at: string
           data_atribuicao: string | null
@@ -424,8 +472,8 @@ export type Database = {
           data_ultima_chamada: string | null
           data_visita: string | null
           descartado_em: string | null
-          descarte_pendente_aprovacao: boolean | null
           descartado_por: string | null
+          descarte_pendente_aprovacao: boolean | null
           email: string | null
           fila_tipo: string | null
           id: string
@@ -443,12 +491,12 @@ export type Database = {
           score: number | null
           sla_vencido: boolean | null
           status: Database["public"]["Enums"]["lead_status"]
+          status_visita: string | null
           telefone: string
           temperatura: Database["public"]["Enums"]["lead_temperatura"] | null
           tentativas_contato: number | null
           tipo_imovel_interesse: string | null
           tipo_visita: string | null
-          status_visita: string | null
           ultima_acao_at: string | null
           ultima_interacao: string | null
           updated_at: string
@@ -461,6 +509,7 @@ export type Database = {
           alerta_visita_2h_ciente?: boolean | null
           bairro_interesse?: string | null
           cadencia_chamada?: number | null
+          coluna_kanban_id?: string | null
           corretor_id?: string | null
           created_at?: string
           data_atribuicao?: string | null
@@ -468,8 +517,8 @@ export type Database = {
           data_ultima_chamada?: string | null
           data_visita?: string | null
           descartado_em?: string | null
-          descarte_pendente_aprovacao?: boolean | null
           descartado_por?: string | null
+          descarte_pendente_aprovacao?: boolean | null
           email?: string | null
           fila_tipo?: string | null
           id?: string
@@ -487,10 +536,12 @@ export type Database = {
           score?: number | null
           sla_vencido?: boolean | null
           status?: Database["public"]["Enums"]["lead_status"]
+          status_visita?: string | null
           telefone: string
           temperatura?: Database["public"]["Enums"]["lead_temperatura"] | null
           tentativas_contato?: number | null
           tipo_imovel_interesse?: string | null
+          tipo_visita?: string | null
           ultima_acao_at?: string | null
           ultima_interacao?: string | null
           updated_at?: string
@@ -503,6 +554,7 @@ export type Database = {
           alerta_visita_2h_ciente?: boolean | null
           bairro_interesse?: string | null
           cadencia_chamada?: number | null
+          coluna_kanban_id?: string | null
           corretor_id?: string | null
           created_at?: string
           data_atribuicao?: string | null
@@ -510,8 +562,8 @@ export type Database = {
           data_ultima_chamada?: string | null
           data_visita?: string | null
           descartado_em?: string | null
-          descarte_pendente_aprovacao?: boolean | null
           descartado_por?: string | null
+          descarte_pendente_aprovacao?: boolean | null
           email?: string | null
           fila_tipo?: string | null
           id?: string
@@ -529,10 +581,12 @@ export type Database = {
           score?: number | null
           sla_vencido?: boolean | null
           status?: Database["public"]["Enums"]["lead_status"]
+          status_visita?: string | null
           telefone?: string
           temperatura?: Database["public"]["Enums"]["lead_temperatura"] | null
           tentativas_contato?: number | null
           tipo_imovel_interesse?: string | null
+          tipo_visita?: string | null
           ultima_acao_at?: string | null
           ultima_interacao?: string | null
           updated_at?: string
@@ -541,6 +595,13 @@ export type Database = {
           valor_venda?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "leads_coluna_kanban_id_fkey"
+            columns: ["coluna_kanban_id"]
+            isOneToOne: false
+            referencedRelation: "colunas_kanban"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "leads_corretor_id_fkey"
             columns: ["corretor_id"]
@@ -651,6 +712,102 @@ export type Database = {
           },
           {
             foreignKeyName: "lembretes_followup_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      links_uteis: {
+        Row: {
+          created_at: string
+          id: string
+          imobiliaria_id: string
+          titulo: string
+          url: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          imobiliaria_id: string
+          titulo: string
+          url: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          imobiliaria_id?: string
+          titulo?: string
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "links_uteis_imobiliaria_id_fkey"
+            columns: ["imobiliaria_id"]
+            isOneToOne: false
+            referencedRelation: "imobiliarias"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mensagens_whatsapp: {
+        Row: {
+          conteudo: string
+          corretor_id: string | null
+          created_at: string | null
+          direcao: string
+          id: string
+          imobiliaria_id: string
+          lead_id: string
+          metadata: Json | null
+          status: string | null
+          tipo: string | null
+          whatsapp_message_id: string | null
+        }
+        Insert: {
+          conteudo: string
+          corretor_id?: string | null
+          created_at?: string | null
+          direcao: string
+          id?: string
+          imobiliaria_id: string
+          lead_id: string
+          metadata?: Json | null
+          status?: string | null
+          tipo?: string | null
+          whatsapp_message_id?: string | null
+        }
+        Update: {
+          conteudo?: string
+          corretor_id?: string | null
+          created_at?: string | null
+          direcao?: string
+          id?: string
+          imobiliaria_id?: string
+          lead_id?: string
+          metadata?: Json | null
+          status?: string | null
+          tipo?: string | null
+          whatsapp_message_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mensagens_whatsapp_corretor_id_fkey"
+            columns: ["corretor_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mensagens_whatsapp_imobiliaria_id_fkey"
+            columns: ["imobiliaria_id"]
+            isOneToOne: false
+            referencedRelation: "imobiliarias"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mensagens_whatsapp_lead_id_fkey"
             columns: ["lead_id"]
             isOneToOne: false
             referencedRelation: "leads"
@@ -806,6 +963,79 @@ export type Database = {
             columns: ["imobiliaria_id"]
             isOneToOne: false
             referencedRelation: "imobiliarias"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      treinamentos: {
+        Row: {
+          created_at: string
+          id: string
+          imobiliaria_id: string
+          titulo: string
+          url: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          imobiliaria_id: string
+          titulo: string
+          url: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          imobiliaria_id?: string
+          titulo?: string
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "treinamentos_imobiliaria_id_fkey"
+            columns: ["imobiliaria_id"]
+            isOneToOne: false
+            referencedRelation: "imobiliarias"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_instances: {
+        Row: {
+          connected: boolean
+          created_at: string
+          id: string
+          jid: string | null
+          updated_at: string
+          user_id: string
+          wuzapi_token: string
+          wuzapi_user_id: string | null
+        }
+        Insert: {
+          connected?: boolean
+          created_at?: string
+          id?: string
+          jid?: string | null
+          updated_at?: string
+          user_id: string
+          wuzapi_token: string
+          wuzapi_user_id?: string | null
+        }
+        Update: {
+          connected?: boolean
+          created_at?: string
+          id?: string
+          jid?: string | null
+          updated_at?: string
+          user_id?: string
+          wuzapi_token?: string
+          wuzapi_user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_instances_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "perfis"
             referencedColumns: ["id"]
           },
         ]

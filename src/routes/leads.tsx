@@ -5,9 +5,10 @@ import { NewLeadDialog } from "@/components/leads/NewLeadDialog";
 import { LeadsTable } from "@/components/leads/LeadsTable";
 import { BolsaoResgateDialog } from "@/components/leads/BolsaoResgateDialog";
 import { AprovacoesDescarteDialog } from "@/components/leads/AprovacoesDescarteDialog";
+import { ManageColumnsDialog } from "@/components/leads/ManageColumnsDialog";
 
 import { Button } from "@/components/ui/button";
-import { Plus, Filter, Search, List, Kanban, AlertCircle, Clock, Flame, Snowflake, Sun, Loader2, RefreshCw, User } from "lucide-react";
+import { Plus, Filter, Search, List, Kanban, AlertCircle, Clock, Flame, Snowflake, Sun, Loader2, RefreshCw, User, Sliders } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -36,6 +37,7 @@ function LeadsPage() {
   const [isNewLeadOpen, setIsNewLeadOpen] = useState(false);
   const [isBolsaoOpen, setIsBolsaoOpen] = useState(false);
   const [isAprovacoesOpen, setIsAprovacoesOpen] = useState(false);
+  const [isManageColumnsOpen, setIsManageColumnsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [view, setView] = useState("kanban");
   const [tempFilter, setTempFilter] = useState<string | null>(null);
@@ -286,6 +288,10 @@ function LeadsPage() {
               <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Puxar Bolsão
             </Button>
 
+            <Button variant="outline" size="sm" className="h-9 px-4 font-bold uppercase text-[10px] tracking-wider border-slate-200 text-slate-700 hover:bg-slate-50 bg-white" onClick={() => setIsManageColumnsOpen(true)}>
+              <Sliders className="mr-1.5 h-3.5 w-3.5 text-slate-400" /> Gerenciar Funil
+            </Button>
+
             <Button size="sm" className="h-9 px-4 font-bold uppercase text-[10px] tracking-wider" onClick={() => setIsNewLeadOpen(true)}>
               <Plus className="mr-1.5 h-3.5 w-3.5" /> Novo Lead
             </Button>
@@ -339,7 +345,7 @@ function LeadsPage() {
 
         <div className="flex-1 min-h-0">
           {view === "kanban" ? (
-            <LeadsKanban leads={filteredLeads} isLoading={isLoading} />
+            <LeadsKanban leads={filteredLeads} isLoading={isLoading} imobiliariaId={profile?.imobiliaria_id || ""} />
           ) : (
             <LeadsTable leads={filteredLeads} isLoading={isLoading} />
           )}
@@ -348,6 +354,12 @@ function LeadsPage() {
         <NewLeadDialog 
           open={isNewLeadOpen} 
           onOpenChange={setIsNewLeadOpen} 
+        />
+        
+        <ManageColumnsDialog 
+          open={isManageColumnsOpen}
+          onOpenChange={setIsManageColumnsOpen}
+          imobiliariaId={profile?.imobiliaria_id || ""}
         />
         
         <BolsaoResgateDialog 

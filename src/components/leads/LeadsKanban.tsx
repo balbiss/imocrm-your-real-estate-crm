@@ -23,14 +23,53 @@ const STAGES = [
   { id: "futuros", title: "FUTUROS", color: "bg-indigo-500" },
 ];
 
+import { useAuth } from "@/context/AuthContext";
+
 interface LeadsKanbanProps {
   leads?: any[];
   isLoading?: boolean;
+  imobiliariaId?: string;
 }
 
-export function LeadsKanban({ leads: initialLeads, isLoading: initialLoading }: LeadsKanbanProps) {
+export function LeadsKanban({ leads: initialLeads, isLoading: initialLoading, imobiliariaId }: LeadsKanbanProps) {
+  const { user } = useAuth();
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Buscar perfil se não foi passado imobiliariaId
+  const { data: profile } = useQuery({
+    queryKey: ["user-profile-kanban", user?.id],
+    queryFn: async () => {
+      if (!user) return null;
+      const { data, error } = await supabase
+        .from("perfis")
+        .select("imobiliaria_id")
+        .eq("id", user.id)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user && !imobiliariaId,
+  });
+
+  const resolvedImobiliariaId = imobiliariaId || profile?.imobiliaria_id;
+
+  // Buscar colunas da imobiliária
+  const { data: colunas, isLoading: loadingColunas } = useQuery({
+    queryKey: ["colunas_kanban", resolvedImobiliariaId],
+    queryFn: async () => {
+      if (!resolvedImobiliariaId) return [];
+      const { data, error } = await supabase
+        .from("colunas_kanban")
+        .select("*")
+        .eq("imobiliaria_id", resolvedImobiliariaId)
+        .order("posicao", { ascending: true });
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!resolvedImobiliariaId,
+  });
 
   // Se não passarmos as props, usamos o query interno como fallback (compatibilidade)
   const { data: leadsData, isLoading: queryLoading } = useQuery({
@@ -52,7 +91,7 @@ export function LeadsKanban({ leads: initialLeads, isLoading: initialLoading }: 
   });
 
   const leads = initialLeads || leadsData;
-  const isLoading = initialLoading !== undefined ? initialLoading : queryLoading;
+  const isLoading = (initialLoading !== undefined ? initialLoading : queryLoading) || (!!resolvedImobiliariaId && loadingColunas);
 
   if (isLoading) {
     return (
@@ -68,15 +107,57 @@ export function LeadsKanban({ leads: initialLeads, isLoading: initialLoading }: 
     );
   }
 
-  const leadsByStage = STAGES.reduce((acc, stage) => {
+  const stages = colunas && colunas.length > 0
+    ? colunas.map((c) => ({ id: c.id, title: c.nome.toUpperCase(), color: c.cor }))
+    : STAGES;
+
+  const leadsByStage = stages.reduce((acc, stage) => {
     acc[stage.id] = leads?.filter((lead) => {
       if (lead.descarte_pendente_aprovacao) return false;
-      let status = String(lead.status || "").toLowerCase();
-      // Se o status do banco não existir nas 8 colunas oficiais, joga pra "novo" pro lead não sumir
-      if (!STAGES.some(s => s.id === status) && status !== "venda_concluida") {
-        status = "novo";
+      
+      // Se o lead tem a coluna_kanban_id explícita
+      if (lead.coluna_kanban_id) {
+        return lead.coluna_kanban_id === stage.id;
       }
-      return status === stage.id.toLowerCase();
+      
+      // Caso contrário, usamos o status antigo como fallback (para consistência imediata antes das triggers)
+      let statusText = String(lead.status || "").toLowerCase();
+      
+      // Se o stage for uma coluna padrão de fallback (não-dinâmica, ex: STAGES original)
+      if (!colunas || colunas.length === 0) {
+        if (!STAGES.some(s => s.id === statusText) && statusText !== "venda_concluida") {
+          statusText = "novo";
+        }
+        return statusText === stage.id.toLowerCase();
+      }
+      
+      // Se temos colunas dinâmicas, mas o lead não tem coluna_kanban_id ainda,
+      // mapeamos o status antigo para a coluna com nome equivalente
+      const matchingColumn = colunas.find(col => {
+        const colNameNormalized = col.nome.toLowerCase();
+        const statusNameMap: Record<string, string> = {
+          novo: "lead novo",
+          rebatida: "rebatida",
+          tarefas: "tarefas",
+          agendado: "agendado",
+          visitou: "visitou",
+          cobrar_doc: "cobrar doc",
+          pendente: "pendente",
+          aprovado: "aprovado",
+          reprovado: "reprovado",
+          futuros: "futuros",
+        };
+        const expectedName = statusNameMap[statusText] || statusText;
+        return colNameNormalized === expectedName;
+      });
+
+      if (matchingColumn) {
+        return matchingColumn.id === stage.id;
+      }
+
+      // Se não bateu com nenhuma coluna, colocamos na primeira coluna ativa do funil
+      const firstColumn = colunas[0];
+      return firstColumn?.id === stage.id;
     }) || [];
     return acc;
   }, {} as Record<string, any[]>);
@@ -88,7 +169,7 @@ export function LeadsKanban({ leads: initialLeads, isLoading: initialLoading }: 
 
   return (
     <div className="flex gap-3 h-[calc(100vh-10rem)] overflow-x-auto pb-4 custom-scrollbar">
-      {STAGES.map((stage) => (
+      {stages.map((stage) => (
         <div key={stage.id} className="flex-shrink-0 w-72 flex flex-col gap-3">
           <div className="flex items-center justify-between px-1">
             <div className="flex items-center gap-1.5">

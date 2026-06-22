@@ -100,6 +100,56 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
     enabled: !!leadId && open,
   });
 
+  // Buscar colunas do Kanban
+  const { data: colunas, isLoading: loadingColunas } = useQuery({
+    queryKey: ["colunas_kanban", lead?.imobiliaria_id],
+    queryFn: async () => {
+      if (!lead?.imobiliaria_id) return [];
+      const { data, error } = await supabase
+        .from("colunas_kanban")
+        .select("*")
+        .eq("imobiliaria_id", lead.imobiliaria_id)
+        .order("posicao", { ascending: true });
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!lead?.imobiliaria_id && open,
+  });
+
+  const getRetrocompatibleStatus = (nomeColuna: string, posicao: number, total: number) => {
+    const nomeNormalized = nomeColuna.toLowerCase().trim();
+    
+    if (nomeNormalized.includes("novo") || nomeNormalized.includes("triagem") || nomeNormalized.includes("entrada")) return "novo";
+    if (nomeNormalized.includes("rebatida")) return "rebatida";
+    if (nomeNormalized.includes("tarefa") || nomeNormalized.includes("dia")) return "tarefas";
+    if (nomeNormalized.includes("agenda") || nomeNormalized.includes("reunião")) return "agendado";
+    if (nomeNormalized.includes("visita")) return "visitou";
+    if (nomeNormalized.includes("cobrar") || nomeNormalized.includes("document")) return "cobrar_doc";
+    if (nomeNormalized.includes("pendente")) return "pendente";
+    if (nomeNormalized.includes("aprovado") || nomeNormalized.includes("fechamento")) return "aprovado";
+    if (nomeNormalized.includes("reprovado") || nomeNormalized.includes("perdido")) return "reprovado";
+    if (nomeNormalized.includes("futuro") || nomeNormalized.includes("frio") || nomeNormalized.includes("arquivado")) return "futuros";
+
+    const ratio = posicao / Math.max(total - 1, 1);
+    if (ratio < 0.15) return "novo";
+    if (ratio < 0.3) return "rebatida";
+    if (ratio < 0.45) return "tarefas";
+    if (ratio < 0.6) return "agendado";
+    if (ratio < 0.7) return "visitou";
+    if (ratio < 0.8) return "cobrar_doc";
+    if (ratio < 0.9) return "pendente";
+    return "futuros";
+  };
+
+  const handleMoveColuna = (colunaId: string, nomeColuna: string, posicao: number) => {
+    const retroStatus = getRetrocompatibleStatus(nomeColuna, posicao, colunas ? colunas.length : 10);
+    updateMutation.mutate({
+      coluna_kanban_id: colunaId,
+      status: retroStatus
+    });
+  };
+
   // Lógica do SLA de 5 minutos
   useEffect(() => {
     if (lead && lead.status === 'novo' && lead.ultima_acao_at) {
@@ -507,40 +557,90 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
                 </CardHeader>
                 <CardContent className="p-4 pt-3">
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                    {([
-                      { value: "novo",            label: "Novo",         color: "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100" },
-                      { value: "rebatida",        label: "Rebatida",     color: "bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100" },
-                      { value: "tarefas",         label: "Tarefas",      color: "bg-red-50 text-red-700 border-red-200 hover:bg-red-100" },
-                      { value: "agendado",        label: "Agendado",     color: "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100" },
-                      { value: "visitou",         label: "Visitou",      color: "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100" },
-                      { value: "cobrar_doc",      label: "Cobrar Doc",   color: "bg-cyan-50 text-cyan-700 border-cyan-200 hover:bg-cyan-100" },
-                      { value: "pendente",        label: "Pendente",     color: "bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200" },
-                      { value: "aprovado",        label: "Aprovado",     color: "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100" },
-                      { value: "reprovado",       label: "Reprovado",    color: "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100" },
-                      { value: "futuros",         label: "Futuros",      color: "bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100" },
-                    ] as const).map((s) => (
-                      <button
-                        key={s.value}
-                        onClick={() => {
-                          if (lead.status !== s.value) {
-                            handleUpdateField("status", s.value);
-                          }
-                        }}
-                        className={`relative h-10 rounded-lg border text-[10px] font-bold uppercase tracking-wider transition-all ${
-                          lead.status === s.value
-                            ? "ring-2 ring-offset-1 ring-primary shadow-sm scale-[1.03] " + s.color
-                            : s.color + " opacity-70"
-                        }`}
-                      >
-                        {lead.status === s.value && (
-                          <CheckCircle2 className="absolute top-1 right-1 h-3 w-3 text-primary opacity-80" />
-                        )}
-                        {s.label}
-                      </button>
-                    ))}
+                    {loadingColunas ? (
+                      <div className="col-span-full flex justify-center py-4">
+                        <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                      </div>
+                    ) : colunas && colunas.length > 0 ? (
+                      colunas.map((coluna) => {
+                        const retroStatus = getRetrocompatibleStatus(coluna.nome, coluna.posicao, colunas.length);
+                        const isAtiva = lead.coluna_kanban_id 
+                          ? lead.coluna_kanban_id === coluna.id 
+                          : lead.status === retroStatus;
+
+                        // Determinar cores dinâmicas baseadas na classe da cor da coluna
+                        let colorClass = "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100";
+                        if (coluna.cor === "bg-orange-500") colorClass = "bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100";
+                        else if (coluna.cor === "bg-red-500") colorClass = "bg-red-50 text-red-700 border-red-200 hover:bg-red-100";
+                        else if (coluna.cor === "bg-purple-500") colorClass = "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100";
+                        else if (coluna.cor === "bg-amber-500") colorClass = "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100";
+                        else if (coluna.cor === "bg-cyan-500") colorClass = "bg-cyan-50 text-cyan-700 border-cyan-200 hover:bg-cyan-100";
+                        else if (coluna.cor === "bg-slate-500") colorClass = "bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200";
+                        else if (coluna.cor === "bg-emerald-500") colorClass = "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100";
+                        else if (coluna.cor === "bg-rose-600") colorClass = "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100";
+                        else if (coluna.cor === "bg-indigo-500") colorClass = "bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100";
+
+                        return (
+                          <button
+                            key={coluna.id}
+                            onClick={() => {
+                              if (!isAtiva) {
+                                handleMoveColuna(coluna.id, coluna.nome, coluna.posicao);
+                              }
+                            }}
+                            className={`relative h-10 rounded-lg border text-[10px] font-bold uppercase tracking-wider transition-all ${
+                              isAtiva
+                                ? "ring-2 ring-offset-1 ring-primary shadow-sm scale-[1.03] " + colorClass
+                                : colorClass + " opacity-70"
+                            }`}
+                          >
+                            {isAtiva && (
+                              <CheckCircle2 className="absolute top-1 right-1 h-3 w-3 text-primary opacity-80" />
+                            )}
+                            {coluna.nome}
+                          </button>
+                        );
+                      })
+                    ) : (
+                      ([
+                        { value: "novo",            label: "Novo",         color: "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100" },
+                        { value: "rebatida",        label: "Rebatida",     color: "bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100" },
+                        { value: "tarefas",         label: "Tarefas",      color: "bg-red-50 text-red-700 border-red-200 hover:bg-red-100" },
+                        { value: "agendado",        label: "Agendado",     color: "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100" },
+                        { value: "visitou",         label: "Visitou",      color: "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100" },
+                        { value: "cobrar_doc",      label: "Cobrar Doc",   color: "bg-cyan-50 text-cyan-700 border-cyan-200 hover:bg-cyan-100" },
+                        { value: "pendente",        label: "Pendente",     color: "bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200" },
+                        { value: "aprovado",        label: "Aprovado",     color: "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100" },
+                        { value: "reprovado",       label: "Reprovado",    color: "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100" },
+                        { value: "futuros",         label: "Futuros",      color: "bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100" },
+                      ] as const).map((s) => (
+                        <button
+                          key={s.value}
+                          onClick={() => {
+                            if (lead.status !== s.value) {
+                              handleUpdateField("status", s.value);
+                            }
+                          }}
+                          className={`relative h-10 rounded-lg border text-[10px] font-bold uppercase tracking-wider transition-all ${
+                            lead.status === s.value
+                              ? "ring-2 ring-offset-1 ring-primary shadow-sm scale-[1.03] " + s.color
+                              : s.color + " opacity-70"
+                          }`}
+                        >
+                          {lead.status === s.value && (
+                            <CheckCircle2 className="absolute top-1 right-1 h-3 w-3 text-primary opacity-80" />
+                          )}
+                          {s.label}
+                        </button>
+                      ))
+                    )}
                   </div>
                   <p className="text-[10px] text-slate-400 mt-2 font-medium">
-                    Status atual: <span className="font-bold text-slate-600">{lead.status.replace("_", " ")}</span>
+                    Coluna atual: <span className="font-bold text-slate-600">
+                      {colunas && lead.coluna_kanban_id 
+                        ? colunas.find(c => c.id === lead.coluna_kanban_id)?.nome 
+                        : lead.status.replace("_", " ").toUpperCase()}
+                    </span>
                   </p>
                 </CardContent>
               </Card>

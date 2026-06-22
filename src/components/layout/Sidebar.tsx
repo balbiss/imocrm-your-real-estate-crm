@@ -14,6 +14,8 @@ import {
   Settings,
   LogOut,
   Loader2,
+  Link as LinkIcon,
+  GraduationCap,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
@@ -186,6 +188,9 @@ export function Sidebar({ collapsed, onClose }: { collapsed: boolean; onClose?: 
 
   // Todo mundo tem acesso à página de integrações (para conectar seu próprio WhatsApp)
   tools.push({ to: "/integracoes", label: "Integrações", icon: Settings });
+
+  tools.push({ to: "/links-uteis", label: "Links Úteis", icon: LinkIcon });
+  tools.push({ to: "/treinamentos", label: "Treinamentos", icon: GraduationCap });
 
   if (can('configure_system')) {
     tools.push({ to: "/configuracoes", label: "Ajustes", icon: Settings });
