@@ -26,7 +26,7 @@ $FullImageName = "${DockerUser}/${ImageName}:latest"
 Write-Host "--- Iniciando Build da Imagem: $FullImageName ---" -ForegroundColor Cyan
 
 # 2. Build da Imagem com argumentos do Vite
-docker build `
+docker build --no-cache `
     --build-arg VITE_SUPABASE_URL=$Env:VITE_SUPABASE_URL `
     --build-arg VITE_SUPABASE_PUBLISHABLE_KEY=$Env:VITE_SUPABASE_PUBLISHABLE_KEY `
     -t $FullImageName .
