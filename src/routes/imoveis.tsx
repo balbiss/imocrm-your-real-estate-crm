@@ -136,15 +136,21 @@ function ImoveisPage() {
                 <div className="grid grid-cols-3 gap-1 pt-3 border-t border-slate-50">
                   <div className="flex items-center gap-1 justify-center bg-slate-50 rounded-lg py-1">
                     <Bed className="h-3 w-3 text-slate-400" />
-                    <span className="text-[10px] font-bold text-slate-600">3</span>
+                    <span className="text-[10px] font-bold text-slate-600">
+                      {imovel.quartos !== null && imovel.quartos !== undefined ? imovel.quartos : "-"}
+                    </span>
                   </div>
                   <div className="flex items-center gap-1 justify-center bg-slate-50 rounded-lg py-1">
                     <Bath className="h-3 w-3 text-slate-400" />
-                    <span className="text-[10px] font-bold text-slate-600">2</span>
+                    <span className="text-[10px] font-bold text-slate-600">
+                      {imovel.banheiros !== null && imovel.banheiros !== undefined ? imovel.banheiros : "-"}
+                    </span>
                   </div>
                   <div className="flex items-center gap-1 justify-center bg-slate-50 rounded-lg py-1">
                     <Square className="h-3 w-3 text-slate-400" />
-                    <span className="text-[10px] font-bold text-slate-600">120mÂ²</span>
+                    <span className="text-[10px] font-bold text-slate-600">
+                      {imovel.area !== null && imovel.area !== undefined ? `${imovel.area}m²` : "-"}
+                    </span>
                   </div>
                 </div>
 
