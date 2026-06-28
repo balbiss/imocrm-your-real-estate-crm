@@ -1,5 +1,6 @@
 import React from "react";
 import { useForm } from "react-hook-form";
+import { Badge } from "@/components/ui/badge";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -25,6 +26,19 @@ import { Loader2 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { Upload, X, Image as ImageIcon, Plus, Trash2 } from "lucide-react";
 
+const CARACTERISTICAS_PADRAO = [
+  "Varanda",
+  "Suíte",
+  "Piscina",
+  "Churrasqueira",
+  "Garagem Coberta",
+  "Portaria 24h",
+  "Academia",
+  "Elevador",
+  "Mobiliado",
+  "Ar Condicionado"
+];
+
 interface NewPropertyDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -39,6 +53,26 @@ export function NewPropertyDialog({ open, onOpenChange }: NewPropertyDialogProps
   const [previews, setPreviews] = React.useState<string[]>([]);
   const [selectedFiles, setSelectedFiles] = React.useState<File[]>([]);
   const [customFields, setCustomFields] = React.useState<Array<{ key: string; value: string }>>([]);
+  const [newFeatureName, setNewFeatureName] = React.useState("");
+
+  const toggleFeature = (name: string) => {
+    const exists = customFields.some(f => f.key.toLowerCase() === name.toLowerCase());
+    if (exists) {
+      setCustomFields(prev => prev.filter(f => f.key.toLowerCase() !== name.toLowerCase()));
+    } else {
+      setCustomFields(prev => [...prev, { key: name, value: "Sim" }]);
+    }
+  };
+
+  const handleAddNewFeature = () => {
+    const name = newFeatureName.trim();
+    if (!name) return;
+    const exists = customFields.some(f => f.key.toLowerCase() === name.toLowerCase());
+    if (!exists) {
+      setCustomFields(prev => [...prev, { key: name, value: "Sim" }]);
+    }
+    setNewFeatureName("");
+  };
 
   const handleAddCustomField = () => {
     setCustomFields((prev) => [...prev, { key: "", value: "" }]);
@@ -249,45 +283,83 @@ export function NewPropertyDialog({ open, onOpenChange }: NewPropertyDialogProps
             <div className="space-y-3 p-4 bg-slate-50/50 rounded-xl border border-slate-100/50">
               <div className="flex items-center justify-between">
                 <Label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Características Adicionais</Label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleAddCustomField}
-                  className="h-7 px-2 text-[9px] font-bold uppercase tracking-wider border-slate-200 hover:bg-slate-50 text-slate-600 rounded-lg"
-                >
-                  <Plus className="h-3.5 w-3.5 mr-1" /> Adicionar
-                </Button>
               </div>
 
-              <div className="space-y-2">
-                {customFields.map((field, idx) => (
-                  <div key={idx} className="flex gap-2 items-center">
-                    <Input
-                      placeholder="Nome (ex: Suítes)"
-                      value={field.key}
-                      onChange={(e) => handleCustomFieldChange(idx, "key", e.target.value)}
-                      className="h-9 text-xs border-slate-200 flex-1"
+              <div className="space-y-4">
+                {/* Tags pré-definidas */}
+                <div className="space-y-2">
+                  <Label className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Opções Rápidas (Clique para marcar/desmarcar)</Label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {CARACTERISTICAS_PADRAO.map(char => {
+                      const isSelected = customFields.some(f => f.key.toLowerCase() === char.toLowerCase());
+                      return (
+                        <Badge
+                          key={char}
+                          type="button"
+                          variant={isSelected ? "default" : "outline"}
+                          onClick={() => toggleFeature(char)}
+                          className="cursor-pointer select-none text-[9px] font-black uppercase tracking-wider py-1 px-2.5 transition-all hover:bg-primary/10 active:scale-95"
+                        >
+                          {char}
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Campo de criação livre de tag */}
+                <div className="space-y-2">
+                  <Label className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Criar característica personalizada na hora</Label>
+                  <div className="flex gap-2">
+                    <Input 
+                      placeholder="Digite um nome (ex: Quintal Grande)" 
+                      value={newFeatureName}
+                      onChange={(e) => setNewFeatureName(e.target.value)}
+                      className="h-10 text-xs border-slate-200"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddNewFeature();
+                        }
+                      }}
                     />
-                    <Input
-                      placeholder="Valor (ex: 2)"
-                      value={field.value}
-                      onChange={(e) => handleCustomFieldChange(idx, "value", e.target.value)}
-                      className="h-9 text-xs border-slate-200 flex-1"
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleRemoveCustomField(idx)}
-                      className="h-9 w-9 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg flex-shrink-0"
+                    <Button 
+                      type="button" 
+                      onClick={handleAddNewFeature}
+                      className="h-10 text-xs font-bold uppercase px-4 shrink-0"
                     >
-                      <Trash2 className="h-4 w-4" />
+                      + Criar
                     </Button>
                   </div>
-                ))}
-                {customFields.length === 0 && (
-                  <p className="text-[11px] text-slate-400 text-center py-2">Nenhum campo personalizado adicionado.</p>
+                </div>
+
+                {/* Lista de características ativas para alteração do valor */}
+                {customFields.length > 0 && (
+                  <div className="space-y-2 mt-4 pt-4 border-t border-slate-100">
+                    <Label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Valores / Detalhes das Características</Label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {customFields.map((field, idx) => (
+                        <div key={idx} className="flex gap-2 items-center bg-white p-2 rounded-xl border border-slate-100 shadow-sm">
+                          <span className="text-xs font-bold text-slate-700 flex-1 truncate pl-1">{field.key}</span>
+                          <Input
+                            placeholder="Sim"
+                            value={field.value}
+                            onChange={(e) => handleCustomFieldChange(idx, "value", e.target.value)}
+                            className="h-8 text-xs border-slate-200 bg-white w-24 text-center font-medium rounded-lg"
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleRemoveCustomField(idx)}
+                            className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg flex-shrink-0"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
