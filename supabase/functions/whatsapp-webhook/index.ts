@@ -75,17 +75,142 @@ serve(async (req)=>{
         
         console.log(`Recebida mensagem inbound de ${cleanNumber}: ${text}`);
 
-        // 1. Tentar encontrar o lead por telefone
-        // O banco salva "9181190130" mas o cleanNumber pode vir como "559181190130"
-        const { data: leads } = await supabase
-          .from("leads")
-          .select("id, imobiliaria_id")
-          .or(`telefone.ilike.%${cleanNumber}%,telefone.ilike.%${cleanNumber.slice(2)}%`)
-          .limit(1);
+        // 1. Tentar encontrar o lead por telefone usando a RPC inteligente
+        const { data: leads, error: searchError } = await supabase
+          .rpc("buscar_lead_por_telefone", { telefone_busca: cleanNumber });
+
+        if (searchError) {
+          console.error("Erro ao buscar lead por telefone:", searchError);
+        }
 
         if (leads && leads.length > 0) {
           const lead = leads[0];
           console.log(`Lead encontrado: ${lead.id}`);
+
+          // Tentar baixar arquivos de mídia (imagem, áudio, vídeo, documento) se presentes
+          let attachmentUrl = "";
+          let finalType = "text";
+          
+          let mediaMessage = null;
+          let downloadEndpoint = "";
+          let originalFileName = "";
+          let caption = "";
+
+          if (msgEvent.Message.imageMessage) {
+            mediaMessage = msgEvent.Message.imageMessage;
+            downloadEndpoint = "/chat/downloadimage";
+            finalType = "image";
+            caption = mediaMessage.caption ? `\n${mediaMessage.caption}` : "";
+          } else if (msgEvent.Message.documentMessage) {
+            mediaMessage = msgEvent.Message.documentMessage;
+            downloadEndpoint = "/chat/downloaddocument";
+            finalType = "document";
+            originalFileName = mediaMessage.fileName || mediaMessage.Filename || "documento.pdf";
+            caption = mediaMessage.caption ? `\n${mediaMessage.caption}` : "";
+          } else if (msgEvent.Message.audioMessage) {
+            mediaMessage = msgEvent.Message.audioMessage;
+            downloadEndpoint = "/chat/downloadaudio";
+            finalType = "audio";
+          } else if (msgEvent.Message.videoMessage) {
+            mediaMessage = msgEvent.Message.videoMessage;
+            downloadEndpoint = "/chat/downloadvideo";
+            finalType = "video";
+            caption = mediaMessage.caption ? `\n${mediaMessage.caption}` : "";
+          }
+
+          if (mediaMessage && downloadEndpoint) {
+            try {
+              // Buscar o corretor_id do lead
+              const { data: leadDetail } = await supabase
+                .from("leads")
+                .select("corretor_id")
+                .eq("id", lead.id)
+                .single();
+
+              let wuzapiToken = "";
+              if (leadDetail?.corretor_id) {
+                const { data: instance } = await supabase
+                  .from("whatsapp_instances")
+                  .select("wuzapi_token")
+                  .eq("user_id", leadDetail.corretor_id)
+                  .maybeSingle();
+                if (instance) {
+                  wuzapiToken = instance.wuzapi_token;
+                }
+              }
+
+              if (wuzapiToken) {
+                const downloadParams = {
+                  Url: mediaMessage.URL || mediaMessage.url || mediaMessage.Url,
+                  MediaKey: mediaMessage.mediaKey || mediaMessage.MediaKey,
+                  Mimetype: mediaMessage.mimetype || mediaMessage.Mimetype,
+                  FileSHA256: mediaMessage.fileSHA256 || mediaMessage.fileSha256 || mediaMessage.FileSHA256,
+                  FileLength: Number(mediaMessage.fileLength || mediaMessage.FileLength || 0),
+                  DirectPath: mediaMessage.directPath || mediaMessage.DirectPath,
+                  FileEncSHA256: mediaMessage.fileEncSHA256 || mediaMessage.fileEncSha256 || mediaMessage.FileEncSHA256
+                };
+
+                const downloadRes = await fetch(`https://wuzap.inoovaweb.cloud${downloadEndpoint}`, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "token": wuzapiToken
+                  },
+                  body: JSON.stringify(downloadParams)
+                });
+
+                const downloadJson = await downloadRes.json();
+                if (downloadJson.success && downloadJson.data && downloadJson.data.Data) {
+                  const base64String = downloadJson.data.Data;
+                  const parts = base64String.split(",");
+                  const base64Clean = parts[1] || parts[0];
+                  const mimeType = downloadParams.Mimetype || "application/octet-stream";
+                  let fileExt = mimeType.split("/")[1] || "bin";
+                  if (fileExt.includes(";")) {
+                    fileExt = fileExt.split(";")[0];
+                  }
+                  
+                  if (mimeType.includes("audio/ogg") || fileExt === "ogg") {
+                    fileExt = "ogg";
+                  }
+
+                  const safeFileName = originalFileName 
+                    ? `${crypto.randomUUID()}_${originalFileName.replace(/[^a-zA-Z0-9.-]/g, "_")}`
+                    : `${crypto.randomUUID()}.${fileExt}`;
+
+                  // Converter base64 para Uint8Array no Deno
+                  const fileBytes = Uint8Array.from(atob(base64Clean), c => c.charCodeAt(0));
+
+                  // Enviar para o Storage do Supabase (bucket whatsapp_media)
+                  const { data: uploadData, error: uploadError } = await supabase.storage
+                    .from('whatsapp_media')
+                    .upload(safeFileName, fileBytes, {
+                      contentType: mimeType,
+                      upsert: true
+                    });
+
+                  if (!uploadError) {
+                    const { data: urlData } = supabase.storage
+                      .from('whatsapp_media')
+                      .getPublicUrl(safeFileName);
+                    attachmentUrl = urlData.publicUrl;
+                    
+                    if (finalType === "document") {
+                      text = `[Anexo]: ${attachmentUrl}\n${originalFileName}${caption}`;
+                    } else {
+                      text = `[Anexo]: ${attachmentUrl}${caption}`;
+                    }
+                  } else {
+                    console.error(`Erro ao subir ${finalType} no Storage:`, uploadError);
+                  }
+                } else {
+                  console.error(`Erro ao baixar ${finalType} da Wuzapi:`, downloadJson);
+                }
+              }
+            } catch (err) {
+              console.error(`Erro no processamento de ${finalType} do WhatsApp:`, err);
+            }
+          }
 
           // 2. Inserir a mensagem no histórico do lead
           const { error: insertError } = await supabase.from("mensagens_whatsapp").insert({
@@ -95,7 +220,7 @@ serve(async (req)=>{
             direcao: "inbound",
             status: "delivered", // mensagens recebidas já chegam delivered/read
             whatsapp_message_id: messageId,
-            tipo: "text",
+            tipo: finalType,
             metadata: payload
           });
 

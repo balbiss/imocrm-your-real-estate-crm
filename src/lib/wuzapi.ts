@@ -137,10 +137,9 @@ export async function logoutWuzapiSession(userToken: string): Promise<void> {
 // ============================================
 
 export async function setWuzapiWebhook(userToken: string, webhookUrl: string) {
-  return await invokeProxy("PUT", "/webhook", {
+  return await invokeProxy("POST", "/webhook", {
     WebhookURL: webhookUrl,
-    Events: ["Message"],
-    active: true
+    Events: ["Message"]
   }, userToken);
 }
 

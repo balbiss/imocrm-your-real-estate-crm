@@ -354,7 +354,7 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber }: WhatsAppCha
       </div>
 
       {/* Área de Mensagens */}
-      <ScrollArea className="flex-1 p-4 z-10">
+      <div className="flex-1 p-4 z-10 overflow-y-auto [scrollbar-width:thin] [scrollbar-color:rgba(0,0,0,0.2)_transparent]">
         <div className="space-y-2 pb-2">
           {messages.length === 0 && (
             <div className="text-center py-10 opacity-60 bg-[#FFEECD] text-[#54656F] rounded-lg p-4 mx-auto text-xs w-fit max-w-[80%] shadow-sm">
@@ -390,7 +390,26 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber }: WhatsAppCha
                   {hasAnexo && anexoUrl && (
                     <div className="mb-1 mt-1">
                       {anexoUrl.match(/\.(jpeg|jpg|gif|png)$/i) ? (
-                        <img src={anexoUrl} alt="Anexo" className="rounded-md max-h-[250px] object-contain cursor-pointer hover:opacity-95" onClick={() => window.open(anexoUrl, '_blank')} />
+                        <img 
+                          src={anexoUrl} 
+                          alt="Anexo" 
+                          className="rounded-md max-h-[250px] object-contain cursor-pointer hover:opacity-95" 
+                          onClick={() => window.open(anexoUrl, '_blank')}
+                          onLoad={() => {
+                            scrollRef.current?.scrollIntoView({ behavior: "smooth" });
+                          }}
+                        />
+                      ) : anexoUrl.match(/\.(ogg|mp3|wav|m4a)$/i) ? (
+                        <audio src={anexoUrl} controls className="max-w-full my-1 focus:outline-none" />
+                      ) : anexoUrl.match(/\.(mp4|webm|ogv|mov|3gp)$/i) ? (
+                        <video 
+                          src={anexoUrl} 
+                          controls 
+                          className="rounded-md max-h-[250px] max-w-full my-1 focus:outline-none"
+                          onLoadedData={() => {
+                            scrollRef.current?.scrollIntoView({ behavior: "smooth" });
+                          }}
+                        />
                       ) : (
                         <a href={anexoUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2 bg-black/5 p-3 rounded-md hover:bg-black/10 transition-colors text-sm font-medium text-[#111B21]">
                           <Paperclip className="h-4 w-4 text-[#54656F]" /> Documento Anexo
@@ -420,7 +439,7 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber }: WhatsAppCha
           })}
           <div ref={scrollRef} />
         </div>
-      </ScrollArea>
+      </div>
 
       {/* Input de Envio */}
       <div className="flex flex-col bg-[#F0F2F5] z-10 shrink-0 border-t border-[#D1D7DB]">
