@@ -8,7 +8,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 import EmojiPicker, { EmojiClickData, Theme } from "emoji-picker-react";
-import { sendWuzapiText, sendWuzapiImage, sendWuzapiDocument, sendWuzapiAudio, checkWuzapiUser, getWuzapiAvatar } from "@/lib/wuzapi";
+import { getWhatsappAvatar, getWhatsappStatus, sendWhatsappMessage } from "@/lib/baileys";
 
 interface Message {
   id: string;
@@ -88,7 +88,7 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber }: WhatsAppCha
     }
   }, [messages]);
 
-  const [wuzapiToken, setWuzapiToken] = useState<string | null>(null);
+  const [whatsappConnected, setWhatsappConnected] = useState(false);
   const [attachment, setAttachment] = useState<File | null>(null);
   const [leadAvatar, setLeadAvatar] = useState<string | null>(null);
   const [agentAvatar, setAgentAvatar] = useState<string | null>(null);
@@ -107,36 +107,32 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber }: WhatsAppCha
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Busca o token da instância do usuário logado
+  // Busca o status de conexão do WhatsApp do usuário logado
   useEffect(() => {
-    const fetchToken = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      const { data } = await supabase
-        .from("whatsapp_instances" as any)
-        .select("wuzapi_token, jid")
-        .eq("user_id", user.id)
-        .single();
-        
-      if (data?.wuzapi_token) {
-        setWuzapiToken(data.wuzapi_token);
-        
+    const fetchStatus = async () => {
+      try {
+        const data = await getWhatsappStatus();
+        setWhatsappConnected(!!data.connected);
+        if (!data.connected) return;
+
         // Buscar a foto do Lead e do Corretor em background
         const corretorPhone = data.jid?.split('@')[0]?.split(':')[0];
         if (corretorPhone) {
-          getWuzapiAvatar(data.wuzapi_token, corretorPhone)
+          getWhatsappAvatar(corretorPhone)
             .then(url => { if (url) setAgentAvatar(url) })
             .catch(() => {});
         }
-        
+
         const cleanLead = phoneNumber.replace(/\D/g, "");
         const leadPhone = cleanLead.startsWith("55") ? cleanLead : `55${cleanLead}`;
-        getWuzapiAvatar(data.wuzapi_token, leadPhone)
+        getWhatsappAvatar(leadPhone)
           .then(url => { if (url) setLeadAvatar(url) })
           .catch(() => {});
+      } catch (e) {
+        console.error("Erro ao buscar status do WhatsApp:", e);
       }
     };
-    fetchToken();
+    fetchStatus();
   }, [phoneNumber]);
 
   const toBase64 = (file: File): Promise<string> =>
@@ -145,7 +141,6 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber }: WhatsAppCha
       reader.readAsDataURL(file);
       reader.onload = () => {
         let encoded = reader.result?.toString() || "";
-        // WuzAPI exige o prefixo inteiro: data:image/png;base64,...
         resolve(encoded);
       };
       reader.onerror = (error) => reject(error);
@@ -154,7 +149,7 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber }: WhatsAppCha
   const handleSendMessage = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if ((!newMessage.trim() && !attachment) || sending) return;
-    if (!wuzapiToken) {
+    if (!whatsappConnected) {
       toast.error("O WhatsApp do seu corretor não está conectado!");
       return;
     }
@@ -193,7 +188,7 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber }: WhatsAppCha
         const { data: storageData, error: storageError } = await supabase.storage
           .from('whatsapp_media')
           .upload(fileName, attachment);
-          
+
         if (!storageError) {
           const { data: { publicUrl } } = supabase.storage.from('whatsapp_media').getPublicUrl(fileName);
           finalConteudo = `[Anexo]: ${publicUrl}\n${messageContent}`;
@@ -201,84 +196,19 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber }: WhatsAppCha
           finalConteudo = `[Arquivo]: ${attachment.name}\n${messageContent}`;
         }
 
-        // Limpa número
-        const cleanTo = phoneNumber.replace(/\D/g, "");
-        let finalTo = cleanTo.startsWith("55") ? cleanTo : `55${cleanTo}`;
+        typeSent = type.startsWith("image/") ? "image" : type.startsWith("audio/") ? "audio" : "document";
 
-        // Estratégia do Nono Dígito (Brasil)
-        const phonesToCheck = [finalTo];
-        if (finalTo.startsWith("55")) {
-          if (finalTo.length === 13) {
-            // Tem 9: checa sem o 9 (ex: 55 91 9 82935558 -> 55 91 82935558)
-            const semNove = finalTo.substring(0, 4) + finalTo.substring(5);
-            phonesToCheck.push(semNove);
-          } else if (finalTo.length === 12) {
-            // Não tem 9: checa com o 9 (ex: 55 91 81190130 -> 55 91 9 81190130)
-            const comNove = finalTo.substring(0, 4) + "9" + finalTo.substring(4);
-            phonesToCheck.push(comNove);
-          }
-        }
+        // O backend resolve o JID certo (com/sem nono dígito) e envia via baileys-api
+        await sendWhatsappMessage(phoneNumber, messageContent, {
+          base64,
+          mimetype: type,
+          fileName: attachment.name,
+        });
 
-        const checkData = await checkWuzapiUser(wuzapiToken, phonesToCheck);
-        const validUsers = checkData?.data?.Users || [];
-        // Encontra o primeiro que está no WhatsApp
-        const validUser = validUsers.find((u: any) => u.IsInWhatsapp);
-
-        if (!validUser) {
-          toast.error("Este número não está registrado no WhatsApp.");
-          return;
-        }
-
-        // Usa o JID exato retornado pelo WhatsApp!
-        const correctJid = validUser.JID;
-        
-        // A WUZAPI exige Mime Types específicos no prefixo, independente do arquivo real
-        const pureBase64 = base64.includes(",") ? base64.split(",")[1] : base64;
-
-        if (type.startsWith("image/")) {
-           const finalBase64 = `data:image/png;base64,${pureBase64}`;
-           await sendWuzapiImage(wuzapiToken, correctJid, finalBase64);
-           typeSent = "image";
-           if (messageContent) await sendWuzapiText(wuzapiToken, correctJid, messageContent);
-        } else if (type.startsWith("audio/")) {
-           const finalBase64 = `data:audio/ogg;base64,${pureBase64}`;
-           await sendWuzapiAudio(wuzapiToken, correctJid, finalBase64);
-           typeSent = "audio";
-           if (messageContent) await sendWuzapiText(wuzapiToken, correctJid, messageContent);
-        } else {
-           const finalBase64 = `data:application/octet-stream;base64,${pureBase64}`;
-           await sendWuzapiDocument(wuzapiToken, correctJid, finalBase64, attachment.name);
-           typeSent = "document";
-           if (messageContent) await sendWuzapiText(wuzapiToken, correctJid, messageContent);
-        }
-        
         setAttachment(null);
       } else {
-        // Envia apenas o texto
-        const cleanTo = phoneNumber.replace(/\D/g, "");
-        let finalTo = cleanTo.startsWith("55") ? cleanTo : `55${cleanTo}`;
-
-        const phonesToCheck = [finalTo];
-        if (finalTo.startsWith("55")) {
-          if (finalTo.length === 13) {
-            const semNove = finalTo.substring(0, 4) + finalTo.substring(5);
-            phonesToCheck.push(semNove);
-          } else if (finalTo.length === 12) {
-            const comNove = finalTo.substring(0, 4) + "9" + finalTo.substring(4);
-            phonesToCheck.push(comNove);
-          }
-        }
-
-        const checkData = await checkWuzapiUser(wuzapiToken, phonesToCheck);
-        const validUsers = checkData?.data?.Users || [];
-        const validUser = validUsers.find((u: any) => u.IsInWhatsapp);
-
-        if (!validUser) {
-          toast.error("Este número não está registrado no WhatsApp.");
-          return;
-        }
-
-        await sendWuzapiText(wuzapiToken, validUser.JID, messageContent);
+        // Envia apenas o texto — o backend resolve o JID e faz o envio
+        await sendWhatsappMessage(phoneNumber, messageContent);
       }
 
       // 2. Salvar no banco (direção outbound)

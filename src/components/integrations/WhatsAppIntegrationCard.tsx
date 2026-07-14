@@ -2,10 +2,17 @@ import React, { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { MessageCircle, CheckCircle2, AlertCircle, RefreshCw, Loader2, User } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { MessageCircle, AlertCircle, Loader2, User, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
-import { createWuzapiUser, deleteWuzapiUserFull, getWuzapiStatus, getWuzapiAvatar, setWuzapiWebhook } from "@/lib/wuzapi";
+import {
+  connectWhatsapp,
+  deleteWhatsappInstance,
+  disconnectWhatsapp,
+  getWhatsappAvatar,
+  getWhatsappStatus,
+  WhatsappStatus,
+} from "@/lib/baileys";
 import { UserWhatsAppModal } from "./UserWhatsAppModal";
 
 interface WhatsAppIntegrationCardProps {
@@ -15,96 +22,70 @@ interface WhatsAppIntegrationCardProps {
 
 export function WhatsAppIntegrationCard({ userId, userName }: WhatsAppIntegrationCardProps) {
   const [loading, setLoading] = useState(true);
-  const [instanceData, setInstanceData] = useState<any>(null);
+  const [status, setStatus] = useState<WhatsappStatus | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [processing, setProcessing] = useState(false);
+  const [phoneInput, setPhoneInput] = useState("");
 
-  // Status derivados
-  const hasInstance = !!instanceData;
-  const isConnected = instanceData?.connected === true;
-  const wuzapiToken = instanceData?.wuzapi_token;
-  const wuzapiUserId = instanceData?.wuzapi_user_id;
-  const jid = instanceData?.jid;
+  // Uma linha antiga (herdada da WUZAPI, sem numero de telefone) nao conta
+  // como conexao de verdade — trata como "sem instancia" pra pedir o numero.
+  const hasInstance = !!status?.hasInstance && !!status?.phoneNumber;
+  const isConnected = status?.connected === true;
 
-  const loadInstance = async () => {
+  const loadStatus = async () => {
     try {
-      const { data, error } = await supabase
-        .from("whatsapp_instances" as any)
-        .select("*")
-        .eq("user_id", userId)
-        .maybeSingle();
-      
-      if (error) throw error;
-      setInstanceData(data);
+      const data = await getWhatsappStatus();
+      setStatus(data);
 
-      if (data && data.wuzapi_token) {
-        // Verifica na WUZAPI se a sessão está realmente logada
-        try {
-          const status = await getWuzapiStatus(data.wuzapi_token);
-          
-          if (status.loggedIn) {
-            // Atualiza jid se conectou e mudou
-            if (status.jid && status.jid !== data.jid) {
-              await supabase.from("whatsapp_instances" as any).update({ jid: status.jid, connected: true }).eq("user_id", userId);
-              setInstanceData({ ...data, jid: status.jid, connected: true });
-            } else if (!data.connected) {
-              await supabase.from("whatsapp_instances" as any).update({ connected: true }).eq("user_id", userId);
-              setInstanceData({ ...data, connected: true });
-            }
-            
-            // Busca a foto de perfil
-            if (status.jid) {
-              const cleanJid = status.jid.split('@')[0].split(':')[0];
-              const avatar = await getWuzapiAvatar(data.wuzapi_token, cleanJid);
-              setAvatarUrl(avatar);
-            }
-          } else {
-            // Se não está logado, garante que o card volte para "Aguardando"
-            if (data.connected) {
-              await supabase.from("whatsapp_instances" as any).update({ connected: false }).eq("user_id", userId);
-              setInstanceData({ ...data, connected: false });
-            }
-          }
-        } catch (e) {
-          console.warn("Não foi possível verificar status", e);
-        }
+      if (data.connected && data.jid) {
+        const cleanJid = data.jid.split("@")[0].split(":")[0];
+        getWhatsappAvatar(cleanJid)
+          .then((url) => setAvatarUrl(url))
+          .catch(() => {});
       }
     } catch (e) {
-      console.error("Erro ao carregar instância:", e);
+      console.error("Erro ao carregar status do WhatsApp:", e);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadInstance();
+    loadStatus();
   }, [userId]);
 
-  const handleCreateConnection = async () => {
+  const handleConnect = async () => {
+    const digits = phoneInput.replace(/\D/g, "");
+    if (digits.length < 10) {
+      toast.error("Informe um numero de WhatsApp valido, com DDD.");
+      return;
+    }
+
     setProcessing(true);
     try {
-      const sanitizedName = userName.trim().replace(/\s+/g, "_") + "_" + userId.substring(0, 5);
-      const wuzapiUser = await createWuzapiUser(sanitizedName);
-
-      // Configurar o Webhook usando a URL solicitada
-      const webhookUrl = "https://osheoeeigahkwsrzfjdw.supabase.co/functions/v1/whatsapp-webhook";
-      await setWuzapiWebhook(wuzapiUser.token, webhookUrl).catch(e => console.warn("Erro ao setar webhook:", e));
-
-      const newInstance = {
-        user_id: userId,
-        wuzapi_token: wuzapiUser.token,
-        wuzapi_user_id: wuzapiUser.id,
-        connected: false
-      };
-
-      await supabase.from("whatsapp_instances" as any).insert(newInstance);
-      
-      setInstanceData(newInstance);
-      toast.success("Conexão criada com sucesso! Agora gere seu QR Code.");
+      await connectWhatsapp(digits);
+      await loadStatus();
+      setIsModalOpen(true);
     } catch (error: any) {
       console.error(error);
-      toast.error(`Erro ao criar conexão: ${error.message}`);
+      toast.error(`Erro ao criar conexao: ${error.message}`);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleShowQr = async () => {
+    if (!status?.phoneNumber) return;
+    setProcessing(true);
+    try {
+      // Repete o connect pra pedir um QR fresco ao baileys-api — o anterior
+      // pode ja ter expirado (o baileys so gera QR sob demanda, nao guarda).
+      await connectWhatsapp(status.phoneNumber);
+      setIsModalOpen(true);
+    } catch (error: any) {
+      console.error(error);
+      toast.error(`Erro ao gerar QR Code: ${error.message}`);
     } finally {
       setProcessing(false);
     }
@@ -113,20 +94,28 @@ export function WhatsAppIntegrationCard({ userId, userName }: WhatsAppIntegratio
   const handleDisconnect = async () => {
     setProcessing(true);
     try {
-      if (wuzapiUserId) {
-        try {
-          await deleteWuzapiUserFull(wuzapiUserId);
-        } catch (e: any) {
-          console.warn("Erro ao deletar WUZAPI user (pode já estar excluído):", e);
-        }
-      }
-
-      await supabase.from("whatsapp_instances" as any).delete().eq("user_id", userId);
-      setInstanceData(null);
-      toast.success("WhatsApp desconectado e instância removida completamente.");
+      await disconnectWhatsapp();
+      setAvatarUrl(null);
+      await loadStatus();
+      toast.success("WhatsApp desconectado. O número continua salvo — é só ler o QR de novo pra reconectar.");
     } catch (error: any) {
       console.error(error);
-      toast.error("Erro ao remover conexão");
+      toast.error("Erro ao desconectar");
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    setProcessing(true);
+    try {
+      await deleteWhatsappInstance();
+      setStatus({ hasInstance: false });
+      setAvatarUrl(null);
+      toast.success("Conexão removida por completo.");
+    } catch (error: any) {
+      console.error(error);
+      toast.error("Erro ao deletar conexão");
     } finally {
       setProcessing(false);
     }
@@ -134,7 +123,7 @@ export function WhatsAppIntegrationCard({ userId, userName }: WhatsAppIntegratio
 
   const handleModalClose = () => {
     setIsModalOpen(false);
-    loadInstance(); // Recarrega para ver se conectou
+    loadStatus();
   };
 
   if (loading) {
@@ -166,20 +155,26 @@ export function WhatsAppIntegrationCard({ userId, userName }: WhatsAppIntegratio
                   <span className="text-[10px] font-bold text-slate-400 uppercase">Inativo</span>
                 </div>
               </div>
-              <h3 className="text-saas-sm font-bold text-slate-700 mb-1">WhatsApp API</h3>
+              <h3 className="text-saas-sm font-bold text-slate-700 mb-1">WhatsApp</h3>
               <p className="text-saas-xs text-slate-400 leading-relaxed">
                 Envio automático de mensagens e integração com chatbot.
               </p>
             </div>
           </div>
-          <div className="mt-auto pt-2">
+          <div className="mt-auto pt-2 space-y-2">
+            <Input
+              placeholder="Seu numero com DDD (ex: 11999998888)"
+              value={phoneInput}
+              onChange={(e) => setPhoneInput(e.target.value)}
+              className="h-9 text-xs"
+            />
             <Button
               className="w-full h-9 text-[10px] font-bold uppercase tracking-wider"
-              onClick={handleCreateConnection}
+              onClick={handleConnect}
               disabled={processing}
             >
               {processing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Criar Conexão
+              Conectar WhatsApp
             </Button>
           </div>
         </CardContent>
@@ -187,7 +182,7 @@ export function WhatsAppIntegrationCard({ userId, userName }: WhatsAppIntegratio
     );
   }
 
-  // ESTADO 2 e 4: Com Instância (Aguardando QR Code ou Conectado)
+  // ESTADO 2 e 3: Com instância (aguardando QR ou conectado)
   return (
     <>
       <Card className="border-none shadow-soft bg-white hover:shadow-md transition-all h-full flex flex-col relative overflow-hidden">
@@ -201,7 +196,7 @@ export function WhatsAppIntegrationCard({ userId, userName }: WhatsAppIntegratio
                 <MessageCircle className={`h-4 w-4 ${isConnected ? 'text-emerald-600' : 'text-slate-400'}`} />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-slate-700">WhatsApp API</h3>
+                <h3 className="text-sm font-bold text-slate-700">WhatsApp</h3>
                 <p className="text-[10px] text-slate-400 font-medium">Conexão Individual</p>
               </div>
             </div>
@@ -230,7 +225,7 @@ export function WhatsAppIntegrationCard({ userId, userName }: WhatsAppIntegratio
                   <span>{userName}</span>
                 </div>
                 <div className="text-sm text-slate-500">
-                  {instanceData.jid ? instanceData.jid.split('@')[0] : "Número indisponível"}
+                  {status?.phoneNumber || "Número indisponível"}
                 </div>
               </div>
             </div>
@@ -240,14 +235,16 @@ export function WhatsAppIntegrationCard({ userId, userName }: WhatsAppIntegratio
             {!isConnected ? (
               <Button
                 className="flex-1 h-9 text-[10px] font-bold uppercase tracking-wider bg-primary hover:bg-primary/90"
-                onClick={() => setIsModalOpen(true)}
+                onClick={handleShowQr}
+                disabled={processing}
               >
-                Gerar QR Code
+                {processing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                Ver QR Code
               </Button>
             ) : (
               <Button
                 variant="outline"
-                className="flex-1 h-9 text-[10px] font-bold uppercase tracking-wider border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+                className="flex-1 h-9 text-[10px] font-bold uppercase tracking-wider border-slate-200 text-slate-600 hover:bg-slate-50"
                 onClick={handleDisconnect}
                 disabled={processing}
               >
@@ -255,17 +252,22 @@ export function WhatsAppIntegrationCard({ userId, userName }: WhatsAppIntegratio
                 Desconectar
               </Button>
             )}
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-9 w-9 shrink-0 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+              onClick={handleDelete}
+              disabled={processing}
+              title="Apagar conexão por completo"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
           </div>
         </CardContent>
       </Card>
 
-      {isModalOpen && wuzapiToken && (
-        <UserWhatsAppModal
-          isOpen={isModalOpen}
-          onClose={handleModalClose}
-          userId={userId}
-          wuzapiToken={wuzapiToken}
-        />
+      {isModalOpen && (
+        <UserWhatsAppModal isOpen={isModalOpen} onClose={handleModalClose} />
       )}
     </>
   );

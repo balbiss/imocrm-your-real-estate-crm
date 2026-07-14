@@ -1011,30 +1011,30 @@ export type Database = {
           created_at: string
           id: string
           jid: string | null
+          phone_number: string | null
+          qr_code: string | null
           updated_at: string
           user_id: string
-          wuzapi_token: string
-          wuzapi_user_id: string | null
         }
         Insert: {
           connected?: boolean
           created_at?: string
           id?: string
           jid?: string | null
+          phone_number?: string | null
+          qr_code?: string | null
           updated_at?: string
           user_id: string
-          wuzapi_token: string
-          wuzapi_user_id?: string | null
         }
         Update: {
           connected?: boolean
           created_at?: string
           id?: string
           jid?: string | null
+          phone_number?: string | null
+          qr_code?: string | null
           updated_at?: string
           user_id?: string
-          wuzapi_token?: string
-          wuzapi_user_id?: string | null
         }
         Relationships: [
           {

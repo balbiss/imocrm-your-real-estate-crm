@@ -1,127 +1,61 @@
 import React, { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, QrCode, MessageCircle } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { connectWuzapiSession, getWuzapiQR, getWuzapiStatus } from "@/lib/wuzapi";
+import { getWhatsappStatus } from "@/lib/baileys";
 
 interface UserWhatsAppModalProps {
   isOpen: boolean;
   onClose: () => void;
-  userId: string;
-  wuzapiToken: string;
 }
 
-export function UserWhatsAppModal({ isOpen, onClose, userId, wuzapiToken }: UserWhatsAppModalProps) {
-  const [loading, setLoading] = useState(true);
+export function UserWhatsAppModal({ isOpen, onClose }: UserWhatsAppModalProps) {
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [status, setStatus] = useState<"connecting" | "connected" | "error">("connecting");
 
-  // Inicia a geração do QR Code ao abrir o modal
+  // O connect() ja foi disparado antes de abrir o modal (WhatsAppIntegrationCard).
+  // Aqui a gente so faz polling do status ate o QR aparecer ou conectar de vez.
   useEffect(() => {
-    if (isOpen && wuzapiToken) {
-      generateQRCode();
-    }
-  }, [isOpen, wuzapiToken]);
+    if (!isOpen) return;
 
-  const generateQRCode = async () => {
-    setLoading(true);
+    let cancelled = false;
     setStatus("connecting");
     setQrCode(null);
 
-    try {
+    const poll = async () => {
       try {
-        await connectWuzapiSession(wuzapiToken);
-      } catch (connErr: any) {
-        if (connErr.message?.toLowerCase().includes("already connected")) {
-          const { loggedIn } = await getWuzapiStatus(wuzapiToken);
-          if (loggedIn) {
-            handleSuccess();
-            return;
-          }
-        } else {
-          throw connErr;
+        const data = await getWhatsappStatus();
+        if (cancelled) return;
+
+        if (data.connected) {
+          setStatus("connected");
+          setQrCode(null);
+          toast.success("WhatsApp conectado com sucesso!");
+          setTimeout(() => !cancelled && onClose(), 2000);
+          return true;
         }
+
+        if (data.qrCode) setQrCode(data.qrCode);
+      } catch (e: any) {
+        console.error("Erro ao consultar status do WhatsApp:", e);
       }
+      return false;
+    };
 
-      // Aguardar um instante e pegar o QR Code
-      setTimeout(async () => {
-        try {
-          const base64QR = await getWuzapiQR(wuzapiToken);
-          if (base64QR) {
-            setQrCode(base64QR);
-          } else {
-            // Se não vier QR Code, verificar se já está logado.
-            const { connected, loggedIn } = await getWuzapiStatus(wuzapiToken);
-            if (connected && loggedIn) {
-              handleSuccess();
-            }
-          }
-        } catch (e: any) {
-          toast.error(e.message || "Erro ao pegar QR Code.");
-          setStatus("error");
-        } finally {
-          setLoading(false);
-        }
-      }, 3000);
-    } catch (error: any) {
-      console.error(error);
-      const errorMsg = error.message?.toLowerCase() || "";
-      if (errorMsg.includes("unauthorized") || errorMsg.includes("não autorizado")) {
-        toast.error("Sua instância não existe mais. Feche e recrie a conexão.");
-      } else {
-        toast.error(`Erro: ${error.message}`);
-      }
-      setStatus("error");
-      setLoading(false);
-    }
-  };
-
-  const handleSuccess = async () => {
-    setStatus("connected");
-    setQrCode(null);
-    setLoading(false);
-    await supabase.from("whatsapp_instances" as any).update({ connected: true }).eq("user_id", userId);
-    toast.success("WhatsApp conectado com sucesso!");
-    setTimeout(() => onClose(), 2000);
-  };
-
-  // Polling
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    let qrRefreshCounter = 0;
-
-    if (isOpen && status === "connecting" && qrCode && wuzapiToken) {
-      interval = setInterval(async () => {
-        try {
-          const { connected, loggedIn } = await getWuzapiStatus(wuzapiToken);
-          
-          if (connected && loggedIn) {
-            clearInterval(interval);
-            handleSuccess();
-          } else {
-            qrRefreshCounter++;
-            if (qrRefreshCounter >= 3) {
-               qrRefreshCounter = 0;
-               try {
-                 const base64QR = await getWuzapiQR(wuzapiToken);
-                 if (base64QR) setQrCode(base64QR);
-               } catch(e) {} 
-            }
-          }
-        } catch (e) {
-          console.error("Polling error:", e);
-        }
-      }, 5000);
-    }
+    poll();
+    const interval = setInterval(async () => {
+      const done = await poll();
+      if (done) clearInterval(interval);
+    }, 3000);
 
     return () => {
-      if (interval) clearInterval(interval);
+      cancelled = true;
+      clearInterval(interval);
     };
-  }, [isOpen, status, qrCode, wuzapiToken, userId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -174,12 +108,7 @@ export function UserWhatsAppModal({ isOpen, onClose, userId, wuzapiToken }: User
                     <div>
                       <p className="text-[11px] font-bold text-slate-500 uppercase">Aguardando geração...</p>
                     </div>
-                  </div>
-                )}
-                
-                {loading && (
-                  <div className="absolute inset-0 bg-white/60 backdrop-blur-sm flex items-center justify-center rounded-2xl z-10">
-                    <Loader2 className="h-8 w-8 text-primary animate-spin" />
+                    <Loader2 className="h-5 w-5 mx-auto text-primary animate-spin" />
                   </div>
                 )}
               </div>

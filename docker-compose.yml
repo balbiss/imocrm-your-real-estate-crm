@@ -3,7 +3,7 @@ version: "3.7"
 services:
   crm_oka:
     image: inoovaweb/crm-oka:latest
-    
+
     networks:
       - inoovaweb
 
@@ -35,7 +35,100 @@ services:
         - traefik.http.middlewares.sslheader.headers.customrequestheaders.X-Forwarded-Proto=https
         - traefik.http.routers.crm_oka.middlewares=sslheader,redirect-to-https
 
+  ## --------------------------- WHATSAPP (BAILEYS) --------------------------- ##
+  ## Mesma solucao usada no CRM VisitaIA (ghcr.io/fazer-ai/baileys-api), no
+  ## lugar da WUZAPI. Substitui as Edge Functions wuzapi-proxy/whatsapp-webhook.
+
+  crm_oka_redis:
+    image: redis:7-alpine
+    command: redis-server --requirepass ${CRM_OKA_REDIS_PASSWORD} --appendonly yes
+    volumes:
+      - crm_oka_redis_data:/data
+    networks:
+      - inoovaweb
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+
+  crm_oka_baileys:
+    image: ghcr.io/fazer-ai/baileys-api:latest
+    command:
+      - sh
+      - "-c"
+      - "bun manage-api-keys create crmoka ${CRM_OKA_BAILEYS_API_KEY} && bun start"
+    environment:
+      - NODE_ENV=production
+      - PORT=3025
+      - REDIS_URL=redis://:${CRM_OKA_REDIS_PASSWORD}@crm_oka_redis:6379/1
+      - LOG_LEVEL=warn
+      - BAILEYS_LOG_LEVEL=error
+      - BAILEYS_PROVIDER_DEFAULT_API_KEY=${CRM_OKA_BAILEYS_API_KEY}
+      - IGNORE_GROUP_MESSAGES=true
+      - IGNORE_STATUS_MESSAGES=true
+    volumes:
+      - crm_oka_baileys_storage:/app/storage
+    networks:
+      - inoovaweb
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M
+
+  crm_oka_backend:
+    image: inoovaweb/crm-oka-backend:latest
+    environment:
+      - PORT=4000
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - SUPABASE_ANON_KEY=${SUPABASE_PUBLISHABLE_KEY}
+      - BAILEYS_API_URL=http://crm_oka_baileys:3025
+      - BAILEYS_API_KEY=${CRM_OKA_BAILEYS_API_KEY}
+      - PUBLIC_WEBHOOK_URL=https://crm.hinodeimoveis.com.br/backend/webhooks/baileys
+      - WEBHOOK_SECRET=${CRM_OKA_WEBHOOK_SECRET}
+    networks:
+      - inoovaweb
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M
+      labels:
+        # Reaproveita o dominio ja existente (crm.hinodeimoveis.com.br) por path,
+        # em vez de depender de um novo registro de DNS pra um subdominio novo.
+        - traefik.enable=true
+        - traefik.http.routers.crm_oka_backend.rule=Host(`crm.hinodeimoveis.com.br`) && PathPrefix(`/backend`)
+        - traefik.http.routers.crm_oka_backend.entrypoints=websecure
+        - traefik.http.routers.crm_oka_backend.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.crm_oka_backend.priority=10
+        - traefik.http.routers.crm_oka_backend.service=crm_oka_backend
+        - traefik.http.routers.crm_oka_backend.middlewares=crm_oka_backend_stripprefix
+        - traefik.http.middlewares.crm_oka_backend_stripprefix.stripprefix.prefixes=/backend
+        - traefik.http.services.crm_oka_backend.loadbalancer.server.port=4000
+        - traefik.http.services.crm_oka_backend.loadbalancer.passHostHeader=true
+
 networks:
   inoovaweb:
     external: true
     name: inoovaweb
+
+volumes:
+  crm_oka_redis_data:
+  crm_oka_baileys_storage:
