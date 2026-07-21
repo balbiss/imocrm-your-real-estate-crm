@@ -2,7 +2,7 @@ import { Router } from "express";
 import { requireUser } from "../middleware/auth.js";
 import { supabaseAdmin } from "../supabase.js";
 import * as baileys from "../baileysClient.js";
-import { toDigitsWithDDI } from "../lib/phone.js";
+import { toDigitsWithDDI, toJid } from "../lib/phone.js";
 
 export const whatsappRouter = Router();
 whatsappRouter.use(requireUser);
@@ -71,10 +71,11 @@ whatsappRouter.get("/status", async (req, res) => {
 whatsappRouter.get("/avatar", async (req, res) => {
   try {
     const instance = await getInstance(req.userId);
-    const jid = req.query.jid;
-    if (!instance?.phone_number || !jid) return res.json({ url: null });
+    const raw = req.query.jid;
+    if (!instance?.phone_number || !raw) return res.json({ url: null });
 
-    const url = await baileys.fetchProfilePictureUrl(instance.phone_number, String(jid));
+    // Aceita telefone puro ou jid pronto — toJid e idempotente pra jid ja formatado.
+    const url = await baileys.fetchProfilePictureUrl(instance.phone_number, toJid(String(raw)));
     res.json({ url });
   } catch (err) {
     res.json({ url: null });

@@ -11,6 +11,7 @@ import {
   UsersRound,
   BarChart2,
   MessageSquare,
+  MessageCircle,
   Settings,
   LogOut,
   Loader2,
@@ -124,7 +125,7 @@ export function Sidebar({ collapsed, onClose }: { collapsed: boolean; onClose?: 
     queryKey: ["sidebar-counts", profile?.imobiliaria_id],
     queryFn: async () => {
       if (!profile?.imobiliaria_id) return { leads: 0, fila: 0 };
-      
+
       let query = supabase
         .from("leads")
         .select("*", { count: "exact", head: true })
@@ -153,9 +154,32 @@ export function Sidebar({ collapsed, onClose }: { collapsed: boolean; onClose?: 
     refetchInterval: 60000,
   });
 
+  // Contagem de mensagens nao lidas (conversas)
+  const { data: naoLidas } = useQuery({
+    queryKey: ["sidebar-nao-lidas", profile?.id, profile?.role],
+    queryFn: async () => {
+      let query = supabase
+        .from("mensagens_whatsapp")
+        .select("*", { count: "exact", head: true })
+        .eq("direcao", "inbound")
+        .eq("lida", false);
+
+      if (profile?.role === 'corretor') {
+        query = query.eq("corretor_id", profile.id);
+      }
+
+      const { count } = await query;
+      return count || 0;
+    },
+    enabled: !!profile?.id,
+    staleTime: 1000 * 15,
+    refetchInterval: 30000,
+  });
+
   const { can, role } = usePermissions();
   const main: Item[] = [
     { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { to: "/conversas", label: "Conversas", icon: MessageCircle, badge: naoLidas, badgeTone: "red" },
     { to: "/leads", label: "Leads", icon: Users, badge: counts?.leads },
   ];
 

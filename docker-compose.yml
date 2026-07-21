@@ -4,6 +4,11 @@ services:
   crm_oka:
     image: inoovaweb/crm-oka:latest
 
+    environment:
+      # Usado só pelo bundle SSR (o cliente ja recebe via VITE_BACKEND_URL no build) —
+      # ver src/routes/__root.tsx.
+      - BACKEND_URL=https://crm.hinodeimoveis.com.br/backend
+
     networks:
       - inoovaweb
 
@@ -98,6 +103,9 @@ services:
       - BAILEYS_API_KEY=${CRM_OKA_BAILEYS_API_KEY}
       - PUBLIC_WEBHOOK_URL=https://crm.hinodeimoveis.com.br/backend/webhooks/baileys
       - WEBHOOK_SECRET=${CRM_OKA_WEBHOOK_SECRET}
+      - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
+      - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
+      - VAPID_SUBJECT=${VAPID_SUBJECT}
     networks:
       - inoovaweb
     deploy:

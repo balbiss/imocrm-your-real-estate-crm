@@ -766,6 +766,7 @@ export type Database = {
           id: string
           imobiliaria_id: string
           lead_id: string
+          lida: boolean
           metadata: Json | null
           status: string | null
           tipo: string | null
@@ -779,6 +780,7 @@ export type Database = {
           id?: string
           imobiliaria_id: string
           lead_id: string
+          lida?: boolean
           metadata?: Json | null
           status?: string | null
           tipo?: string | null
@@ -792,6 +794,7 @@ export type Database = {
           id?: string
           imobiliaria_id?: string
           lead_id?: string
+          lida?: boolean
           metadata?: Json | null
           status?: string | null
           tipo?: string | null
@@ -1057,6 +1060,25 @@ export type Database = {
       }
       get_auth_imobiliaria_id: { Args: never; Returns: string }
       get_auth_role: { Args: never; Returns: string }
+      get_conversas: {
+        Args: { p_corretor_id?: string | null }
+        Returns: {
+          lead_id: string
+          lead_nome: string | null
+          lead_telefone: string | null
+          corretor_id: string | null
+          corretor_nome: string | null
+          imobiliaria_id: string
+          ultima_mensagem: string | null
+          ultima_mensagem_em: string
+          ultima_direcao: string
+          nao_lidas: number
+        }[]
+      }
+      marcar_conversa_lida: {
+        Args: { p_lead_id: string }
+        Returns: undefined
+      }
       get_my_role: { Args: never; Returns: string }
       get_next_broker_on_duty: { Args: never; Returns: string }
       get_next_corretor_rodizio: {

@@ -41,6 +41,8 @@ function NotFoundComponent() {
   );
 }
 
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || process.env.BACKEND_URL || "";
+
 export const Route = createRootRoute({
   head: () => ({
     meta: [
@@ -48,8 +50,18 @@ export const Route = createRootRoute({
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "CRM — Gestão de Leads Imobiliários" },
       { name: "description", content: "Sistema de gestão de leads para imobiliárias. Funil visual, follow-up automático e relatórios em tempo real." },
+      { name: "theme-color", content: "#1d4ed8" },
+      { name: "mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
+      { name: "apple-mobile-web-app-title", content: "CRM Hinode" },
     ],
-    links: [{ rel: "stylesheet", href: appCss }],
+    links: [
+      { rel: "stylesheet", href: appCss },
+      { rel: "manifest", href: `${BACKEND_URL}/manifest.webmanifest` },
+      { rel: "apple-touch-icon", href: `${BACKEND_URL}/apple-touch-icon.png` },
+      { rel: "icon", href: `${BACKEND_URL}/favicon-32x32.png`, type: "image/png" },
+    ],
   }),
   shellComponent: RootShell,
   component: RootComponent,

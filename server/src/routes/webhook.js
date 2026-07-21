@@ -2,6 +2,7 @@ import { Router } from "express";
 import { supabaseAdmin } from "../supabase.js";
 import * as baileys from "../baileysClient.js";
 import { uploadWhatsappMedia } from "../lib/media.js";
+import { sendPushToUser } from "../push.js";
 
 export const webhookRouter = Router();
 
@@ -104,6 +105,12 @@ async function handleSingleMessage(msg) {
 
   const lead = leads[0];
 
+  const { data: leadDetail } = await supabaseAdmin
+    .from("leads")
+    .select("corretor_id, nome, telefone")
+    .eq("id", lead.id)
+    .single();
+
   let text =
     msg?.message?.conversation || msg?.message?.extendedTextMessage?.text || "";
   let tipo = "text";
@@ -147,11 +154,13 @@ async function handleSingleMessage(msg) {
   const { error: insertError } = await supabaseAdmin.from("mensagens_whatsapp").insert({
     lead_id: lead.id,
     imobiliaria_id: lead.imobiliaria_id,
+    corretor_id: leadDetail?.corretor_id || null,
     conteudo: text,
     direcao: "inbound",
     status: "delivered",
     whatsapp_message_id: sourceId,
     tipo,
+    lida: false,
     metadata: msg,
   });
   if (insertError) console.error("Erro ao inserir mensagem:", insertError);
@@ -160,4 +169,14 @@ async function handleSingleMessage(msg) {
     .from("leads")
     .update({ ultima_acao_at: new Date().toISOString() })
     .eq("id", lead.id);
+
+  if (leadDetail?.corretor_id) {
+    const nomeExibicao = leadDetail.nome || leadDetail.telefone || "Novo lead";
+    sendPushToUser(leadDetail.corretor_id, {
+      title: nomeExibicao,
+      body: text.length > 120 ? `${text.slice(0, 117)}...` : text,
+      tag: lead.id,
+      url: "/conversas",
+    }).catch((e) => console.error("Erro ao enviar push:", e));
+  }
 }

@@ -4,9 +4,11 @@ import { useAuth } from "@/context/AuthContext";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 import { VisitaAlertProvider } from "@/components/analytics/VisitaAlertProvider";
+import { NotificationPermissionPrompt } from "@/components/notifications/NotificationPermissionPrompt";
 
 const TITLES: Record<string, string> = {
   "/dashboard": "Dashboard",
+  "/conversas": "Conversas",
   "/leads": "Leads",
   "/imoveis": "Imóveis",
   "/clientes": "Clientes",
@@ -69,6 +71,7 @@ export function MainLayout({ children }: { children: ReactNode }) {
             else setCollapsed((v) => !v);
           }}
         />
+        <NotificationPermissionPrompt />
         <main className="flex-1 overflow-y-auto p-4">{children}</main>
       </div>
     </div>

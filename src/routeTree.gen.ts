@@ -21,6 +21,7 @@ import { Route as ImoveisRouteImport } from './routes/imoveis'
 import { Route as FilasRouteImport } from './routes/filas'
 import { Route as EquipeRouteImport } from './routes/equipe'
 import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as ConversasRouteImport } from './routes/conversas'
 import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
 import { Route as ClientesRouteImport } from './routes/clientes'
 import { Route as CadastroRouteImport } from './routes/cadastro'
@@ -88,6 +89,11 @@ const DashboardRoute = DashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ConversasRoute = ConversasRouteImport.update({
+  id: '/conversas',
+  path: '/conversas',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ConfiguracoesRoute = ConfiguracoesRouteImport.update({
   id: '/configuracoes',
   path: '/configuracoes',
@@ -125,6 +131,7 @@ export interface FileRoutesByFullPath {
   '/cadastro': typeof CadastroRoute
   '/clientes': typeof ClientesRoute
   '/configuracoes': typeof ConfiguracoesRoute
+  '/conversas': typeof ConversasRoute
   '/dashboard': typeof DashboardRoute
   '/equipe': typeof EquipeRoute
   '/filas': typeof FilasRoute
@@ -145,6 +152,7 @@ export interface FileRoutesByTo {
   '/cadastro': typeof CadastroRoute
   '/clientes': typeof ClientesRoute
   '/configuracoes': typeof ConfiguracoesRoute
+  '/conversas': typeof ConversasRoute
   '/dashboard': typeof DashboardRoute
   '/equipe': typeof EquipeRoute
   '/filas': typeof FilasRoute
@@ -166,6 +174,7 @@ export interface FileRoutesById {
   '/cadastro': typeof CadastroRoute
   '/clientes': typeof ClientesRoute
   '/configuracoes': typeof ConfiguracoesRoute
+  '/conversas': typeof ConversasRoute
   '/dashboard': typeof DashboardRoute
   '/equipe': typeof EquipeRoute
   '/filas': typeof FilasRoute
@@ -188,6 +197,7 @@ export interface FileRouteTypes {
     | '/cadastro'
     | '/clientes'
     | '/configuracoes'
+    | '/conversas'
     | '/dashboard'
     | '/equipe'
     | '/filas'
@@ -208,6 +218,7 @@ export interface FileRouteTypes {
     | '/cadastro'
     | '/clientes'
     | '/configuracoes'
+    | '/conversas'
     | '/dashboard'
     | '/equipe'
     | '/filas'
@@ -228,6 +239,7 @@ export interface FileRouteTypes {
     | '/cadastro'
     | '/clientes'
     | '/configuracoes'
+    | '/conversas'
     | '/dashboard'
     | '/equipe'
     | '/filas'
@@ -249,6 +261,7 @@ export interface RootRouteChildren {
   CadastroRoute: typeof CadastroRoute
   ClientesRoute: typeof ClientesRoute
   ConfiguracoesRoute: typeof ConfiguracoesRoute
+  ConversasRoute: typeof ConversasRoute
   DashboardRoute: typeof DashboardRoute
   EquipeRoute: typeof EquipeRoute
   FilasRoute: typeof FilasRoute
@@ -349,6 +362,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/conversas': {
+      id: '/conversas'
+      path: '/conversas'
+      fullPath: '/conversas'
+      preLoaderRoute: typeof ConversasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/configuracoes': {
       id: '/configuracoes'
       path: '/configuracoes'
@@ -410,6 +430,7 @@ const rootRouteChildren: RootRouteChildren = {
   CadastroRoute: CadastroRoute,
   ClientesRoute: ClientesRoute,
   ConfiguracoesRoute: ConfiguracoesRoute,
+  ConversasRoute: ConversasRoute,
   DashboardRoute: DashboardRoute,
   EquipeRoute: EquipeRoute,
   FilasRoute: FilasRoute,

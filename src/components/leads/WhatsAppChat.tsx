@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Send, Paperclip, Check, CheckCheck, Clock, X, Smile, User, Loader2, MessageSquare } from "lucide-react";
+import { Send, Paperclip, Check, CheckCheck, Clock, X, Smile, User, Loader2, MessageSquare, FileText } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
@@ -23,9 +23,16 @@ interface WhatsAppChatProps {
   leadId: string;
   imobiliariaId: string;
   phoneNumber: string;
+  fullHeight?: boolean;
 }
 
-export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber }: WhatsAppChatProps) {
+interface Template {
+  id: string;
+  titulo: string;
+  conteudo: string;
+}
+
+export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, fullHeight }: WhatsAppChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(true);
@@ -93,19 +100,39 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber }: WhatsAppCha
   const [leadAvatar, setLeadAvatar] = useState<string | null>(null);
   const [agentAvatar, setAgentAvatar] = useState<string | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [templates, setTemplates] = useState<Template[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
+  const templatesRef = useRef<HTMLDivElement>(null);
 
-  // Fecha o emoji picker ao clicar fora
+  // Fecha o emoji picker / mensagens prontas ao clicar fora
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (emojiPickerRef.current && !emojiPickerRef.current.contains(event.target as Node)) {
         setShowEmojiPicker(false);
       }
+      if (templatesRef.current && !templatesRef.current.contains(event.target as Node)) {
+        setShowTemplates(false);
+      }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  // Carrega as mensagens prontas (templates) da imobiliária
+  useEffect(() => {
+    const fetchTemplates = async () => {
+      const { data, error } = await supabase
+        .from("templates_mensagem")
+        .select("id, titulo, conteudo")
+        .eq("imobiliaria_id", imobiliariaId)
+        .eq("tipo", "whatsapp")
+        .order("titulo", { ascending: true });
+      if (!error) setTemplates((data || []) as Template[]);
+    };
+    if (imobiliariaId) fetchTemplates();
+  }, [imobiliariaId]);
 
   // Busca o status de conexão do WhatsApp do usuário logado
   useEffect(() => {
@@ -116,9 +143,9 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber }: WhatsAppCha
         if (!data.connected) return;
 
         // Buscar a foto do Lead e do Corretor em background
-        const corretorPhone = data.jid?.split('@')[0]?.split(':')[0];
-        if (corretorPhone) {
-          getWhatsappAvatar(corretorPhone)
+        // (data.jid quase nunca vem preenchido — usa o proprio numero conectado)
+        if (data.phoneNumber) {
+          getWhatsappAvatar(data.phoneNumber)
             .then(url => { if (url) setAgentAvatar(url) })
             .catch(() => {});
         }
@@ -156,56 +183,60 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber }: WhatsAppCha
 
     setSending(true);
     const messageContent = newMessage;
+    const pendingAttachment = attachment;
     setNewMessage("");
+    setAttachment(null);
 
-    // GERAR ID PARA ATUALIZAÇÃO OTIMISTA
     const messageId = crypto.randomUUID();
-    const optimisticMessage: Message = {
-      id: messageId,
-      lead_id: leadId,
-      imobiliaria_id: imobiliariaId,
-      conteudo: messageContent,
-      direcao: "outbound",
-      tipo: attachment ? attachment.type.split('/')[0] : "text",
-      created_at: new Date().toISOString(),
-      status: "pending",
-    } as any;
-
-    // Coloca na tela instantaneamente!
-    setMessages((prev) => [...prev, optimisticMessage]);
 
     try {
       let finalConteudo = messageContent;
       let typeSent = "text";
+      let base64: string | null = null;
+      let mimetype = "";
 
-      if (attachment) {
-        const base64 = await toBase64(attachment);
-        const type = attachment.type;
-        const fileExt = attachment.name.split('.').pop();
+      // Sobe o anexo (se tiver) ANTES de mostrar a bolha otimista, pra ela ja
+      // nascer com a miniatura/link certos em vez de so o texto da legenda.
+      if (pendingAttachment) {
+        base64 = await toBase64(pendingAttachment);
+        mimetype = pendingAttachment.type;
+        const fileExt = pendingAttachment.name.split('.').pop();
         const fileName = `${crypto.randomUUID()}.${fileExt}`;
 
-        // Salvar no bucket (ignora erro se o bucket não existir, apenas registra no DB sem link)
-        const { data: storageData, error: storageError } = await supabase.storage
+        const { error: storageError } = await supabase.storage
           .from('whatsapp_media')
-          .upload(fileName, attachment);
+          .upload(fileName, pendingAttachment);
 
         if (!storageError) {
           const { data: { publicUrl } } = supabase.storage.from('whatsapp_media').getPublicUrl(fileName);
-          finalConteudo = `[Anexo]: ${publicUrl}\n${messageContent}`;
+          finalConteudo = `[Anexo]: ${publicUrl}${messageContent ? `\n${messageContent}` : ""}`;
         } else {
-          finalConteudo = `[Arquivo]: ${attachment.name}\n${messageContent}`;
+          finalConteudo = `[Arquivo]: ${pendingAttachment.name}${messageContent ? `\n${messageContent}` : ""}`;
         }
 
-        typeSent = type.startsWith("image/") ? "image" : type.startsWith("audio/") ? "audio" : "document";
+        typeSent = mimetype.startsWith("image/") ? "image" : mimetype.startsWith("audio/") ? "audio" : "document";
+      }
 
+      // Coloca na tela instantaneamente, ja com o conteudo final (inclusive anexo)
+      const optimisticMessage: Message = {
+        id: messageId,
+        lead_id: leadId,
+        imobiliaria_id: imobiliariaId,
+        conteudo: finalConteudo,
+        direcao: "outbound",
+        tipo: typeSent,
+        created_at: new Date().toISOString(),
+        status: "pending",
+      } as any;
+      setMessages((prev) => [...prev, optimisticMessage]);
+
+      if (pendingAttachment && base64) {
         // O backend resolve o JID certo (com/sem nono dígito) e envia via baileys-api
         await sendWhatsappMessage(phoneNumber, messageContent, {
           base64,
-          mimetype: type,
-          fileName: attachment.name,
+          mimetype,
+          fileName: pendingAttachment.name,
         });
-
-        setAttachment(null);
       } else {
         // Envia apenas o texto — o backend resolve o JID e faz o envio
         await sendWhatsappMessage(phoneNumber, messageContent);
@@ -213,7 +244,7 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber }: WhatsAppCha
 
       // 2. Salvar no banco (direção outbound)
       const { data: { user } } = await supabase.auth.getUser();
-      
+
       await supabase.from("mensagens_whatsapp" as any).insert({
         id: messageId, // Usa o mesmo ID otimista
         lead_id: leadId,
@@ -231,6 +262,7 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber }: WhatsAppCha
       console.error("Erro no envio:", error);
       toast.error(`Falha ao enviar: ${error.message}`);
       setNewMessage(messageContent); // Devolve o texto se falhar
+      if (pendingAttachment) setAttachment(pendingAttachment); // Devolve o anexo tambem
     } finally {
       setSending(false);
     }
@@ -238,7 +270,7 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber }: WhatsAppCha
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center h-[400px] text-slate-400">
+      <div className={`flex flex-col items-center justify-center text-slate-400 ${fullHeight ? "h-full" : "h-[400px]"}`}>
         <Loader2 className="h-8 w-8 animate-spin mb-2" />
         <p className="text-sm">Carregando conversa...</p>
       </div>
@@ -246,7 +278,7 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber }: WhatsAppCha
   }
 
   return (
-    <div className="flex flex-col h-[55vh] min-h-[400px] max-h-[600px] bg-[#EFEAE2] rounded-xl border border-slate-200 overflow-hidden shadow-inner relative">
+    <div className={`flex flex-col bg-[#EFEAE2] rounded-xl border border-slate-200 overflow-hidden shadow-inner relative ${fullHeight ? "h-full" : "h-[55vh] min-h-[400px] max-h-[600px]"}`}>
       {/* Background Pattern do WhatsApp */}
       <div 
         className="absolute inset-0 z-0 opacity-[0.06] pointer-events-none" 
@@ -413,6 +445,42 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber }: WhatsAppCha
           >
             <Paperclip className="h-6 w-6" />
           </Button>
+          <div className="relative shrink-0">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-10 w-10 text-[#54656F] hover:bg-transparent hover:text-[#111B21] transition-colors"
+              onClick={() => setShowTemplates((prev) => !prev)}
+              title="Mensagens prontas"
+            >
+              <FileText className="h-6 w-6" />
+            </Button>
+            {showTemplates && (
+              <div ref={templatesRef} className="absolute bottom-14 left-0 z-50 w-72 max-h-80 overflow-y-auto bg-white rounded-lg shadow-lg border border-slate-200">
+                {templates.length === 0 ? (
+                  <p className="p-4 text-xs text-slate-400 text-center">
+                    Nenhuma mensagem pronta cadastrada. Crie em "Templates" no menu.
+                  </p>
+                ) : (
+                  templates.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      className="w-full text-left px-3 py-2.5 border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors"
+                      onClick={() => {
+                        setNewMessage((prev) => (prev ? `${prev}\n${t.conteudo}` : t.conteudo));
+                        setShowTemplates(false);
+                      }}
+                    >
+                      <p className="text-xs font-bold text-slate-700">{t.titulo}</p>
+                      <p className="text-xs text-slate-500 truncate">{t.conteudo}</p>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
           <div className="flex-1 bg-white rounded-lg border-none shadow-sm flex items-end relative">
             {showEmojiPicker && (
               <div ref={emojiPickerRef} className="absolute bottom-14 left-0 z-50">
