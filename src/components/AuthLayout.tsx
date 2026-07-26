@@ -1,5 +1,6 @@
 import { Home, CheckCircle2 } from "lucide-react";
 import type { ReactNode } from "react";
+import hinodeBg from "@/assets/hinode-bg.jpg";
 
 const features = [
   "Funil de vendas visual",
@@ -12,6 +13,11 @@ export function AuthLayout({ children }: { children: ReactNode }) {
     <div className="min-h-screen w-full lg:grid lg:grid-cols-2">
       {/* Lado esquerdo — apenas em telas md+ */}
       <aside className="relative hidden lg:flex flex-col justify-between p-12 text-white bg-gradient-brand-dark overflow-hidden">
+        <div
+          className="absolute inset-0 bg-cover bg-center opacity-40"
+          style={{ backgroundImage: `url(${hinodeBg})` }}
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-[#0f172a]/80 via-[#0f172a]/70 to-[#0f172a]/90" />
         <div className="absolute -top-32 -right-32 h-96 w-96 rounded-full bg-blue-500/10 blur-3xl" />
         <div className="absolute -bottom-32 -left-32 h-96 w-96 rounded-full bg-blue-400/10 blur-3xl" />
 

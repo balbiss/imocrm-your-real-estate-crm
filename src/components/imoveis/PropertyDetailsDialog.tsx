@@ -113,7 +113,7 @@ export function PropertyDetailsDialog({ imovel, open, onOpenChange }: PropertyDe
     mutationFn: async (data: any) => {
       setUploading(true);
       try {
-        let uploadedUrls = [...previews];
+        let uploadedUrls = previews.filter((url) => !url.startsWith("blob:"));
 
         for (const file of newFiles) {
           const fileExt = file.name.split('.').pop();
@@ -194,9 +194,11 @@ export function PropertyDetailsDialog({ imovel, open, onOpenChange }: PropertyDe
   };
 
   const removePhoto = (index: number) => {
+    const originalCount = imovel?.fotos?.length || 0;
     setPreviews((prev) => prev.filter((_, i) => i !== index));
-    if (index >= (imovel?.fotos?.length || 0)) {
-        setNewFiles([]);
+    if (index >= originalCount) {
+      const newFileIndex = index - originalCount;
+      setNewFiles((prev) => prev.filter((_, i) => i !== newFileIndex));
     }
   };
 

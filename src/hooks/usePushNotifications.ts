@@ -23,6 +23,36 @@ function urlBase64ToUint8Array(base64String: string) {
   return Uint8Array.from([...rawData].map((c) => c.charCodeAt(0)));
 }
 
+// Toca um "ding" de duas notas sintetizado (sem depender de arquivo de audio).
+// Service Worker nao tem acesso a Web Audio, entao isso so roda na pagina —
+// funciona com a aba aberta em segundo plano (igual WhatsApp Web), nao com
+// o navegador totalmente fechado.
+function playNotificationSound() {
+  try {
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    const ctx = new AudioContextClass();
+    const now = ctx.currentTime;
+
+    [880, 1108.73].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      const start = now + i * 0.1;
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(0.2, start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.35);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(start);
+      osc.stop(start + 0.4);
+    });
+
+    setTimeout(() => ctx.close().catch(() => {}), 800);
+  } catch (e) {
+    console.error("Erro ao tocar som de notificação:", e);
+  }
+}
+
 export function usePushNotifications() {
   const [permission, setPermission] = useState<NotificationPermission | "unsupported">(
     typeof Notification !== "undefined" ? Notification.permission : "unsupported"
@@ -35,15 +65,56 @@ export function usePushNotifications() {
   // No iOS, push só existe se o app estiver instalado na tela inicial — limitação da Apple, não bug.
   const needsInstallOnIOS = isIOS && !isStandalone();
 
+  // Garante que existe uma inscricao de push ativa E registrada no backend.
+  // NAO pede permissao — so cria/renova a inscricao quando a permissao ja
+  // esta concedida. pushManager.subscribe() nao exige gesto do usuario
+  // (só requestPermission exige), entao isso pode rodar sozinho no load.
+  const ensureSubscribed = useCallback(async () => {
+    const registration = await navigator.serviceWorker.ready;
+    let subscription = await registration.pushManager.getSubscription();
+
+    if (!subscription) {
+      const publicKey = await getVapidPublicKey();
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey),
+      });
+    }
+
+    await subscribePush(subscription.toJSON());
+    return subscription;
+  }, []);
+
   // Registra o service worker uma vez, sem pedir permissão (isso pode acontecer sem gesto do usuário).
   useEffect(() => {
     if (!isSupported) return;
     // sw.js e servido pelo backend (o worker do frontend nao repassa
     // arquivos estaticos fora de /assets) — o header Service-Worker-Allowed
     // no backend + o scope explicito aqui deixam ele controlar o site inteiro.
-    navigator.serviceWorker.register(`${BACKEND_URL}/sw.js`, { scope: "/" }).catch((e) => {
-      console.error("Erro ao registrar service worker:", e);
-    });
+    navigator.serviceWorker
+      .register(`${BACKEND_URL}/sw.js`, { scope: "/" })
+      .then(() => {
+        // Se a permissao ja foi concedida antes mas a inscricao "sumiu"
+        // (acontece depois de update do navegador, limpeza de dados, etc.),
+        // reinscreve sozinho sem precisar do usuario clicar em nada de novo.
+        if (Notification.permission === "granted") {
+          ensureSubscribed().catch((e) => console.error("Erro ao reinscrever push:", e));
+        }
+      })
+      .catch((e) => {
+        console.error("Erro ao registrar service worker:", e);
+      });
+  }, [isSupported, ensureSubscribed]);
+
+  // Toca som quando o service worker avisa que mostrou uma notificação —
+  // funciona com a aba aberta em outra janela/aba, mesmo sem foco.
+  useEffect(() => {
+    if (!isSupported) return;
+    const handler = (event: MessageEvent) => {
+      if (event.data?.type === "PLAY_NOTIFICATION_SOUND") playNotificationSound();
+    };
+    navigator.serviceWorker.addEventListener("message", handler);
+    return () => navigator.serviceWorker.removeEventListener("message", handler);
   }, [isSupported]);
 
   // Precisa ser chamado direto num onClick — Safari (inclusive iOS) ignora
@@ -57,18 +128,7 @@ export function usePushNotifications() {
       setPermission(perm);
       if (perm !== "granted") return false;
 
-      const registration = await navigator.serviceWorker.ready;
-      let subscription = await registration.pushManager.getSubscription();
-
-      if (!subscription) {
-        const publicKey = await getVapidPublicKey();
-        subscription = await registration.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(publicKey),
-        });
-      }
-
-      await subscribePush(subscription.toJSON());
+      await ensureSubscribed();
       return true;
     } catch (e) {
       console.error("Erro ao assinar push:", e);
@@ -76,7 +136,7 @@ export function usePushNotifications() {
     } finally {
       setLoading(false);
     }
-  }, [isSupported, needsInstallOnIOS]);
+  }, [isSupported, needsInstallOnIOS, ensureSubscribed]);
 
   const unsubscribe = useCallback(async () => {
     if (!isSupported) return;

@@ -172,11 +172,14 @@ async function handleSingleMessage(msg) {
 
   if (leadDetail?.corretor_id) {
     const nomeExibicao = leadDetail.nome || leadDetail.telefone || "Novo lead";
+    console.log(`Disparando push pro corretor ${leadDetail.corretor_id} (lead ${lead.id})`);
     sendPushToUser(leadDetail.corretor_id, {
       title: nomeExibicao,
       body: text.length > 120 ? `${text.slice(0, 117)}...` : text,
       tag: lead.id,
       url: "/conversas",
     }).catch((e) => console.error("Erro ao enviar push:", e));
+  } else {
+    console.log(`Lead ${lead.id} sem corretor_id — push nao disparado`);
   }
 }

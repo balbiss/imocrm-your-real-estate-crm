@@ -28,7 +28,16 @@ self.addEventListener("push", (event) => {
     data: { url: data.url || "/conversas" },
   };
 
-  event.waitUntil(self.registration.showNotification(title, options));
+  event.waitUntil(
+    Promise.all([
+      self.registration.showNotification(title, options),
+      // Avisa qualquer aba aberta do CRM (mesmo sem foco) pra tocar um som —
+      // Service Worker nao tem acesso a Audio/DOM, só a pagina consegue tocar.
+      self.clients
+        .matchAll({ type: "window", includeUncontrolled: true })
+        .then((clients) => clients.forEach((c) => c.postMessage({ type: "PLAY_NOTIFICATION_SOUND" }))),
+    ])
+  );
 });
 
 self.addEventListener("notificationclick", (event) => {
