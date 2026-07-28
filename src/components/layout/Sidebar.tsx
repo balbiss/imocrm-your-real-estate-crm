@@ -17,6 +17,7 @@ import {
   Loader2,
   Link as LinkIcon,
   GraduationCap,
+  BookOpen,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
@@ -215,6 +216,7 @@ export function Sidebar({ collapsed, onClose }: { collapsed: boolean; onClose?: 
 
   tools.push({ to: "/links-uteis", label: "Links Úteis", icon: LinkIcon });
   tools.push({ to: "/treinamentos", label: "Treinamentos", icon: GraduationCap });
+  tools.push({ to: "/manual", label: "Manual do CRM", icon: BookOpen });
 
   if (can('configure_system')) {
     tools.push({ to: "/configuracoes", label: "Ajustes", icon: Settings });

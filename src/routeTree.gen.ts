@@ -14,6 +14,7 @@ import { Route as TemplatesRouteImport } from './routes/templates'
 import { Route as RelatoriosRouteImport } from './routes/relatorios'
 import { Route as RedistribuicaoRouteImport } from './routes/redistribuicao'
 import { Route as RedefinirSenhaRouteImport } from './routes/redefinir-senha'
+import { Route as ManualRouteImport } from './routes/manual'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LinksUteisRouteImport } from './routes/links-uteis'
 import { Route as LeadsRouteImport } from './routes/leads'
@@ -54,6 +55,11 @@ const RedistribuicaoRoute = RedistribuicaoRouteImport.update({
 const RedefinirSenhaRoute = RedefinirSenhaRouteImport.update({
   id: '/redefinir-senha',
   path: '/redefinir-senha',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ManualRoute = ManualRouteImport.update({
+  id: '/manual',
+  path: '/manual',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -153,6 +159,7 @@ export interface FileRoutesByFullPath {
   '/leads': typeof LeadsRouteWithChildren
   '/links-uteis': typeof LinksUteisRoute
   '/login': typeof LoginRoute
+  '/manual': typeof ManualRoute
   '/redefinir-senha': typeof RedefinirSenhaRoute
   '/redistribuicao': typeof RedistribuicaoRoute
   '/relatorios': typeof RelatoriosRoute
@@ -176,6 +183,7 @@ export interface FileRoutesByTo {
   '/leads': typeof LeadsRouteWithChildren
   '/links-uteis': typeof LinksUteisRoute
   '/login': typeof LoginRoute
+  '/manual': typeof ManualRoute
   '/redefinir-senha': typeof RedefinirSenhaRoute
   '/redistribuicao': typeof RedistribuicaoRoute
   '/relatorios': typeof RelatoriosRoute
@@ -200,6 +208,7 @@ export interface FileRoutesById {
   '/leads': typeof LeadsRouteWithChildren
   '/links-uteis': typeof LinksUteisRoute
   '/login': typeof LoginRoute
+  '/manual': typeof ManualRoute
   '/redefinir-senha': typeof RedefinirSenhaRoute
   '/redistribuicao': typeof RedistribuicaoRoute
   '/relatorios': typeof RelatoriosRoute
@@ -225,6 +234,7 @@ export interface FileRouteTypes {
     | '/leads'
     | '/links-uteis'
     | '/login'
+    | '/manual'
     | '/redefinir-senha'
     | '/redistribuicao'
     | '/relatorios'
@@ -248,6 +258,7 @@ export interface FileRouteTypes {
     | '/leads'
     | '/links-uteis'
     | '/login'
+    | '/manual'
     | '/redefinir-senha'
     | '/redistribuicao'
     | '/relatorios'
@@ -271,6 +282,7 @@ export interface FileRouteTypes {
     | '/leads'
     | '/links-uteis'
     | '/login'
+    | '/manual'
     | '/redefinir-senha'
     | '/redistribuicao'
     | '/relatorios'
@@ -295,6 +307,7 @@ export interface RootRouteChildren {
   LeadsRoute: typeof LeadsRouteWithChildren
   LinksUteisRoute: typeof LinksUteisRoute
   LoginRoute: typeof LoginRoute
+  ManualRoute: typeof ManualRoute
   RedefinirSenhaRoute: typeof RedefinirSenhaRoute
   RedistribuicaoRoute: typeof RedistribuicaoRoute
   RelatoriosRoute: typeof RelatoriosRoute
@@ -337,6 +350,13 @@ declare module '@tanstack/react-router' {
       path: '/redefinir-senha'
       fullPath: '/redefinir-senha'
       preLoaderRoute: typeof RedefinirSenhaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/manual': {
+      id: '/manual'
+      path: '/manual'
+      fullPath: '/manual'
+      preLoaderRoute: typeof ManualRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -480,6 +500,7 @@ const rootRouteChildren: RootRouteChildren = {
   LeadsRoute: LeadsRouteWithChildren,
   LinksUteisRoute: LinksUteisRoute,
   LoginRoute: LoginRoute,
+  ManualRoute: ManualRoute,
   RedefinirSenhaRoute: RedefinirSenhaRoute,
   RedistribuicaoRoute: RedistribuicaoRoute,
   RelatoriosRoute: RelatoriosRoute,
