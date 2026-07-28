@@ -148,7 +148,7 @@ function FilasPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("filas_atendimento")
-        .select("*, perfis(nome, avatar_url, status_roleta)")
+        .select("*, perfis(nome, avatar_url, status_roleta, ultimo_checkin_roleta)")
         .order("posicao", { ascending: true });
       if (error) throw error;
       return data;
@@ -284,7 +284,15 @@ function FilasPage() {
   const shuffleMutation = useMutation({
     mutationFn: async () => {
       if (!fila) return;
-      const shuffled = [...fila].sort(() => Math.random() - 0.5);
+      // sort(() => Math.random() - 0.5) nao embaralha de verdade: com poucos
+      // itens o algoritmo de ordenacao do V8 faz poucas comparacoes e a
+      // lista quase nao muda. Fisher-Yates garante uma ordem realmente
+      // aleatoria.
+      const shuffled = [...fila];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
       await updatePosicoesMutation.mutateAsync(shuffled);
     },
     onSuccess: () => {

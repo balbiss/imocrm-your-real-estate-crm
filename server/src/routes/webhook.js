@@ -142,11 +142,39 @@ async function resolverDonoDaInstancia(receivingPhoneNumber) {
   return { userId: data.user_id, imobiliariaId };
 }
 
+// leads.telefone e' salvo sem o DDI 55 em todo o resto do sistema (ver leads
+// vindos do Facebook Ads), e a funcao buscar_lead_por_telefone so casa DDD+
+// numero sem DDI. Se guardassemos o numero cru do WhatsApp (com "55" na
+// frente) a busca nunca encontraria o lead de novo e cada mensagem seguinte
+// criaria outro lead duplicado pro mesmo contato.
+function telefoneSemDDI(digitsOnly) {
+  if (digitsOnly.startsWith("55") && digitsOnly.length >= 12) {
+    return digitsOnly.slice(2);
+  }
+  return digitsOnly;
+}
+
 // Cliente novo (nao cadastrado) mandou mensagem pro WhatsApp conectado: cria
 // o lead na hora, na roleta de distribuicao, em vez de simplesmente ignorar.
 async function criarLeadDoWhatsapp(contactPhone, receivingPhoneNumber, pushName) {
   const dono = await resolverDonoDaInstancia(receivingPhoneNumber);
   if (!dono) return null;
+
+  const telefone = telefoneSemDDI(contactPhone);
+
+  // Ultima checagem, ja com o telefone no formato certo: evita duplicar caso
+  // duas mensagens do mesmo contato cheguem quase juntas.
+  const { data: existentes } = await supabaseAdmin.rpc("buscar_lead_por_telefone", {
+    telefone_busca: telefone,
+  });
+  if (existentes?.length) {
+    const { data: existente } = await supabaseAdmin
+      .from("leads")
+      .select("id, imobiliaria_id, corretor_id, nome, telefone, status")
+      .eq("id", existentes[0].id)
+      .single();
+    if (existente) return existente;
+  }
 
   const { data: rodizio } = await supabaseAdmin.rpc("get_next_corretor_rodizio", {
     p_imobiliaria_id: dono.imobiliariaId,
@@ -156,8 +184,8 @@ async function criarLeadDoWhatsapp(contactPhone, receivingPhoneNumber, pushName)
   const { data: novoLead, error } = await supabaseAdmin
     .from("leads")
     .insert({
-      nome: pushName || contactPhone,
-      telefone: contactPhone,
+      nome: pushName || telefone,
+      telefone,
       imobiliaria_id: dono.imobiliariaId,
       corretor_id: corretorId,
       origem: "WhatsApp",

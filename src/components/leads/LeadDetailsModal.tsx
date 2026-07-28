@@ -594,20 +594,27 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
                   </div>
 
                   {can('manage_team') && (
-                    <div className="mt-4 pt-4 border-t border-slate-100 flex items-center gap-3">
-                      <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter shrink-0 flex items-center gap-1.5">
-                        <ArrowLeftRight className="h-3.5 w-3.5" /> Transferir para
-                      </Label>
-                      <Select onValueChange={(v) => transferMutation.mutate(v)} disabled={transferMutation.isPending}>
-                        <SelectTrigger className="h-9 text-xs font-bold flex-1 border-slate-200">
-                          <SelectValue placeholder={lead.corretor_id ? "Selecione outro corretor..." : "Atribuir a um corretor..."} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {corretoresImobiliaria?.filter(c => c.id !== lead.corretor_id).map((c) => (
-                            <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                    <div className="mt-4 pt-4 border-t border-slate-100 space-y-1.5">
+                      {lead.corretor_id && (
+                        <p className="text-[10px] text-slate-400">
+                          Atualmente com <strong className="text-slate-600">{corretoresImobiliaria?.find(c => c.id === lead.corretor_id)?.nome || "..."}</strong> — por isso ela(e) não aparece na lista abaixo.
+                        </p>
+                      )}
+                      <div className="flex items-center gap-3">
+                        <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter shrink-0 flex items-center gap-1.5">
+                          <ArrowLeftRight className="h-3.5 w-3.5" /> Transferir para
+                        </Label>
+                        <Select onValueChange={(v) => transferMutation.mutate(v)} disabled={transferMutation.isPending}>
+                          <SelectTrigger className="h-9 text-xs font-bold flex-1 border-slate-200">
+                            <SelectValue placeholder={lead.corretor_id ? "Selecione outro corretor..." : "Atribuir a um corretor..."} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {corretoresImobiliaria?.filter(c => c.id !== lead.corretor_id).map((c) => (
+                              <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
                   )}
                 </CardContent>
