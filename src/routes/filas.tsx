@@ -34,6 +34,17 @@ export const Route = createFileRoute("/filas")({
   component: FilasPage,
 });
 
+function formatCheckin(value: string | null | undefined): string {
+  if (!value) return "Sem check-in";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Sem check-in";
+  try {
+    return `Check-in: ${format(date, "HH:mm")}`;
+  } catch {
+    return "Sem check-in";
+  }
+}
+
 function SortableItem({ id, profile, index, isNext, canManage, onToggleStatus }: { id: string, profile: any, index: number, isNext: boolean, canManage: boolean, onToggleStatus: (id: string, current: boolean) => void }) {
   const {
     attributes,
@@ -89,7 +100,7 @@ function SortableItem({ id, profile, index, isNext, canManage, onToggleStatus }:
           </div>
           <div className="flex items-center gap-3 mt-1">
             <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wider flex items-center gap-1">
-              <Clock className="h-3 w-3" /> {profile?.ultimo_checkin_roleta ? `Check-in: ${format(new Date(profile.ultimo_checkin_roleta), "HH:mm")}` : "Sem check-in"}
+              <Clock className="h-3 w-3" /> {formatCheckin(profile?.ultimo_checkin_roleta)}
             </span>
           </div>
         </div>
