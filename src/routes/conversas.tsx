@@ -6,6 +6,7 @@ import { ptBR } from "date-fns/locale";
 import { MessageCircle, Search, User } from "lucide-react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { WhatsAppChat } from "@/components/leads/WhatsAppChat";
 import { useAuth } from "@/context/AuthContext";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -34,9 +35,26 @@ function ConversasPage() {
   const { role } = usePermissions();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
+  const [corretorFiltro, setCorretorFiltro] = useState<string>("todos");
   const [selected, setSelected] = useState<Conversa | null>(null);
 
   const canVerTodas = role === "dono" || role === "gerente";
+
+  const { data: corretores } = useQuery({
+    queryKey: ["corretores-filtro-conversas", user?.id],
+    queryFn: async () => {
+      const { data: perfil } = await supabase.from("perfis").select("imobiliaria_id").eq("id", user!.id).single();
+      if (!perfil?.imobiliaria_id) return [];
+      const { data, error } = await supabase
+        .from("perfis")
+        .select("id, nome")
+        .eq("imobiliaria_id", perfil.imobiliaria_id)
+        .order("nome", { ascending: true });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user && canVerTodas,
+  });
 
   const { data: conversas, isLoading } = useQuery({
     queryKey: ["conversas", user?.id, role],
@@ -81,6 +99,7 @@ function ConversasPage() {
   };
 
   const filtered = (conversas || []).filter((c) => {
+    if (corretorFiltro !== "todos" && c.corretor_id !== corretorFiltro) return false;
     if (!search.trim()) return true;
     const term = search.toLowerCase();
     return (
@@ -108,6 +127,19 @@ function ConversasPage() {
                 className="pl-8 h-9 text-sm"
               />
             </div>
+            {canVerTodas && (
+              <Select value={corretorFiltro} onValueChange={setCorretorFiltro}>
+                <SelectTrigger className="h-9 text-sm mt-2">
+                  <SelectValue placeholder="Filtrar por corretor..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos os corretores</SelectItem>
+                  {corretores?.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
 
           <div className="flex-1 overflow-y-auto">

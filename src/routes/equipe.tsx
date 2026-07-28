@@ -121,6 +121,8 @@ function TeamPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["team-list"] });
+      queryClient.invalidateQueries({ queryKey: ["fila-atendimento"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-with-imobiliaria"] });
       toast.success("Status de plantão atualizado!");
     },
     onError: (error: any) => {

@@ -117,6 +117,8 @@ export function Sidebar({ collapsed, onClose }: { collapsed: boolean; onClose?: 
     },
     onSuccess: (_, newValue) => {
       queryClient.invalidateQueries({ queryKey: ["profile-with-imobiliaria"] });
+      queryClient.invalidateQueries({ queryKey: ["fila-atendimento"] });
+      queryClient.invalidateQueries({ queryKey: ["team-list"] });
       toast.success(newValue ? "Check-in realizado! Você está em plantão." : "Check-out realizado.");
     },
   });

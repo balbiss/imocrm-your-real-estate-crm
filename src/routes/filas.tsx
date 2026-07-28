@@ -28,7 +28,7 @@ import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSo
 import { CSS } from "@dnd-kit/utilities";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { format } from "date-fns";
+import { format, isToday } from "date-fns";
 import { isCorretorOnlineNaRoleta } from "@/lib/utils";
 
 export const Route = createFileRoute("/filas")({
@@ -40,7 +40,8 @@ function formatCheckin(value: string | null | undefined): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "Sem check-in";
   try {
-    return `Check-in: ${format(date, "HH:mm")}`;
+    const dataFormatada = isToday(date) ? format(date, "HH:mm") : format(date, "dd/MM 'às' HH:mm");
+    return `Check-in: ${dataFormatada}`;
   } catch {
     return "Sem check-in";
   }
@@ -268,6 +269,8 @@ function FilasPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["fila-atendimento"] });
+      queryClient.invalidateQueries({ queryKey: ["team-list"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-with-imobiliaria"] });
       toast.success("Status atualizado!");
     },
   });
@@ -290,6 +293,8 @@ function FilasPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["fila-atendimento"] });
+      queryClient.invalidateQueries({ queryKey: ["team-list"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-with-imobiliaria"] });
       toast.success("Check-in realizado com sucesso!");
     },
   });
