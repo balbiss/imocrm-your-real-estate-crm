@@ -125,6 +125,54 @@ async function alertaPossivelDuplicidade(lead, leadDetail, receivingPhoneNumber)
   if (error) console.error("Erro ao criar alerta de duplicidade:", error);
 }
 
+// Descobre a imobiliaria e o corretor dono do numero de WhatsApp que recebeu
+// a mensagem (whatsapp_instances nao guarda imobiliaria_id direto, so via perfis).
+async function resolverDonoDaInstancia(receivingPhoneNumber) {
+  if (!receivingPhoneNumber) return null;
+
+  const { data } = await supabaseAdmin
+    .from("whatsapp_instances")
+    .select("user_id, perfis!inner(imobiliaria_id)")
+    .eq("phone_number", receivingPhoneNumber)
+    .maybeSingle();
+
+  const imobiliariaId = data?.perfis?.imobiliaria_id;
+  if (!data?.user_id || !imobiliariaId) return null;
+
+  return { userId: data.user_id, imobiliariaId };
+}
+
+// Cliente novo (nao cadastrado) mandou mensagem pro WhatsApp conectado: cria
+// o lead na hora, na roleta de distribuicao, em vez de simplesmente ignorar.
+async function criarLeadDoWhatsapp(contactPhone, receivingPhoneNumber, pushName) {
+  const dono = await resolverDonoDaInstancia(receivingPhoneNumber);
+  if (!dono) return null;
+
+  const { data: rodizio } = await supabaseAdmin.rpc("get_next_corretor_rodizio", {
+    p_imobiliaria_id: dono.imobiliariaId,
+  });
+  const corretorId = rodizio?.[0]?.corretor_id || dono.userId;
+
+  const { data: novoLead, error } = await supabaseAdmin
+    .from("leads")
+    .insert({
+      nome: pushName || contactPhone,
+      telefone: contactPhone,
+      imobiliaria_id: dono.imobiliariaId,
+      corretor_id: corretorId,
+      origem: "WhatsApp",
+      status: "novo",
+    })
+    .select("id, imobiliaria_id, corretor_id, nome, telefone, status")
+    .single();
+
+  if (error) {
+    console.error("Erro ao criar lead automatico do WhatsApp:", error);
+    return null;
+  }
+  return novoLead;
+}
+
 async function handleSingleMessage(msg, receivingPhoneNumber) {
   const remoteJid = msg?.key?.remoteJid;
   if (!remoteJid || remoteJid.includes("@g.us")) return; // ignora grupos
@@ -159,19 +207,28 @@ async function handleSingleMessage(msg, receivingPhoneNumber) {
     console.error("Erro ao buscar lead por telefone:", searchError);
     return;
   }
-  if (!leads?.length) return;
 
-  const lead = leads[0];
+  let lead;
+  let leadDetail;
 
-  const { data: leadDetail } = await supabaseAdmin
-    .from("leads")
-    .select("corretor_id, nome, telefone, status")
-    .eq("id", lead.id)
-    .single();
+  if (leads?.length) {
+    lead = leads[0];
+    const { data } = await supabaseAdmin
+      .from("leads")
+      .select("corretor_id, nome, telefone, status")
+      .eq("id", lead.id)
+      .single();
+    leadDetail = data;
 
-  await alertaPossivelDuplicidade(lead, leadDetail, receivingPhoneNumber).catch((e) =>
-    console.error("Erro ao checar duplicidade:", e)
-  );
+    await alertaPossivelDuplicidade(lead, leadDetail, receivingPhoneNumber).catch((e) =>
+      console.error("Erro ao checar duplicidade:", e)
+    );
+  } else {
+    const novoLead = await criarLeadDoWhatsapp(contactPhone, receivingPhoneNumber, msg?.pushName);
+    if (!novoLead) return; // nao foi possivel identificar a imobiliaria dona do numero
+    lead = { id: novoLead.id, imobiliaria_id: novoLead.imobiliaria_id };
+    leadDetail = { corretor_id: novoLead.corretor_id, nome: novoLead.nome, telefone: novoLead.telefone, status: novoLead.status };
+  }
 
   let text =
     msg?.message?.conversation || msg?.message?.extendedTextMessage?.text || "";

@@ -218,7 +218,11 @@ export function LeadsKanban({ leads: initialLeads, isLoading: initialLoading, im
                           )}
                         </div>
                       </div>
-                      <Badge variant="outline" className="text-[8px] h-3.5 px-1 shrink-0 font-bold border-slate-200 text-slate-500 bg-slate-50 uppercase">
+                      <Badge
+                        variant="outline"
+                        title={lead.origem || "Site"}
+                        className="text-[8px] h-3.5 px-1 max-w-[92px] shrink-0 truncate font-bold border-slate-200 text-slate-500 bg-slate-50 uppercase"
+                      >
                         {lead.origem || "Site"}
                       </Badge>
                     </div>
