@@ -12,6 +12,31 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       colunas_kanban: {
@@ -311,6 +336,7 @@ export type Database = {
         Row: {
           area: number | null
           banheiros: number | null
+          caracteristicas: Json | null
           cidade: string | null
           created_at: string
           descricao: string | null
@@ -322,7 +348,6 @@ export type Database = {
           imobiliaria_id: string
           preco: number | null
           quartos: number | null
-          caracteristicas: Json | null
           tipo: string | null
           titulo: string
           updated_at: string
@@ -330,6 +355,7 @@ export type Database = {
         Insert: {
           area?: number | null
           banheiros?: number | null
+          caracteristicas?: Json | null
           cidade?: string | null
           created_at?: string
           descricao?: string | null
@@ -341,7 +367,6 @@ export type Database = {
           imobiliaria_id: string
           preco?: number | null
           quartos?: number | null
-          caracteristicas?: Json | null
           tipo?: string | null
           titulo: string
           updated_at?: string
@@ -349,6 +374,7 @@ export type Database = {
         Update: {
           area?: number | null
           banheiros?: number | null
+          caracteristicas?: Json | null
           cidade?: string | null
           created_at?: string
           descricao?: string | null
@@ -360,7 +386,6 @@ export type Database = {
           imobiliaria_id?: string
           preco?: number | null
           quartos?: number | null
-          caracteristicas?: Json | null
           tipo?: string | null
           titulo?: string
           updated_at?: string
@@ -478,6 +503,7 @@ export type Database = {
           descartado_por: string | null
           descarte_pendente_aprovacao: boolean | null
           email: string | null
+          favorito: boolean | null
           fila_tipo: string | null
           id: string
           imobiliaria_id: string
@@ -506,7 +532,6 @@ export type Database = {
           valor_entrada: number | null
           valor_estimado: number | null
           valor_venda: number | null
-          favorito: boolean | null
         }
         Insert: {
           alerta_visita_17h_ciente?: boolean | null
@@ -524,6 +549,7 @@ export type Database = {
           descartado_por?: string | null
           descarte_pendente_aprovacao?: boolean | null
           email?: string | null
+          favorito?: boolean | null
           fila_tipo?: string | null
           id?: string
           imobiliaria_id: string
@@ -552,7 +578,6 @@ export type Database = {
           valor_entrada?: number | null
           valor_estimado?: number | null
           valor_venda?: number | null
-          favorito?: boolean | null
         }
         Update: {
           alerta_visita_17h_ciente?: boolean | null
@@ -570,6 +595,7 @@ export type Database = {
           descartado_por?: string | null
           descarte_pendente_aprovacao?: boolean | null
           email?: string | null
+          favorito?: boolean | null
           fila_tipo?: string | null
           id?: string
           imobiliaria_id?: string
@@ -598,7 +624,6 @@ export type Database = {
           valor_entrada?: number | null
           valor_estimado?: number | null
           valor_venda?: number | null
-          favorito?: boolean | null
         }
         Relationships: [
           {
@@ -935,11 +960,50 @@ export type Database = {
           },
         ]
       }
+      push_subscriptions: {
+        Row: {
+          auth: string
+          created_at: string
+          endpoint: string
+          id: string
+          p256dh: string
+          user_id: string
+        }
+        Insert: {
+          auth: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          p256dh: string
+          user_id: string
+        }
+        Update: {
+          auth?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          p256dh?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_subscriptions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       templates_mensagem: {
         Row: {
+          anexo_nome: string | null
+          anexo_tipo: string | null
+          anexo_url: string | null
           assunto: string | null
           conteudo: string
           created_at: string
+          criado_por: string
           etapa_funil: Database["public"]["Enums"]["lead_status"] | null
           id: string
           imobiliaria_id: string
@@ -947,9 +1011,13 @@ export type Database = {
           titulo: string
         }
         Insert: {
+          anexo_nome?: string | null
+          anexo_tipo?: string | null
+          anexo_url?: string | null
           assunto?: string | null
           conteudo: string
           created_at?: string
+          criado_por: string
           etapa_funil?: Database["public"]["Enums"]["lead_status"] | null
           id?: string
           imobiliaria_id: string
@@ -957,9 +1025,13 @@ export type Database = {
           titulo: string
         }
         Update: {
+          anexo_nome?: string | null
+          anexo_tipo?: string | null
+          anexo_url?: string | null
           assunto?: string | null
           conteudo?: string
           created_at?: string
+          criado_por?: string
           etapa_funil?: Database["public"]["Enums"]["lead_status"] | null
           id?: string
           imobiliaria_id?: string
@@ -1010,6 +1082,8 @@ export type Database = {
       }
       whatsapp_instances: {
         Row: {
+          ai_active: boolean | null
+          ai_prompt: string | null
           connected: boolean
           created_at: string
           id: string
@@ -1020,6 +1094,8 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          ai_active?: boolean | null
+          ai_prompt?: string | null
           connected?: boolean
           created_at?: string
           id?: string
@@ -1030,6 +1106,8 @@ export type Database = {
           user_id: string
         }
         Update: {
+          ai_active?: boolean | null
+          ai_prompt?: string | null
           connected?: boolean
           created_at?: string
           id?: string
@@ -1054,6 +1132,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      buscar_lead_por_telefone: {
+        Args: { telefone_busca: string }
+        Returns: {
+          id: string
+          imobiliaria_id: string
+        }[]
+      }
       distribuir_leads_massa: {
         Args: { p_corretor_id: string; p_lead_ids: string[]; p_tipo: string }
         Returns: undefined
@@ -1061,23 +1146,19 @@ export type Database = {
       get_auth_imobiliaria_id: { Args: never; Returns: string }
       get_auth_role: { Args: never; Returns: string }
       get_conversas: {
-        Args: { p_corretor_id?: string | null }
+        Args: { p_corretor_id?: string }
         Returns: {
-          lead_id: string
-          lead_nome: string | null
-          lead_telefone: string | null
-          corretor_id: string | null
-          corretor_nome: string | null
+          corretor_id: string
+          corretor_nome: string
           imobiliaria_id: string
-          ultima_mensagem: string | null
-          ultima_mensagem_em: string
-          ultima_direcao: string
+          lead_id: string
+          lead_nome: string
+          lead_telefone: string
           nao_lidas: number
+          ultima_direcao: string
+          ultima_mensagem: string
+          ultima_mensagem_em: string
         }[]
-      }
-      marcar_conversa_lida: {
-        Args: { p_lead_id: string }
-        Returns: undefined
       }
       get_my_role: { Args: never; Returns: string }
       get_next_broker_on_duty: { Args: never; Returns: string }
@@ -1094,6 +1175,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      marcar_conversa_lida: { Args: { p_lead_id: string }; Returns: undefined }
       registrar_lead_integracao: {
         Args: { p_imobiliaria_id: string; p_integration_id: string }
         Returns: undefined
@@ -1114,6 +1196,8 @@ export type Database = {
         | "pendente"
         | "aprovado"
         | "futuros"
+        | "cobrar_doc"
+        | "reprovado"
       lead_temperatura: "quente" | "morno" | "frio"
       user_role: "dono" | "gerente" | "corretor"
     }
@@ -1241,6 +1325,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       app_role: ["dono", "gerente", "corretor"],
@@ -1257,6 +1344,8 @@ export const Constants = {
         "pendente",
         "aprovado",
         "futuros",
+        "cobrar_doc",
+        "reprovado",
       ],
       lead_temperatura: ["quente", "morno", "frio"],
       user_role: ["dono", "gerente", "corretor"],

@@ -135,16 +135,6 @@ function FilasPage() {
   const [selectedDay, setSelectedDay] = useState<number>(new Date().getDay() || 7);
   const [selectedCorretor, setSelectedCorretor] = useState<string>("");
 
-  if (loadingPerms) {
-    return (
-      <MainLayout>
-        <div className="flex h-full items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </div>
-      </MainLayout>
-    );
-  }
-
   const { data: profile } = useQuery({
     queryKey: ["user-profile", user?.id],
     queryFn: async () => {
@@ -240,6 +230,7 @@ function FilasPage() {
     mutationFn: async (newOrder: any[]) => {
       const updates = newOrder.map((item, index) => ({
         id: item.id,
+        imobiliaria_id: item.imobiliaria_id,
         corretor_id: item.corretor_id,
         posicao: index + 1,
       }));
@@ -330,6 +321,16 @@ function FilasPage() {
       coordinateGetter: sortableKeyboardCoordinates,
     })
   );
+
+  if (loadingPerms) {
+    return (
+      <MainLayout>
+        <div className="flex h-full items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </MainLayout>
+    );
+  }
 
   function handleDragEnd(event: any) {
     if (!can('manage_roleta')) return;

@@ -30,6 +30,9 @@ interface Template {
   id: string;
   titulo: string;
   conteudo: string;
+  anexo_url: string | null;
+  anexo_tipo: string | null;
+  anexo_nome: string | null;
 }
 
 export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, fullHeight }: WhatsAppChatProps) {
@@ -125,7 +128,7 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, fullHeight }:
     const fetchTemplates = async () => {
       const { data, error } = await supabase
         .from("templates_mensagem")
-        .select("id, titulo, conteudo")
+        .select("id, titulo, conteudo, anexo_url, anexo_tipo, anexo_nome")
         .eq("imobiliaria_id", imobiliariaId)
         .eq("tipo", "whatsapp")
         .order("titulo", { ascending: true });
@@ -468,13 +471,25 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, fullHeight }:
                       key={t.id}
                       type="button"
                       className="w-full text-left px-3 py-2.5 border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors"
-                      onClick={() => {
+                      onClick={async () => {
                         setNewMessage((prev) => (prev ? `${prev}\n${t.conteudo}` : t.conteudo));
                         setShowTemplates(false);
+                        if (t.anexo_url) {
+                          try {
+                            const res = await fetch(t.anexo_url);
+                            const blob = await res.blob();
+                            setAttachment(new File([blob], t.anexo_nome || "anexo", { type: blob.type }));
+                          } catch {
+                            toast.error("Não consegui carregar o anexo do template.");
+                          }
+                        }
                       }}
                     >
                       <p className="text-xs font-bold text-slate-700">{t.titulo}</p>
                       <p className="text-xs text-slate-500 truncate">{t.conteudo}</p>
+                      {t.anexo_nome && (
+                        <p className="text-[10px] text-primary/70 truncate mt-0.5">📎 {t.anexo_nome}</p>
+                      )}
                     </button>
                   ))
                 )}

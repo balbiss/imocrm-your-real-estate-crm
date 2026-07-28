@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Plus, MessageSquare, Trash2, Edit, Copy, CheckCircle2, Mail, MessageCircle } from "lucide-react";
+import { Plus, MessageSquare, Trash2, Edit, Copy, CheckCircle2, Mail, MessageCircle, Image, Video, FileText as FileIcon, X } from "lucide-react";
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -12,19 +12,30 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { usePermissions } from "@/hooks/usePermissions";
 
 export const Route = createFileRoute("/templates")({
   head: () => ({ meta: [{ title: "Templates — CRM" }] }),
   component: TemplatesPage,
 });
 
+function tipoAnexoPorArquivo(file: File): "imagem" | "video" | "documento" {
+  if (file.type.startsWith("image/")) return "imagem";
+  if (file.type.startsWith("video/")) return "video";
+  return "documento";
+}
+
+function IconeAnexo({ tipo, className }: { tipo: string | null; className?: string }) {
+  if (tipo === "imagem") return <Image className={className} />;
+  if (tipo === "video") return <Video className={className} />;
+  return <FileIcon className={className} />;
+}
+
 function TemplatesPage() {
   const queryClient = useQueryClient();
-  const { can } = usePermissions();
-  const podeGerenciar = can("manage_team");
   const [isOpen, setIsOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<any>(null);
+  const [anexoFile, setAnexoFile] = useState<File | null>(null);
+  const [removerAnexoExistente, setRemoverAnexoExistente] = useState(false);
 
   const { data: templates, isLoading } = useQuery({
     queryKey: ["templates"],
@@ -43,6 +54,27 @@ function TemplatesPage() {
       const { data: userData } = await supabase.auth.getUser();
       if (!userData.user) throw new Error("Não autenticado");
 
+      if (anexoFile) {
+        const fileExt = anexoFile.name.split(".").pop();
+        const filePath = `${userData.user.id}/${crypto.randomUUID()}.${fileExt}`;
+        const { error: uploadError } = await supabase.storage
+          .from("templates_anexos")
+          .upload(filePath, anexoFile);
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from("templates_anexos")
+          .getPublicUrl(filePath);
+
+        values.anexo_url = publicUrl;
+        values.anexo_tipo = tipoAnexoPorArquivo(anexoFile);
+        values.anexo_nome = anexoFile.name;
+      } else if (removerAnexoExistente) {
+        values.anexo_url = null;
+        values.anexo_tipo = null;
+        values.anexo_nome = null;
+      }
+
       if (editingTemplate) {
         const { error } = await supabase
           .from("templates_mensagem")
@@ -58,7 +90,7 @@ function TemplatesPage() {
 
         const { error } = await supabase
           .from("templates_mensagem")
-          .insert({ ...values, imobiliaria_id: perfil?.imobiliaria_id });
+          .insert({ ...values, imobiliaria_id: perfil?.imobiliaria_id, criado_por: userData.user.id });
         if (error) throw error;
       }
     },
@@ -66,8 +98,11 @@ function TemplatesPage() {
       queryClient.invalidateQueries({ queryKey: ["templates"] });
       setIsOpen(false);
       setEditingTemplate(null);
+      setAnexoFile(null);
+      setRemoverAnexoExistente(false);
       toast.success(editingTemplate ? "Template atualizado!" : "Template criado!");
     },
+    onError: (error: any) => toast.error("Erro ao salvar: " + (error?.message || "erro desconhecido")),
   });
 
   const deleteTemplate = useMutation({
@@ -89,11 +124,9 @@ function TemplatesPage() {
             <h1 className="text-xl font-bold tracking-tight text-slate-900">Biblioteca de Mensagens</h1>
             <p className="text-saas-sm text-muted-foreground">Padronize o atendimento com templates inteligentes.</p>
           </div>
-          {podeGerenciar && (
-            <Button onClick={() => setIsOpen(true)} className="h-9 text-[11px] font-bold uppercase tracking-wider px-6">
-              <Plus className="mr-1.5 h-3.5 w-3.5" /> Adicionar Template
-            </Button>
-          )}
+          <Button onClick={() => { setEditingTemplate(null); setAnexoFile(null); setRemoverAnexoExistente(false); setIsOpen(true); }} className="h-9 text-[11px] font-bold uppercase tracking-wider px-6">
+            <Plus className="mr-1.5 h-3.5 w-3.5" /> Adicionar Template
+          </Button>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -112,22 +145,32 @@ function TemplatesPage() {
                       </div>
                       <span className="text-saas-sm font-bold text-slate-700 truncate max-w-[140px]">{template.titulo}</span>
                     </div>
-                    {podeGerenciar && (
-                      <div className="flex opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-primary" onClick={() => {
-                          setEditingTemplate(template);
-                          setIsOpen(true);
-                        }}>
-                          <Edit className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-red-500" onClick={() => deleteTemplate.mutate(template.id)}>
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    )}
+                    <div className="flex opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-primary" onClick={() => {
+                        setEditingTemplate(template);
+                        setAnexoFile(null);
+                        setRemoverAnexoExistente(false);
+                        setIsOpen(true);
+                      }}>
+                        <Edit className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-red-500" onClick={() => deleteTemplate.mutate(template.id)}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent className="p-4 flex-1 flex flex-col">
+                  {template.anexo_url && (
+                    template.anexo_tipo === "imagem" ? (
+                      <img src={template.anexo_url} alt={template.anexo_nome || ""} className="mb-2 h-24 w-full object-cover rounded-lg border border-slate-100" />
+                    ) : (
+                      <div className="mb-2 flex items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-saas-xs text-slate-500">
+                        <IconeAnexo tipo={template.anexo_tipo} className="h-3.5 w-3.5 shrink-0" />
+                        <span className="truncate">{template.anexo_nome}</span>
+                      </div>
+                    )
+                  )}
                   <div className="bg-slate-50 p-3 rounded-lg text-saas-xs text-slate-600 line-clamp-4 leading-relaxed font-medium whitespace-pre-wrap flex-1 border border-slate-100">
                     {template.conteudo}
                   </div>
@@ -150,7 +193,11 @@ function TemplatesPage() {
 
         <Dialog open={isOpen} onOpenChange={(val) => {
           setIsOpen(val);
-          if (!val) setEditingTemplate(null);
+          if (!val) {
+            setEditingTemplate(null);
+            setAnexoFile(null);
+            setRemoverAnexoExistente(false);
+          }
         }}>
           <DialogContent className="sm:max-w-[500px]">
             <DialogHeader>
@@ -196,6 +243,37 @@ function TemplatesPage() {
                     <CheckCircle2 className="h-3 w-3 text-emerald-500" />
                     <p className="text-[10px] text-muted-foreground font-medium">Use tags como <strong>{"{nome}"}</strong> para personalização automática.</p>
                 </div>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-saas-xs font-bold text-slate-500 uppercase tracking-wider">Anexo (imagem, vídeo ou documento)</label>
+                {editingTemplate?.anexo_url && !anexoFile && !removerAnexoExistente ? (
+                  <div className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <IconeAnexo tipo={editingTemplate.anexo_tipo} className="h-4 w-4 shrink-0 text-slate-400" />
+                      <span className="text-saas-sm text-slate-600 truncate">{editingTemplate.anexo_nome}</span>
+                    </div>
+                    <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-slate-400 hover:text-red-500 shrink-0" onClick={() => setRemoverAnexoExistente(true)}>
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="file"
+                      accept="image/*,video/*,application/pdf,.doc,.docx,.xls,.xlsx"
+                      className="h-9 text-saas-sm border-slate-200"
+                      onChange={(e) => {
+                        setAnexoFile(e.target.files?.[0] || null);
+                        setRemoverAnexoExistente(false);
+                      }}
+                    />
+                    {anexoFile && (
+                      <Button type="button" variant="ghost" size="icon" className="h-9 w-9 text-slate-400 hover:text-red-500 shrink-0" onClick={() => setAnexoFile(null)}>
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                )}
               </div>
               <DialogFooter className="pt-4 border-t border-slate-50">
                 <Button type="button" variant="ghost" size="sm" onClick={() => setIsOpen(false)} className="text-saas-xs font-bold uppercase">Cancelar</Button>
