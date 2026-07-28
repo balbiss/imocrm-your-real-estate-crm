@@ -50,9 +50,10 @@ import {
 import { WhatsAppChat } from "./WhatsAppChat";
 import { toast } from "sonner";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { format } from "date-fns";
+import { format, isToday } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useAuth } from "@/context/AuthContext";
 
 interface LeadDetailsModalProps {
   leadId: string | null;
@@ -62,9 +63,12 @@ interface LeadDetailsModalProps {
 
 export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModalProps) {
   const queryClient = useQueryClient();
-  const { can } = usePermissions();
+  const { can, role } = usePermissions();
+  const { user: authUser } = useAuth();
   const [activeTab, setActiveTab] = useState("detalhes");
   const [isEditing, setIsEditing] = useState(false);
+  const [editingInteracaoId, setEditingInteracaoId] = useState<string | null>(null);
+  const [editingInteracaoTexto, setEditingInteracaoTexto] = useState("");
   const [showDescarteModal, setShowDescarteModal] = useState(false);
   const [showFechamentoModal, setShowFechamentoModal] = useState(false);
   const [motivoDescarte, setMotivoDescarte] = useState("");
@@ -181,8 +185,8 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
   const handleMoveColuna = (colunaId: string, nomeColuna: string, posicao: number) => {
     const retroStatus = getRetrocompatibleStatus(nomeColuna, posicao, colunas ? colunas.length : 10);
     updateMutation.mutate({
-      coluna_kanban_id: colunaId,
-      status: retroStatus
+      updates: { coluna_kanban_id: colunaId, status: retroStatus },
+      descricao: `Moveu o card para a coluna "${nomeColuna}"`,
     });
   };
 
@@ -223,13 +227,39 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
     }
   }, [lead]);
 
+  // Rótulos legíveis pros campos que o corretor mexe no card, pra gerar o
+  // registro automático de histórico sem precisar anotar cada chamada.
+  const CAMPO_LABELS: Record<string, string> = {
+    nome: "Nome",
+    telefone: "Telefone",
+    email: "E-mail",
+    favorito: "Favorito",
+    temperatura: "Temperatura",
+    status: "Status",
+    cadencia_chamada: "Cadência de chamada",
+    tipo_visita: "Tipo de visita",
+    data_visita: "Data da visita",
+    status_visita: "Status da visita",
+    renda_familiar: "Renda familiar",
+    saldo_fgts: "Saldo de FGTS",
+    valor_entrada: "Valor de entrada",
+    link_drive: "Link de documentos",
+    lembrete_follow_up: "Follow-up",
+  };
+
+  function gerarDescricaoAutomatica(updates: Record<string, any>): string | null {
+    const campos = Object.keys(updates).filter((k) => k in CAMPO_LABELS);
+    if (campos.length === 0) return null;
+    return campos.map((campo) => `${CAMPO_LABELS[campo]} alterado(a) para "${updates[campo]}"`).join("; ");
+  }
+
   // Mutação para atualizar lead
   const updateMutation = useMutation({
-    mutationFn: async (updates: any) => {
+    mutationFn: async ({ updates, descricao }: { updates: any; descricao?: string | null }) => {
       // Sempre atualizar ultima_acao_at ao mexer no card
-      const fullUpdates = { 
-        ...updates, 
-        ultima_acao_at: new Date().toISOString() 
+      const fullUpdates = {
+        ...updates,
+        ultima_acao_at: new Date().toISOString()
       };
 
       const { error } = await supabase
@@ -237,6 +267,18 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
         .update(fullUpdates)
         .eq("id", leadId);
       if (error) throw error;
+
+      // Registra automaticamente no histórico, sem o corretor precisar
+      // escrever nada — qualquer mudança feita no card já vira registro.
+      const texto = descricao ?? gerarDescricaoAutomatica(updates);
+      if (texto && authUser) {
+        await supabase.from("leads_interacoes").insert({
+          lead_id: leadId!,
+          autor_id: authUser.id,
+          tipo: "auto",
+          conteudo: texto,
+        });
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["lead", leadId] });
@@ -270,6 +312,38 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
       queryClient.invalidateQueries({ queryKey: ["lead", leadId] });
       toast.success("Interação registrada!");
     },
+  });
+
+  // Corretor só edita/apaga o que ele mesmo escreveu, e só no mesmo dia;
+  // dono/gerente podem mexer em qualquer registro do histórico.
+  const podeEditarInteracao = (interacao: any) => {
+    if (!authUser) return false;
+    if (role === "dono" || role === "gerente") return true;
+    return interacao.autor_id === authUser.id && isToday(new Date(interacao.created_at));
+  };
+
+  const editInteractionMutation = useMutation({
+    mutationFn: async ({ id, conteudo }: { id: string; conteudo: string }) => {
+      const { error } = await supabase.from("leads_interacoes").update({ conteudo }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["lead", leadId] });
+      toast.success("Registro atualizado!");
+    },
+    onError: (error: any) => toast.error("Erro ao editar: " + error.message),
+  });
+
+  const deleteInteractionMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("leads_interacoes").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["lead", leadId] });
+      toast.success("Registro removido!");
+    },
+    onError: (error: any) => toast.error("Erro ao remover: " + error.message),
   });
 
   const handleDescarte = async () => {
@@ -407,8 +481,12 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
   if (!lead) return null;
 
   const handleUpdateField = (field: string, value: any) => {
+    // Evita registrar histórico "alterado" quando o campo só perdeu o foco
+    // sem ninguém mudar o valor de fato (ex: clicar e sair do input).
+    if (field !== "cadencia_chamada" && value === (lead as any)[field]) return;
+
     const payload: any = { [field]: value };
-    
+
     if (field === "cadencia_chamada") {
       const now = new Date();
       payload.data_ultima_chamada = now.toISOString();
@@ -424,7 +502,7 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
       }
     }
     
-    updateMutation.mutate(payload);
+    updateMutation.mutate({ updates: payload });
   };
 
   return (
@@ -906,8 +984,11 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
                   <div className="space-y-4">
                     <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Histórico de Interações</Label>
                     <div className="relative pl-6 space-y-4 before:absolute before:left-[7px] before:top-2 before:h-[calc(100%-12px)] before:w-[1px] before:bg-slate-200">
-                      {lead.interacoes?.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map((interacao: any) => (
-                        <div key={interacao.id} className="relative">
+                      {lead.interacoes?.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map((interacao: any) => {
+                        const editavel = podeEditarInteracao(interacao);
+                        const editando = editingInteracaoId === interacao.id;
+                        return (
+                        <div key={interacao.id} className="relative group">
                           <div className={`absolute -left-[24px] top-0 h-4 w-4 rounded-full border-2 border-slate-50 flex items-center justify-center ${
                             interacao.tipo === 'status' ? 'bg-blue-500' : 'bg-green-500'
                           }`}>
@@ -916,14 +997,56 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
                           <div className="bg-white rounded-lg border border-slate-100 p-2.5 shadow-sm">
                             <div className="flex items-center justify-between mb-1">
                               <span className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">{interacao.tipo}</span>
-                              <span className="text-[9px] text-slate-400 font-medium">
-                                {format(new Date(interacao.created_at), "dd/MM HH:mm", { locale: ptBR })}
-                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[9px] text-slate-400 font-medium">
+                                  {format(new Date(interacao.created_at), "dd/MM HH:mm", { locale: ptBR })}
+                                </span>
+                                {editavel && !editando && (
+                                  <div className="flex opacity-0 group-hover:opacity-100 transition-opacity gap-0.5">
+                                    <button
+                                      className="text-slate-300 hover:text-primary p-0.5"
+                                      onClick={() => { setEditingInteracaoId(interacao.id); setEditingInteracaoTexto(interacao.conteudo); }}
+                                    >
+                                      <Edit3 className="h-3 w-3" />
+                                    </button>
+                                    <button
+                                      className="text-slate-300 hover:text-red-500 p-0.5"
+                                      onClick={() => { if (confirm("Remover este registro do histórico?")) deleteInteractionMutation.mutate(interacao.id); }}
+                                    >
+                                      <XCircle className="h-3 w-3" />
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
                             </div>
-                            <p className="text-xs text-slate-600 leading-relaxed">{interacao.conteudo}</p>
+                            {editando ? (
+                              <div className="space-y-1.5">
+                                <Textarea
+                                  value={editingInteracaoTexto}
+                                  onChange={(e) => setEditingInteracaoTexto(e.target.value)}
+                                  className="text-xs min-h-[60px] border-slate-200"
+                                />
+                                <div className="flex justify-end gap-1.5">
+                                  <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={() => setEditingInteracaoId(null)}>Cancelar</Button>
+                                  <Button
+                                    size="sm"
+                                    className="h-6 px-2 text-[10px]"
+                                    onClick={() => {
+                                      editInteractionMutation.mutate({ id: interacao.id, conteudo: editingInteracaoTexto });
+                                      setEditingInteracaoId(null);
+                                    }}
+                                  >
+                                    Salvar
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <p className="text-xs text-slate-600 leading-relaxed">{interacao.conteudo}</p>
+                            )}
                           </div>
                         </div>
-                      ))}
+                        );
+                      })}
                       {(!lead.interacoes || lead.interacoes.length === 0) && (
                         <div className="text-center py-10 opacity-30">
                           <History className="h-10 w-10 mx-auto mb-2" />

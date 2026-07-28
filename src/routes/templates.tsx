@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { usePermissions } from "@/hooks/usePermissions";
 
 export const Route = createFileRoute("/templates")({
   head: () => ({ meta: [{ title: "Templates — CRM" }] }),
@@ -20,6 +21,8 @@ export const Route = createFileRoute("/templates")({
 
 function TemplatesPage() {
   const queryClient = useQueryClient();
+  const { can } = usePermissions();
+  const podeGerenciar = can("manage_team");
   const [isOpen, setIsOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<any>(null);
 
@@ -86,9 +89,11 @@ function TemplatesPage() {
             <h1 className="text-xl font-bold tracking-tight text-slate-900">Biblioteca de Mensagens</h1>
             <p className="text-saas-sm text-muted-foreground">Padronize o atendimento com templates inteligentes.</p>
           </div>
-          <Button onClick={() => setIsOpen(true)} className="h-9 text-[11px] font-bold uppercase tracking-wider px-6">
-            <Plus className="mr-1.5 h-3.5 w-3.5" /> Adicionar Template
-          </Button>
+          {podeGerenciar && (
+            <Button onClick={() => setIsOpen(true)} className="h-9 text-[11px] font-bold uppercase tracking-wider px-6">
+              <Plus className="mr-1.5 h-3.5 w-3.5" /> Adicionar Template
+            </Button>
+          )}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -107,17 +112,19 @@ function TemplatesPage() {
                       </div>
                       <span className="text-saas-sm font-bold text-slate-700 truncate max-w-[140px]">{template.titulo}</span>
                     </div>
-                    <div className="flex opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-primary" onClick={() => {
-                        setEditingTemplate(template);
-                        setIsOpen(true);
-                      }}>
-                        <Edit className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-red-500" onClick={() => deleteTemplate.mutate(template.id)}>
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
+                    {podeGerenciar && (
+                      <div className="flex opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-primary" onClick={() => {
+                          setEditingTemplate(template);
+                          setIsOpen(true);
+                        }}>
+                          <Edit className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-red-500" onClick={() => deleteTemplate.mutate(template.id)}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </CardHeader>
                 <CardContent className="p-4 flex-1 flex flex-col">

@@ -253,6 +253,9 @@ function FilasPage() {
       queryClient.invalidateQueries({ queryKey: ["fila-atendimento"] });
       toast.success("Fila atualizada!");
     },
+    onError: (error: any) => {
+      toast.error("Erro ao reordenar a fila: " + (error?.message || "erro desconhecido"));
+    },
   });
 
   const toggleStatusMutation = useMutation({
@@ -315,6 +318,9 @@ function FilasPage() {
     },
     onSuccess: () => {
       toast.info("Roleta embaralhada!");
+    },
+    onError: (error: any) => {
+      toast.error("Erro ao embaralhar: " + (error?.message || "erro desconhecido"));
     },
   });
 
