@@ -13,12 +13,14 @@ import { Route as TreinamentosRouteImport } from './routes/treinamentos'
 import { Route as TemplatesRouteImport } from './routes/templates'
 import { Route as RelatoriosRouteImport } from './routes/relatorios'
 import { Route as RedistribuicaoRouteImport } from './routes/redistribuicao'
+import { Route as RedefinirSenhaRouteImport } from './routes/redefinir-senha'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LinksUteisRouteImport } from './routes/links-uteis'
 import { Route as LeadsRouteImport } from './routes/leads'
 import { Route as IntegracoesRouteImport } from './routes/integracoes'
 import { Route as ImoveisRouteImport } from './routes/imoveis'
 import { Route as FilasRouteImport } from './routes/filas'
+import { Route as EsqueciSenhaRouteImport } from './routes/esqueci-senha'
 import { Route as EquipeRouteImport } from './routes/equipe'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ConversasRouteImport } from './routes/conversas'
@@ -49,6 +51,11 @@ const RedistribuicaoRoute = RedistribuicaoRouteImport.update({
   path: '/redistribuicao',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RedefinirSenhaRoute = RedefinirSenhaRouteImport.update({
+  id: '/redefinir-senha',
+  path: '/redefinir-senha',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
@@ -77,6 +84,11 @@ const ImoveisRoute = ImoveisRouteImport.update({
 const FilasRoute = FilasRouteImport.update({
   id: '/filas',
   path: '/filas',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EsqueciSenhaRoute = EsqueciSenhaRouteImport.update({
+  id: '/esqueci-senha',
+  path: '/esqueci-senha',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EquipeRoute = EquipeRouteImport.update({
@@ -134,12 +146,14 @@ export interface FileRoutesByFullPath {
   '/conversas': typeof ConversasRoute
   '/dashboard': typeof DashboardRoute
   '/equipe': typeof EquipeRoute
+  '/esqueci-senha': typeof EsqueciSenhaRoute
   '/filas': typeof FilasRoute
   '/imoveis': typeof ImoveisRoute
   '/integracoes': typeof IntegracoesRoute
   '/leads': typeof LeadsRouteWithChildren
   '/links-uteis': typeof LinksUteisRoute
   '/login': typeof LoginRoute
+  '/redefinir-senha': typeof RedefinirSenhaRoute
   '/redistribuicao': typeof RedistribuicaoRoute
   '/relatorios': typeof RelatoriosRoute
   '/templates': typeof TemplatesRoute
@@ -155,12 +169,14 @@ export interface FileRoutesByTo {
   '/conversas': typeof ConversasRoute
   '/dashboard': typeof DashboardRoute
   '/equipe': typeof EquipeRoute
+  '/esqueci-senha': typeof EsqueciSenhaRoute
   '/filas': typeof FilasRoute
   '/imoveis': typeof ImoveisRoute
   '/integracoes': typeof IntegracoesRoute
   '/leads': typeof LeadsRouteWithChildren
   '/links-uteis': typeof LinksUteisRoute
   '/login': typeof LoginRoute
+  '/redefinir-senha': typeof RedefinirSenhaRoute
   '/redistribuicao': typeof RedistribuicaoRoute
   '/relatorios': typeof RelatoriosRoute
   '/templates': typeof TemplatesRoute
@@ -177,12 +193,14 @@ export interface FileRoutesById {
   '/conversas': typeof ConversasRoute
   '/dashboard': typeof DashboardRoute
   '/equipe': typeof EquipeRoute
+  '/esqueci-senha': typeof EsqueciSenhaRoute
   '/filas': typeof FilasRoute
   '/imoveis': typeof ImoveisRoute
   '/integracoes': typeof IntegracoesRoute
   '/leads': typeof LeadsRouteWithChildren
   '/links-uteis': typeof LinksUteisRoute
   '/login': typeof LoginRoute
+  '/redefinir-senha': typeof RedefinirSenhaRoute
   '/redistribuicao': typeof RedistribuicaoRoute
   '/relatorios': typeof RelatoriosRoute
   '/templates': typeof TemplatesRoute
@@ -200,12 +218,14 @@ export interface FileRouteTypes {
     | '/conversas'
     | '/dashboard'
     | '/equipe'
+    | '/esqueci-senha'
     | '/filas'
     | '/imoveis'
     | '/integracoes'
     | '/leads'
     | '/links-uteis'
     | '/login'
+    | '/redefinir-senha'
     | '/redistribuicao'
     | '/relatorios'
     | '/templates'
@@ -221,12 +241,14 @@ export interface FileRouteTypes {
     | '/conversas'
     | '/dashboard'
     | '/equipe'
+    | '/esqueci-senha'
     | '/filas'
     | '/imoveis'
     | '/integracoes'
     | '/leads'
     | '/links-uteis'
     | '/login'
+    | '/redefinir-senha'
     | '/redistribuicao'
     | '/relatorios'
     | '/templates'
@@ -242,12 +264,14 @@ export interface FileRouteTypes {
     | '/conversas'
     | '/dashboard'
     | '/equipe'
+    | '/esqueci-senha'
     | '/filas'
     | '/imoveis'
     | '/integracoes'
     | '/leads'
     | '/links-uteis'
     | '/login'
+    | '/redefinir-senha'
     | '/redistribuicao'
     | '/relatorios'
     | '/templates'
@@ -264,12 +288,14 @@ export interface RootRouteChildren {
   ConversasRoute: typeof ConversasRoute
   DashboardRoute: typeof DashboardRoute
   EquipeRoute: typeof EquipeRoute
+  EsqueciSenhaRoute: typeof EsqueciSenhaRoute
   FilasRoute: typeof FilasRoute
   ImoveisRoute: typeof ImoveisRoute
   IntegracoesRoute: typeof IntegracoesRoute
   LeadsRoute: typeof LeadsRouteWithChildren
   LinksUteisRoute: typeof LinksUteisRoute
   LoginRoute: typeof LoginRoute
+  RedefinirSenhaRoute: typeof RedefinirSenhaRoute
   RedistribuicaoRoute: typeof RedistribuicaoRoute
   RelatoriosRoute: typeof RelatoriosRoute
   TemplatesRoute: typeof TemplatesRoute
@@ -304,6 +330,13 @@ declare module '@tanstack/react-router' {
       path: '/redistribuicao'
       fullPath: '/redistribuicao'
       preLoaderRoute: typeof RedistribuicaoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/redefinir-senha': {
+      id: '/redefinir-senha'
+      path: '/redefinir-senha'
+      fullPath: '/redefinir-senha'
+      preLoaderRoute: typeof RedefinirSenhaRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -346,6 +379,13 @@ declare module '@tanstack/react-router' {
       path: '/filas'
       fullPath: '/filas'
       preLoaderRoute: typeof FilasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/esqueci-senha': {
+      id: '/esqueci-senha'
+      path: '/esqueci-senha'
+      fullPath: '/esqueci-senha'
+      preLoaderRoute: typeof EsqueciSenhaRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/equipe': {
@@ -433,12 +473,14 @@ const rootRouteChildren: RootRouteChildren = {
   ConversasRoute: ConversasRoute,
   DashboardRoute: DashboardRoute,
   EquipeRoute: EquipeRoute,
+  EsqueciSenhaRoute: EsqueciSenhaRoute,
   FilasRoute: FilasRoute,
   ImoveisRoute: ImoveisRoute,
   IntegracoesRoute: IntegracoesRoute,
   LeadsRoute: LeadsRouteWithChildren,
   LinksUteisRoute: LinksUteisRoute,
   LoginRoute: LoginRoute,
+  RedefinirSenhaRoute: RedefinirSenhaRoute,
   RedistribuicaoRoute: RedistribuicaoRoute,
   RelatoriosRoute: RelatoriosRoute,
   TemplatesRoute: TemplatesRoute,

@@ -71,6 +71,7 @@ function AgendaPage() {
         .from("leads")
         .select("*, corretor:perfis!leads_corretor_id_fkey(nome)")
         .eq("imobiliaria_id", profile.imobiliaria_id)
+        .is("descartado_em", null)
         .or("lembrete_follow_up.not.is.null,data_visita.not.is.null");
 
       if (role === 'corretor') {

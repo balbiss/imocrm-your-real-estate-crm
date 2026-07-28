@@ -59,7 +59,11 @@ function SortableItem({ id, profile, index, isNext, canManage, onToggleStatus }:
       } ${!isOnline ? "opacity-60 grayscale-[0.5]" : ""}`}
     >
       <div className="flex items-center gap-4">
-        <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500">
+        <div
+          {...(canManage ? attributes : {})}
+          {...(canManage ? listeners : {})}
+          className={`text-slate-300 ${canManage ? "cursor-grab active:cursor-grabbing hover:text-slate-500" : "cursor-not-allowed opacity-40"}`}
+        >
           <GripVertical className="h-5 w-5" />
         </div>
 
@@ -296,6 +300,7 @@ function FilasPage() {
   );
 
   function handleDragEnd(event: any) {
+    if (!can('manage_roleta')) return;
     const { active, over } = event;
     if (active.id !== over.id) {
       const oldIndex = fila?.findIndex((i) => i.id === active.id) ?? -1;

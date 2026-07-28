@@ -7,7 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, RefreshCw, Users, Shuffle, CheckCircle2, History, UserPlus, AlertCircle, AlertTriangle, Clock, UserCheck } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Loader2, RefreshCw, Users, Shuffle, CheckCircle2, History, UserPlus, AlertCircle, AlertTriangle, Clock, UserCheck, Search } from "lucide-react";
 import { toast } from "sonner";
 import {
   Select,
@@ -39,8 +40,9 @@ function RedistributionPage() {
   const queryClient = useQueryClient();
   const { role, isLoading: loadingPerms } = usePermissions();
   const [selectedLeads, setSelectedLeads] = useState<string[]>([]);
-  const [activeTab, setActiveTab] = useState("redistribuicao");
+  const [activeTab, setActiveTab] = useState("bolsao");
   const [isDistributing, setIsDistributing] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
 
   // Proteção de rota
   React.useEffect(() => {
@@ -207,18 +209,28 @@ function RedistributionPage() {
   };
 
   const handleToggleSelectAll = () => {
-    if (selectedLeads.length === (leads?.length || 0) && (leads?.length || 0) !== 0) {
+    if (selectedLeads.length === (filteredLeads?.length || 0) && (filteredLeads?.length || 0) !== 0) {
       setSelectedLeads([]);
     } else {
-      setSelectedLeads(leads?.map(l => l.id) || []);
+      setSelectedLeads(filteredLeads?.map(l => l.id) || []);
     }
   };
 
   const handleSelectLead = (id: string) => {
-    setSelectedLeads(prev => 
+    setSelectedLeads(prev =>
       prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
     );
   };
+
+  const filteredLeads = leads?.filter((lead) => {
+    if (!searchTerm.trim()) return true;
+    const term = searchTerm.toLowerCase();
+    return (
+      lead.nome?.toLowerCase().includes(term) ||
+      lead.telefone?.toLowerCase().includes(term) ||
+      lead.corretor?.nome?.toLowerCase().includes(term)
+    );
+  });
 
   return (
     <MainLayout>
@@ -282,17 +294,17 @@ function RedistributionPage() {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <div className="flex items-center justify-between mb-4 border-b border-slate-100">
             <TabsList className="bg-transparent border-none h-12 p-0 gap-8">
-              <TabsTrigger 
-                value="redistribuicao" 
-                className="border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent rounded-none h-full text-xs font-black uppercase tracking-wider px-0 opacity-40 data-[state=active]:opacity-100 transition-all"
-              >
-                Fila de Redistribuição
-              </TabsTrigger>
-              <TabsTrigger 
+              <TabsTrigger
                 value="bolsao"
                 className="border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent rounded-none h-full text-xs font-black uppercase tracking-wider px-0 opacity-40 data-[state=active]:opacity-100 transition-all"
               >
-                Bolsão de Leads
+                Bolsão de Leads (sem corretor)
+              </TabsTrigger>
+              <TabsTrigger
+                value="redistribuicao"
+                className="border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent rounded-none h-full text-xs font-black uppercase tracking-wider px-0 opacity-40 data-[state=active]:opacity-100 transition-all"
+              >
+                Presos p/ Redistribuir (com corretor)
               </TabsTrigger>
               <TabsTrigger 
                 value="descartados"
@@ -337,13 +349,23 @@ function RedistributionPage() {
             )}
           </div>
 
+          <div className="relative max-w-sm mb-4">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+            <Input
+              placeholder="Buscar por nome, telefone ou corretor..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-9 h-9 text-xs border-slate-200"
+            />
+          </div>
+
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
             <Table>
               <TableHeader>
                 <TableRow className="bg-slate-50/50 hover:bg-slate-50/50 border-none">
                   <TableHead className="w-10 py-4 pl-6">
-                    <Checkbox 
-                      checked={selectedLeads.length === (leads?.length || 0) && (leads?.length || 0) !== 0}
+                    <Checkbox
+                      checked={selectedLeads.length === (filteredLeads?.length || 0) && (filteredLeads?.length || 0) !== 0}
                       onCheckedChange={handleToggleSelectAll}
                     />
                   </TableHead>
@@ -365,7 +387,7 @@ function RedistributionPage() {
                       </div>
                     </TableCell>
                   </TableRow>
-                ) : leads?.length === 0 ? (
+                ) : filteredLeads?.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={5} className="h-64 text-center">
                       <div className="flex flex-col items-center gap-4 opacity-20">
@@ -375,7 +397,7 @@ function RedistributionPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  leads?.map((lead) => (
+                  filteredLeads?.map((lead) => (
                     <TableRow key={lead.id} className="group hover:bg-slate-50/50 transition-colors border-slate-50">
                       <TableCell className="py-4 pl-6">
                         <Checkbox 

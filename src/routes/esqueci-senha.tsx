@@ -1,33 +1,29 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useState } from "react";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Mail, Loader2 } from "lucide-react";
+import { Mail, Loader2, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { AuthLayout } from "@/components/AuthLayout";
 import { TextField } from "@/components/TextField";
-import { PasswordInput } from "@/components/PasswordInput";
 import { useAuth } from "@/context/AuthContext";
 
 const schema = z.object({
   email: z.string().trim().email("E-mail inválido"),
-  senha: z.string().min(6, "Senha deve ter no mínimo 6 caracteres"),
 });
 type FormData = z.infer<typeof schema>;
 
-export const Route = createFileRoute("/login")({
+export const Route = createFileRoute("/esqueci-senha")({
   head: () => ({
-    meta: [
-      { title: "Entrar — CRM" },
-      { name: "description", content: "Acesse sua conta CRM e gerencie seus leads imobiliários." },
-    ],
+    meta: [{ title: "Esqueci minha senha — CRM" }],
   }),
-  component: LoginPage,
+  component: EsqueciSenhaPage,
 });
 
-function LoginPage() {
-  const navigate = useNavigate();
-  const { login } = useAuth();
+function EsqueciSenhaPage() {
+  const { resetPassword } = useAuth();
+  const [sent, setSent] = useState(false);
   const {
     register,
     handleSubmit,
@@ -36,27 +32,42 @@ function LoginPage() {
 
   const onSubmit = async (data: FormData) => {
     try {
-      await login(data.email, data.senha);
-      toast.success("Bem-vindo de volta!");
-      navigate({ to: "/dashboard" });
+      await resetPassword(data.email);
+      setSent(true);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "";
-      if (msg.toLowerCase().includes("invalid login")) {
-        toast.error("E-mail ou senha incorretos");
-      } else if (msg.toLowerCase().includes("network") || msg.toLowerCase().includes("fetch")) {
-        toast.error("Erro de conexão. Tente novamente.");
-      } else {
-        toast.error(msg || "Não foi possível entrar");
-      }
+      toast.error(msg || "Não foi possível enviar o e-mail de redefinição");
     }
   };
+
+  if (sent) {
+    return (
+      <AuthLayout>
+        <div className="space-y-4 mb-8 animate-fade-in-up text-center">
+          <div className="mx-auto h-12 w-12 rounded-full bg-green-50 flex items-center justify-center">
+            <CheckCircle2 className="h-6 w-6 text-green-600" />
+          </div>
+          <h2 className="text-2xl font-bold tracking-tight">E-mail enviado!</h2>
+          <p className="text-sm text-muted-foreground">
+            Se esse e-mail estiver cadastrado, você vai receber um link pra redefinir sua senha. Confira também a caixa de spam.
+          </p>
+        </div>
+        <Link
+          to="/login"
+          className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-gradient-brand text-primary-foreground text-sm font-semibold transition shadow-elegant hover:opacity-95"
+        >
+          Voltar para o login
+        </Link>
+      </AuthLayout>
+    );
+  }
 
   return (
     <AuthLayout>
       <div className="space-y-2 mb-8 animate-fade-in-up">
-        <h2 className="text-3xl font-bold tracking-tight">Bem-vindo de volta</h2>
+        <h2 className="text-3xl font-bold tracking-tight">Esqueci minha senha</h2>
         <p className="text-sm text-muted-foreground">
-          Entre na sua conta para continuar gerenciando seus leads.
+          Digite seu e-mail e vamos te mandar um link pra criar uma nova senha.
         </p>
       </div>
 
@@ -75,37 +86,20 @@ function LoginPage() {
           {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
         </div>
 
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <label htmlFor="senha" className="text-sm font-medium">Senha</label>
-            <Link to="/esqueci-senha" className="text-xs text-primary hover:underline font-medium">
-              Esqueci minha senha
-            </Link>
-          </div>
-          <PasswordInput
-            id="senha"
-            placeholder="••••••••"
-            autoComplete="current-password"
-            hasError={!!errors.senha}
-            {...register("senha")}
-          />
-          {errors.senha && <p className="text-xs text-destructive">{errors.senha.message}</p>}
-        </div>
-
         <button
           type="submit"
           disabled={isSubmitting}
           className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-gradient-brand text-primary-foreground text-sm font-semibold transition shadow-elegant hover:opacity-95 disabled:opacity-60 disabled:cursor-not-allowed"
         >
           {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
-          {isSubmitting ? "Entrando..." : "Entrar"}
+          {isSubmitting ? "Enviando..." : "Enviar link de redefinição"}
         </button>
       </form>
 
       <p className="mt-8 text-center text-sm text-muted-foreground">
-        Não tem conta?{" "}
-        <Link to="/cadastro" className="font-semibold text-primary hover:underline">
-          Cadastre sua imobiliária
+        Lembrou a senha?{" "}
+        <Link to="/login" className="font-semibold text-primary hover:underline">
+          Voltar para o login
         </Link>
       </p>
     </AuthLayout>

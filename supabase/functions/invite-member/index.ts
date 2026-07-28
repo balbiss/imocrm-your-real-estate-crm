@@ -39,7 +39,7 @@ Deno.serve(async (req) => {
 
     if (createError) {
       // Se o usuário já existir, buscamos o ID dele para atualizar o perfil
-      if (createError.message.includes("already registered") || createError.message.includes("already exists")) {
+      if (createError.message.includes("already") || createError.message.includes("already exists")) {
         // Como o admin.createUser falhou, buscamos o usuário pelo email
         const { data: userList, error: listError } = await supabaseClient.auth.admin.listUsers();
         if (listError) throw listError;

@@ -26,7 +26,7 @@ webhookRouter.post("/baileys", async (req, res) => {
     if (event === "connection.update") {
       await handleConnectionUpdate(phoneNumber, data || {});
     } else if (event === "messages.upsert") {
-      await handleMessagesUpsert(data || {});
+      await handleMessagesUpsert(data || {}, phoneNumber);
     }
 
     res.json({ success: true });
@@ -57,17 +57,75 @@ async function handleConnectionUpdate(phoneNumber, data) {
   if (error) console.error("Erro ao atualizar whatsapp_instances no webhook:", error);
 }
 
-async function handleMessagesUpsert(data) {
+async function handleMessagesUpsert(data, receivingPhoneNumber) {
   const messages = data.messages || [];
 
   for (const msg of messages) {
-    await handleSingleMessage(msg).catch((e) =>
+    await handleSingleMessage(msg, receivingPhoneNumber).catch((e) =>
       console.error("Erro ao processar mensagem individual:", e)
     );
   }
 }
 
-async function handleSingleMessage(msg) {
+// Se o lead que mandou a mensagem ja pertence a outro corretor (ou esta
+// marcado como rebatida) e quem recebeu foi um numero de WhatsApp diferente
+// do dono do lead, avisa dono/gerente pra decidirem se transferem o card.
+async function alertaPossivelDuplicidade(lead, leadDetail, receivingPhoneNumber) {
+  if (!receivingPhoneNumber) return;
+
+  const { data: instance } = await supabaseAdmin
+    .from("whatsapp_instances")
+    .select("user_id")
+    .eq("phone_number", receivingPhoneNumber)
+    .maybeSingle();
+
+  const receivingUserId = instance?.user_id;
+  if (!receivingUserId) return;
+
+  const isRebatida = leadDetail?.status === "rebatida";
+  const isOutroCorretor = leadDetail?.corretor_id && leadDetail.corretor_id !== receivingUserId;
+
+  if (!isRebatida && !isOutroCorretor) return;
+
+  // Evita duplicar alerta: se ja existe um aviso nao lido pra esse lead
+  // nas ultimas 2 horas, nao cria outro a cada mensagem nova.
+  const duasHorasAtras = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+  const { data: alertaExistente } = await supabaseAdmin
+    .from("notificacoes")
+    .select("id")
+    .eq("lead_id", lead.id)
+    .eq("tipo", "possivel_duplicidade")
+    .eq("lida", false)
+    .gte("created_at", duasHorasAtras)
+    .limit(1);
+  if (alertaExistente?.length) return;
+
+  const { data: gestores } = await supabaseAdmin
+    .from("perfis")
+    .select("id")
+    .eq("imobiliaria_id", lead.imobiliaria_id)
+    .in("role", ["dono", "gerente"]);
+  if (!gestores?.length) return;
+
+  const nomeLead = leadDetail?.nome || leadDetail?.telefone || "Lead";
+  const titulo = isRebatida
+    ? `${nomeLead} (rebatida) respondeu de novo — confira se precisa transferir`
+    : `${nomeLead} chamou outro corretor, mas já é atendido — confira se precisa transferir`;
+
+  const rows = gestores.map((g) => ({
+    usuario_id: g.id,
+    imobiliaria_id: lead.imobiliaria_id,
+    lead_id: lead.id,
+    tipo: "possivel_duplicidade",
+    titulo,
+    lida: false,
+  }));
+
+  const { error } = await supabaseAdmin.from("notificacoes").insert(rows);
+  if (error) console.error("Erro ao criar alerta de duplicidade:", error);
+}
+
+async function handleSingleMessage(msg, receivingPhoneNumber) {
   const remoteJid = msg?.key?.remoteJid;
   if (!remoteJid || remoteJid.includes("@g.us")) return; // ignora grupos
   if (msg?.key?.fromMe) return; // eco do que a gente mesmo mandou
@@ -107,9 +165,13 @@ async function handleSingleMessage(msg) {
 
   const { data: leadDetail } = await supabaseAdmin
     .from("leads")
-    .select("corretor_id, nome, telefone")
+    .select("corretor_id, nome, telefone, status")
     .eq("id", lead.id)
     .single();
+
+  await alertaPossivelDuplicidade(lead, leadDetail, receivingPhoneNumber).catch((e) =>
+    console.error("Erro ao checar duplicidade:", e)
+  );
 
   let text =
     msg?.message?.conversation || msg?.message?.extendedTextMessage?.text || "";

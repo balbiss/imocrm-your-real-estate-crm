@@ -8,7 +8,7 @@ export interface Notification {
   usuario_id: string;
   imobiliaria_id: string;
   lead_id: string | null;
-  tipo: 'novo_lead' | 'sla_vencido' | 'followup' | 'descarte' | 'redistribuicao';
+  tipo: 'novo_lead' | 'sla_vencido' | 'followup' | 'descarte' | 'redistribuicao' | 'possivel_duplicidade';
   titulo: string;
   mensagem: string | null;
   lida: boolean;

@@ -114,7 +114,8 @@ export function LeadsKanban({ leads: initialLeads, isLoading: initialLoading, im
   const leadsByStage = stages.reduce((acc, stage) => {
     acc[stage.id] = leads?.filter((lead) => {
       if (lead.descarte_pendente_aprovacao) return false;
-      
+      if (lead.descartado_em) return false;
+
       // Se o lead tem a coluna_kanban_id explícita
       if (lead.coluna_kanban_id) {
         return lead.coluna_kanban_id === stage.id;

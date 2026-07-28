@@ -19,6 +19,8 @@ type AuthContextValue = {
   login: (email: string, senha: string) => Promise<void>;
   cadastrar: (data: CadastroPayload) => Promise<void>;
   logout: () => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
+  updatePassword: (novaSenha: string) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -72,8 +74,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
   };
 
+  const resetPassword = async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/redefinir-senha`,
+    });
+    if (error) throw error;
+  };
+
+  const updatePassword = async (novaSenha: string) => {
+    const { error } = await supabase.auth.updateUser({ password: novaSenha });
+    if (error) throw error;
+  };
+
   return (
-    <AuthContext.Provider value={{ user, session, loading, login, cadastrar, logout }}>
+    <AuthContext.Provider value={{ user, session, loading, login, cadastrar, logout, resetPassword, updatePassword }}>
       {children}
     </AuthContext.Provider>
   );

@@ -500,7 +500,13 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, fullHeight }:
               placeholder={attachment ? "Adicione uma legenda..." : "Digite uma mensagem"}
               value={newMessage}
               onChange={(e) => {
-                setNewMessage(e.target.value);
+                const value = e.target.value;
+                if (value === "/") {
+                  setShowTemplates(true);
+                  setNewMessage("");
+                } else {
+                  setNewMessage(value);
+                }
                 e.target.style.height = 'auto';
                 e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
               }}

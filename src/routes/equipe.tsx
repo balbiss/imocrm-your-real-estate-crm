@@ -18,6 +18,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
+import { usePermissions } from "@/hooks/usePermissions";
 
 export const Route = createFileRoute("/equipe")({
   head: () => ({ meta: [{ title: "Equipe — CRM" }] }),
@@ -26,6 +27,7 @@ export const Route = createFileRoute("/equipe")({
 
 function TeamPage() {
   const { user } = useAuth();
+  const { can } = usePermissions();
   const queryClient = useQueryClient();
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -253,9 +255,14 @@ function TeamPage() {
                       <span className="text-xs font-bold text-slate-700">{member.sla_media}</span>
                     </TableCell>
                     <TableCell>
-                      <div 
-                        className="flex items-center gap-1.5 cursor-pointer hover:opacity-80 transition-opacity w-fit"
-                        onClick={() => togglePlantaoMutation.mutate({ id: member.id, em_plantao: !!member.em_plantao })}
+                      <div
+                        className={`flex items-center gap-1.5 w-fit transition-opacity ${
+                          can('manage_team') ? "cursor-pointer hover:opacity-80" : "cursor-default opacity-90"
+                        }`}
+                        onClick={() => {
+                          if (!can('manage_team')) return;
+                          togglePlantaoMutation.mutate({ id: member.id, em_plantao: !!member.em_plantao });
+                        }}
                       >
                         {togglePlantaoMutation.isPending && togglePlantaoMutation.variables?.id === member.id ? (
                           <Loader2 className="h-3 w-3 animate-spin text-slate-400" />

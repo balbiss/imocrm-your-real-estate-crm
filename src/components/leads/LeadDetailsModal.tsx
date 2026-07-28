@@ -52,6 +52,7 @@ import { toast } from "sonner";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { usePermissions } from "@/hooks/usePermissions";
 
 interface LeadDetailsModalProps {
   leadId: string | null;
@@ -61,6 +62,7 @@ interface LeadDetailsModalProps {
 
 export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModalProps) {
   const queryClient = useQueryClient();
+  const { can } = usePermissions();
   const [activeTab, setActiveTab] = useState("detalhes");
   const [isEditing, setIsEditing] = useState(false);
   const [showDescarteModal, setShowDescarteModal] = useState(false);
@@ -142,6 +144,39 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
     if (ratio < 0.9) return "pendente";
     return "futuros";
   };
+
+  // Lista de corretores da imobiliária, pra dono/gerente poderem transferir o lead
+  const { data: corretoresImobiliaria } = useQuery({
+    queryKey: ["corretores-transferencia", lead?.imobiliaria_id],
+    queryFn: async () => {
+      if (!lead?.imobiliaria_id) return [];
+      const { data, error } = await supabase
+        .from("perfis")
+        .select("id, nome")
+        .eq("imobiliaria_id", lead.imobiliaria_id)
+        .order("nome", { ascending: true });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!lead?.imobiliaria_id && open && can('manage_team'),
+  });
+
+  const transferMutation = useMutation({
+    mutationFn: async (corretorId: string) => {
+      const { error } = await supabase.rpc('distribuir_leads_massa', {
+        p_lead_ids: [leadId],
+        p_corretor_id: corretorId,
+        p_tipo: 'manual',
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Lead transferido!");
+      queryClient.invalidateQueries({ queryKey: ["lead", leadId] });
+      queryClient.invalidateQueries({ queryKey: ["leads"] });
+    },
+    onError: (error: any) => toast.error("Erro ao transferir: " + error.message),
+  });
 
   const handleMoveColuna = (colunaId: string, nomeColuna: string, posicao: number) => {
     const retroStatus = getRetrocompatibleStatus(nomeColuna, posicao, colunas ? colunas.length : 10);
@@ -273,6 +308,7 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
         // Fluxo Normal (Vai pro bolsão/quarentena)
         await supabase.from("leads").update({
           corretor_id: null,
+          coluna_kanban_id: null,
           motivo_descarte: motivoDescarte,
           descartado_por: user.id,
           descartado_em: new Date().toISOString(),
@@ -556,6 +592,24 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
                       </Button>
                     </div>
                   </div>
+
+                  {can('manage_team') && (
+                    <div className="mt-4 pt-4 border-t border-slate-100 flex items-center gap-3">
+                      <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter shrink-0 flex items-center gap-1.5">
+                        <ArrowLeftRight className="h-3.5 w-3.5" /> Transferir para
+                      </Label>
+                      <Select onValueChange={(v) => transferMutation.mutate(v)} disabled={transferMutation.isPending}>
+                        <SelectTrigger className="h-9 text-xs font-bold flex-1 border-slate-200">
+                          <SelectValue placeholder={lead.corretor_id ? "Selecione outro corretor..." : "Atribuir a um corretor..."} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {corretoresImobiliaria?.filter(c => c.id !== lead.corretor_id).map((c) => (
+                            <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 

@@ -53,11 +53,12 @@ export function AprovacoesDescarteDialog({ open, onOpenChange, imobiliariaId }: 
       
       const { error } = await supabase
         .from("leads")
-        .update({ 
+        .update({
           descarte_pendente_aprovacao: false,
           descartado_em: new Date().toISOString(),
           descartado_por: user.id,
           corretor_id: null,
+          coluna_kanban_id: null,
           status: 'novo'
         })
         .eq("id", leadId);
