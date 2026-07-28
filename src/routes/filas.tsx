@@ -29,6 +29,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { format } from "date-fns";
+import { isCorretorOnlineNaRoleta } from "@/lib/utils";
 
 export const Route = createFileRoute("/filas")({
   component: FilasPage,
@@ -59,7 +60,7 @@ function SortableItem({ id, profile, index, isNext, canManage, onToggleStatus }:
     transition,
   };
 
-  const isOnline = profile?.status_roleta === true;
+  const isOnline = isCorretorOnlineNaRoleta(profile?.status_roleta, profile?.ultimo_checkin_roleta);
 
   return (
     <div 
@@ -257,8 +258,9 @@ function FilasPage() {
     mutationFn: async ({ profileId, status }: { profileId: string, status: boolean }) => {
       const { error } = await supabase
         .from("perfis")
-        .update({ 
+        .update({
           status_roleta: !status,
+          em_plantao: !status,
           ultimo_checkin_roleta: !status ? new Date().toISOString() : null
         })
         .eq("id", profileId);

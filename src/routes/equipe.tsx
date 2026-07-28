@@ -19,6 +19,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
+import { isCorretorOnlineNaRoleta } from "@/lib/utils";
 
 export const Route = createFileRoute("/equipe")({
   head: () => ({ meta: [{ title: "Equipe — CRM" }] }),
@@ -102,13 +103,19 @@ function TeamPage() {
       return teamWithMetrics;
     },
     enabled: !!profile?.imobiliaria_id,
+    refetchInterval: 60000,
   });
 
   const togglePlantaoMutation = useMutation({
     mutationFn: async ({ id, em_plantao }: { id: string, em_plantao: boolean }) => {
+      const novoValor = !em_plantao;
       const { error } = await supabase
         .from("perfis")
-        .update({ em_plantao: !em_plantao })
+        .update({
+          em_plantao: novoValor,
+          status_roleta: novoValor,
+          ultimo_checkin_roleta: novoValor ? new Date().toISOString() : null,
+        })
         .eq("id", id);
       if (error) throw error;
     },
@@ -217,7 +224,9 @@ function TeamPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredTeam?.map((member) => (
+                filteredTeam?.map((member) => {
+                  const online = isCorretorOnlineNaRoleta(member.status_roleta, member.ultimo_checkin_roleta);
+                  return (
                   <TableRow key={member.id} className="group hover:bg-slate-50/50">
                     <TableCell>
                       <div className="flex items-center gap-3">
@@ -226,7 +235,7 @@ function TeamPage() {
                             <AvatarImage src={member.avatar_url || ""} />
                             <AvatarFallback className="bg-slate-100 text-slate-500 font-bold text-xs">{member.nome?.[0]}</AvatarFallback>
                           </Avatar>
-                          {member.em_plantao && (
+                          {online && (
                              <div className="absolute -bottom-0.5 -right-0.5 bg-white p-0.5 rounded-full">
                                 <div className="h-2 w-2 bg-emerald-500 rounded-full border border-white" />
                              </div>
@@ -261,16 +270,16 @@ function TeamPage() {
                         }`}
                         onClick={() => {
                           if (!can('manage_team')) return;
-                          togglePlantaoMutation.mutate({ id: member.id, em_plantao: !!member.em_plantao });
+                          togglePlantaoMutation.mutate({ id: member.id, em_plantao: online });
                         }}
                       >
                         {togglePlantaoMutation.isPending && togglePlantaoMutation.variables?.id === member.id ? (
                           <Loader2 className="h-3 w-3 animate-spin text-slate-400" />
                         ) : (
-                          <div className={`h-1.5 w-1.5 rounded-full ${member.em_plantao ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" : "bg-slate-300"}`} />
+                          <div className={`h-1.5 w-1.5 rounded-full ${online ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" : "bg-slate-300"}`} />
                         )}
                         <span className="text-[10px] font-bold text-slate-500 tracking-tight">
-                          {member.em_plantao ? "Disponível" : "Offline"}
+                          {online ? "Disponível" : "Offline"}
                         </span>
                       </div>
                     </TableCell>
@@ -322,7 +331,8 @@ function TeamPage() {
                       )}
                     </TableCell>
                   </TableRow>
-                ))
+                  );
+                })
               )}
             </TableBody>
           </Table>
