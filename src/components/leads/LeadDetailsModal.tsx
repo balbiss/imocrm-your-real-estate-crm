@@ -54,6 +54,7 @@ import { format, isToday } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAuth } from "@/context/AuthContext";
+import { getRetrocompatibleStatus, getColunaPorStatus } from "@/lib/utils";
 
 interface LeadDetailsModalProps {
   leadId: string | null;
@@ -124,30 +125,6 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
     enabled: !!lead?.imobiliaria_id && open,
   });
 
-  const getRetrocompatibleStatus = (nomeColuna: string, posicao: number, total: number) => {
-    const nomeNormalized = nomeColuna.toLowerCase().trim();
-    
-    if (nomeNormalized.includes("novo") || nomeNormalized.includes("triagem") || nomeNormalized.includes("entrada")) return "novo";
-    if (nomeNormalized.includes("rebatida")) return "rebatida";
-    if (nomeNormalized.includes("tarefa") || nomeNormalized.includes("dia")) return "tarefas";
-    if (nomeNormalized.includes("agenda") || nomeNormalized.includes("reunião")) return "agendado";
-    if (nomeNormalized.includes("visita")) return "visitou";
-    if (nomeNormalized.includes("cobrar") || nomeNormalized.includes("document")) return "cobrar_doc";
-    if (nomeNormalized.includes("pendente")) return "pendente";
-    if (nomeNormalized.includes("aprovado") || nomeNormalized.includes("fechamento")) return "aprovado";
-    if (nomeNormalized.includes("reprovado") || nomeNormalized.includes("perdido")) return "reprovado";
-    if (nomeNormalized.includes("futuro") || nomeNormalized.includes("frio") || nomeNormalized.includes("arquivado")) return "futuros";
-
-    const ratio = posicao / Math.max(total - 1, 1);
-    if (ratio < 0.15) return "novo";
-    if (ratio < 0.3) return "rebatida";
-    if (ratio < 0.45) return "tarefas";
-    if (ratio < 0.6) return "agendado";
-    if (ratio < 0.7) return "visitou";
-    if (ratio < 0.8) return "cobrar_doc";
-    if (ratio < 0.9) return "pendente";
-    return "futuros";
-  };
 
   // Lista de corretores da imobiliária, pra dono/gerente poderem transferir o lead
   const { data: corretoresImobiliaria } = useQuery({
@@ -496,9 +473,14 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
       nextDate.setHours(nextDate.getHours() + 24);
       payload.lembrete_follow_up = nextDate.toISOString();
       
-      // Move para tarefas (se não for venda ou descarte)
+      // Move para tarefas (se não for venda ou descarte) — precisa mudar o
+      // status E a coluna do kanban juntos, senao o card fica visualmente
+      // parado na coluna antiga (ex: "Lead Novo") mesmo o historico
+      // registrando que o status virou "tarefas".
       if (lead.status !== 'venda_concluida' && !lead.descartado_em) {
          payload.status = 'tarefas';
+         const colunaTarefas = getColunaPorStatus(colunas, 'tarefas');
+         if (colunaTarefas) payload.coluna_kanban_id = colunaTarefas.id;
       }
     }
     

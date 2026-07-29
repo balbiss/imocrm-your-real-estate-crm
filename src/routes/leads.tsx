@@ -25,6 +25,7 @@ import { toast } from "sonner";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { getColunaPorStatus } from "@/lib/utils";
 
 export const Route = createFileRoute("/leads")({
   head: () => ({ meta: [{ title: "Leads — CRM" }] }),
@@ -56,6 +57,21 @@ function LeadsPage() {
       return data;
     },
     enabled: !!user,
+  });
+
+  const { data: colunas } = useQuery({
+    queryKey: ["colunas_kanban", profile?.imobiliaria_id],
+    queryFn: async () => {
+      if (!profile?.imobiliaria_id) return [];
+      const { data, error } = await supabase
+        .from("colunas_kanban")
+        .select("id, nome, posicao")
+        .eq("imobiliaria_id", profile.imobiliaria_id)
+        .order("posicao", { ascending: true });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!profile?.imobiliaria_id,
   });
 
   const { data: leads, isLoading, error } = useQuery({
@@ -144,9 +160,18 @@ function LeadsPage() {
       const lote = shuffled.slice(0, quantidadePuxar);
       const loteIds = lote.map(l => l.id);
 
+      // Move pra coluna "Rebatida" tambem — so mudar o status sem mudar a
+      // coluna deixa o card visualmente parado onde estava (ex: Lead Novo).
+      const colunaRebatida = getColunaPorStatus(colunas, "rebatida");
+
       const { error: updateError } = await supabase
         .from("leads")
-        .update({ corretor_id: user.id, status: "rebatida", ultima_acao_at: new Date().toISOString() })
+        .update({
+          corretor_id: user.id,
+          status: "rebatida",
+          ultima_acao_at: new Date().toISOString(),
+          ...(colunaRebatida ? { coluna_kanban_id: colunaRebatida.id } : {}),
+        })
         .in("id", loteIds);
 
       if (updateError) throw updateError;

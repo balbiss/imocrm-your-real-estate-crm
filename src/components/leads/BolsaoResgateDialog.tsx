@@ -8,6 +8,7 @@ import { Loader2, AlertTriangle, RefreshCw, Hand } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
+import { getColunaPorStatus } from "@/lib/utils";
 
 interface BolsaoResgateDialogProps {
   open: boolean;
@@ -34,6 +35,20 @@ export function BolsaoResgateDialog({ open, onOpenChange, imobiliariaId }: Bolsa
       return count || 0;
     },
     enabled: open && !!user,
+  });
+
+  const { data: colunas } = useQuery({
+    queryKey: ["colunas_kanban", imobiliariaId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("colunas_kanban")
+        .select("id, nome, posicao")
+        .eq("imobiliaria_id", imobiliariaId)
+        .order("posicao", { ascending: true });
+      if (error) throw error;
+      return data;
+    },
+    enabled: open && !!imobiliariaId,
   });
 
   // Trava 2: Limite de Rebatidas hoje (30)
@@ -110,11 +125,13 @@ export function BolsaoResgateDialog({ open, onOpenChange, imobiliariaId }: Bolsa
         throw new Error("Limite diário de 30 rebatidas atingido.");
       }
 
+      const colunaRebatida = getColunaPorStatus(colunas, "rebatida");
       const { error } = await supabase
         .from("leads")
-        .update({ 
+        .update({
           corretor_id: user.id,
           status: "rebatida",
+          ...(colunaRebatida ? { coluna_kanban_id: colunaRebatida.id } : {}),
         })
         .eq("id", leadId);
 

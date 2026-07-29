@@ -143,6 +143,12 @@ whatsappRouter.post("/send", async (req, res) => {
         : attachment.base64;
       const mimetype = attachment.mimetype || "application/octet-stream";
 
+      // WhatsApp rejeita video mandado como mensagem de video acima de ~16mb
+      // (limite bem mais apertado que o de documento) — video grande demais
+      // vai como documento em vez de dar erro no envio.
+      const tamanhoBytes = (pureBase64.length * 3) / 4;
+      const videoGrandeDemais = mimetype.startsWith("video/") && tamanhoBytes > 16 * 1024 * 1024;
+
       if (mimetype.startsWith("image/")) {
         messageContent.image = pureBase64;
         if (text) messageContent.caption = text;
@@ -150,7 +156,7 @@ whatsappRouter.post("/send", async (req, res) => {
         messageContent.audio = pureBase64;
         messageContent.mimetype = mimetype;
         messageContent.ptt = true;
-      } else if (mimetype.startsWith("video/")) {
+      } else if (mimetype.startsWith("video/") && !videoGrandeDemais) {
         messageContent.video = pureBase64;
         messageContent.mimetype = mimetype;
         if (text) messageContent.caption = text;

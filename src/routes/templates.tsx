@@ -245,7 +245,7 @@ function TemplatesPage() {
                 </div>
               </div>
               <div className="space-y-1.5">
-                <label className="text-saas-xs font-bold text-slate-500 uppercase tracking-wider">Anexo (imagem, vídeo ou documento)</label>
+                <label className="text-saas-xs font-bold text-slate-500 uppercase tracking-wider">Anexo (imagem, vídeo, áudio ou documento)</label>
                 {editingTemplate?.anexo_url && !anexoFile && !removerAnexoExistente ? (
                   <div className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2">
                     <div className="flex items-center gap-2 min-w-0">
@@ -260,7 +260,7 @@ function TemplatesPage() {
                   <div className="flex items-center gap-2">
                     <Input
                       type="file"
-                      accept="image/*,video/*,application/pdf,.doc,.docx,.xls,.xlsx"
+                      accept="image/*,video/*,audio/*,application/pdf,.doc,.docx,.xls,.xlsx"
                       className="h-9 text-saas-sm border-slate-200"
                       onChange={(e) => {
                         setAnexoFile(e.target.files?.[0] || null);

@@ -16,3 +16,44 @@ export function isCorretorOnlineNaRoleta(statusRoleta: boolean | null | undefine
   if (Number.isNaN(checkinTime)) return false;
   return Date.now() - checkinTime < ROLETA_CHECKIN_TIMEOUT_MS;
 }
+
+// Deriva o status "retrocompatível" (usado em dashboard/relatórios) a partir
+// da coluna de kanban real do lead — as colunas são livremente renomeadas/
+// reordenadas por cada imobiliária, então isso tenta casar pelo nome antes
+// de cair num fallback por posição relativa.
+export function getRetrocompatibleStatus(nomeColuna: string, posicao: number, total: number): string {
+  const nomeNormalized = nomeColuna.toLowerCase().trim();
+
+  if (nomeNormalized.includes("novo") || nomeNormalized.includes("triagem") || nomeNormalized.includes("entrada")) return "novo";
+  if (nomeNormalized.includes("rebatida")) return "rebatida";
+  if (nomeNormalized.includes("tarefa") || nomeNormalized.includes("dia")) return "tarefas";
+  if (nomeNormalized.includes("agenda") || nomeNormalized.includes("reunião")) return "agendado";
+  if (nomeNormalized.includes("visita")) return "visitou";
+  if (nomeNormalized.includes("cobrar") || nomeNormalized.includes("document")) return "cobrar_doc";
+  if (nomeNormalized.includes("pendente")) return "pendente";
+  if (nomeNormalized.includes("aprovado") || nomeNormalized.includes("fechamento")) return "aprovado";
+  if (nomeNormalized.includes("reprovado") || nomeNormalized.includes("perdido")) return "reprovado";
+  if (nomeNormalized.includes("futuro") || nomeNormalized.includes("frio") || nomeNormalized.includes("arquivado")) return "futuros";
+
+  const ratio = posicao / Math.max(total - 1, 1);
+  if (ratio < 0.15) return "novo";
+  if (ratio < 0.3) return "rebatida";
+  if (ratio < 0.45) return "tarefas";
+  if (ratio < 0.6) return "agendado";
+  if (ratio < 0.7) return "visitou";
+  if (ratio < 0.8) return "cobrar_doc";
+  if (ratio < 0.9) return "pendente";
+  return "futuros";
+}
+
+// Inverso: acha a coluna de kanban que representa um dado status
+// retrocompatível, pra manter coluna_kanban_id e status sincronizados
+// quando o codigo muda o status "por baixo dos panos" (ex: rebatida em
+// lote, avanco de cadencia de chamada) sem o usuario arrastar o card.
+export function getColunaPorStatus<T extends { nome: string; posicao: number; id: string }>(
+  colunas: T[] | undefined | null,
+  status: string
+): T | undefined {
+  if (!colunas || colunas.length === 0) return undefined;
+  return colunas.find((c) => getRetrocompatibleStatus(c.nome, c.posicao, colunas.length) === status);
+}
