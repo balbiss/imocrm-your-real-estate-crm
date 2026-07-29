@@ -60,13 +60,14 @@ interface LeadDetailsModalProps {
   leadId: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  initialTab?: "detalhes" | "chat";
 }
 
-export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModalProps) {
+export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "detalhes" }: LeadDetailsModalProps) {
   const queryClient = useQueryClient();
   const { can, role } = usePermissions();
   const { user: authUser } = useAuth();
-  const [activeTab, setActiveTab] = useState("detalhes");
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [isEditing, setIsEditing] = useState(false);
   const [editingInteracaoId, setEditingInteracaoId] = useState<string | null>(null);
   const [editingInteracaoTexto, setEditingInteracaoTexto] = useState("");
@@ -83,6 +84,14 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // O modal e reaproveitado entre leads diferentes (nao remonta por key),
+  // entao a aba precisa ser resetada toda vez que abre de novo -- senao um
+  // clique no icone do WhatsApp de um lead pode abrir na aba errada se o
+  // usuario tinha deixado outro lead aberto no "Detalhes" antes.
+  useEffect(() => {
+    if (open) setActiveTab(initialTab);
+  }, [open, initialTab]);
 
   const [editNome, setEditNome] = useState("");
   const [editTelefone, setEditTelefone] = useState("");
@@ -552,7 +561,7 @@ export function LeadDetailsModal({ leadId, open, onOpenChange }: LeadDetailsModa
             </div>
           </div>
 
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "detalhes" | "chat")} className="w-full">
             <TabsList className="bg-transparent border-b rounded-none h-9 p-0 gap-5">
               {[
                 { id: "detalhes", icon: User, label: "Detalhes" },

@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Table,
   TableBody,
@@ -10,12 +11,28 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { MessageSquare, Phone, MoreVertical, Flame, Snowflake, Sun } from "lucide-react";
 import { LeadDetailsModal } from "./LeadDetailsModal";
+import { supabase } from "@/integrations/supabase/client";
+import { getRetrocompatibleStatus } from "@/lib/utils";
+import { toast } from "sonner";
+
+interface Coluna {
+  id: string;
+  nome: string;
+  posicao: number;
+}
 
 interface LeadsTableProps {
   leads?: any[];
   isLoading?: boolean;
+  colunas?: Coluna[];
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -34,14 +51,42 @@ const STATUS_LABELS: Record<string, string> = {
   venda_concluida: "Venda Concluída",
 };
 
-export function LeadsTable({ leads, isLoading }: LeadsTableProps) {
+export function LeadsTable({ leads, isLoading, colunas }: LeadsTableProps) {
+  const queryClient = useQueryClient();
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalInitialTab, setModalInitialTab] = useState<"detalhes" | "chat">("detalhes");
 
   const handleLeadClick = (id: string) => {
     setSelectedLeadId(id);
+    setModalInitialTab("detalhes");
     setIsModalOpen(true);
   };
+
+  const handleOpenChat = (id: string) => {
+    setSelectedLeadId(id);
+    setModalInitialTab("chat");
+    setIsModalOpen(true);
+  };
+
+  // Muda o status direto na lista, sem abrir o card — move status e coluna
+  // do kanban juntos (mesma logica de handleMoveColuna no LeadDetailsModal),
+  // senao o card fica visualmente parado na coluna antiga.
+  const changeStatusMutation = useMutation({
+    mutationFn: async ({ leadId, coluna }: { leadId: string; coluna: Coluna }) => {
+      const status = getRetrocompatibleStatus(coluna.nome, coluna.posicao, colunas?.length || 1);
+      const { error } = await supabase
+        .from("leads")
+        .update({ coluna_kanban_id: coluna.id, status } as any)
+        .eq("id", leadId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["leads"] });
+      toast.success("Status atualizado!");
+    },
+    onError: (error: any) => toast.error("Erro ao atualizar status: " + (error?.message || "erro desconhecido")),
+  });
 
   if (isLoading) {
     return (
@@ -94,9 +139,32 @@ export function LeadsTable({ leads, isLoading }: LeadsTableProps) {
                 </div>
               </TableCell>
               <TableCell>
-                <Badge className={`text-[9px] font-bold border-none shadow-none uppercase px-1.5 h-4 ${STATUS_COLORS[lead.status] || 'bg-slate-100 text-slate-600'}`}>
-                  {STATUS_LABELS[lead.status] || lead.status}
-                </Badge>
+                {colunas && colunas.length > 0 ? (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button onClick={(e) => e.stopPropagation()}>
+                        <Badge className={`text-[9px] font-bold border-none shadow-none uppercase px-1.5 h-4 cursor-pointer hover:opacity-80 ${STATUS_COLORS[lead.status] || 'bg-slate-100 text-slate-600'}`}>
+                          {STATUS_LABELS[lead.status] || lead.status}
+                        </Badge>
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" onClick={(e) => e.stopPropagation()}>
+                      {colunas.map((coluna) => (
+                        <DropdownMenuItem
+                          key={coluna.id}
+                          disabled={lead.coluna_kanban_id === coluna.id}
+                          onClick={() => changeStatusMutation.mutate({ leadId: lead.id, coluna })}
+                        >
+                          {coluna.nome}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                ) : (
+                  <Badge className={`text-[9px] font-bold border-none shadow-none uppercase px-1.5 h-4 ${STATUS_COLORS[lead.status] || 'bg-slate-100 text-slate-600'}`}>
+                    {STATUS_LABELS[lead.status] || lead.status}
+                  </Badge>
+                )}
               </TableCell>
               <TableCell>
                 <span className="text-[10px] font-medium text-slate-600 uppercase">
@@ -134,7 +202,7 @@ export function LeadsTable({ leads, isLoading }: LeadsTableProps) {
                     className="h-7 w-7 text-green-600 hover:bg-green-50"
                     onClick={(e) => {
                       e.stopPropagation();
-                      window.open(`https://wa.me/55${lead.telefone.replace(/\D/g, "")}`, "_blank");
+                      handleOpenChat(lead.id);
                     }}
                   >
                     <MessageSquare className="h-3.5 w-3.5" />
@@ -160,10 +228,11 @@ export function LeadsTable({ leads, isLoading }: LeadsTableProps) {
         </TableBody>
       </Table>
 
-      <LeadDetailsModal 
+      <LeadDetailsModal
         leadId={selectedLeadId}
         open={isModalOpen}
         onOpenChange={setIsModalOpen}
+        initialTab={modalInitialTab}
       />
     </div>
   );
