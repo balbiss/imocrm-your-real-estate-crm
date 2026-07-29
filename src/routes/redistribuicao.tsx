@@ -52,16 +52,6 @@ function RedistributionPage() {
     }
   }, [role, loadingPerms, navigate]);
 
-  if (loadingPerms || role === 'corretor') {
-    return (
-      <MainLayout>
-        <div className="flex h-full items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </div>
-      </MainLayout>
-    );
-  }
-
   const { data: profile } = useQuery({
     queryKey: ["user-profile", user?.id],
     queryFn: async () => {
@@ -164,6 +154,16 @@ function RedistributionPage() {
       queryClient.invalidateQueries({ queryKey: ["sidebar-counts"] });
     },
   });
+
+  if (loadingPerms || role === 'corretor') {
+    return (
+      <MainLayout>
+        <div className="flex h-full items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </MainLayout>
+    );
+  }
 
   const handleBulkDistribute = async (mode: 'rodizio' | 'um_corretor', targetCorretorId?: string) => {
     if (selectedLeads.length === 0) {
