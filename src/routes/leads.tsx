@@ -44,6 +44,7 @@ function LeadsPage() {
   const [tempFilter, setTempFilter] = useState<string | null>(null);
   const [corretorFilter, setCorretorFilter] = useState<string>('todos');
   const [cidadeFilter, setCidadeFilter] = useState<string>('todas');
+  const [statusFilter, setStatusFilter] = useState<string>('todos');
   const [showOverdueOnly, setShowOverdueOnly] = useState(false);
   
   const queryClient = useQueryClient();
@@ -73,6 +74,22 @@ function LeadsPage() {
       return data;
     },
     enabled: !!profile?.imobiliaria_id,
+  });
+
+  const { data: aprovacoesPendentesCount } = useQuery({
+    queryKey: ["aprovacoes-pendentes-count", profile?.imobiliaria_id],
+    queryFn: async () => {
+      if (!profile?.imobiliaria_id) return 0;
+      const { count, error } = await supabase
+        .from("leads")
+        .select("*", { count: "exact", head: true })
+        .eq("imobiliaria_id", profile.imobiliaria_id)
+        .eq("descarte_pendente_aprovacao", true);
+      if (error) throw error;
+      return count || 0;
+    },
+    enabled: !!profile?.imobiliaria_id && canMonitor,
+    refetchInterval: 60000,
   });
 
   const { data: leads, isLoading, error } = useQuery({
@@ -211,12 +228,20 @@ function LeadsPage() {
 
 
   const filteredLeads = leads?.filter(lead => {
-    const matchesSearch = lead.nome?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      lead.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      lead.telefone?.includes(searchTerm);
-    
+    const term = searchTerm.toLowerCase().trim();
+    const matchesSearch = !term ||
+      lead.nome?.toLowerCase().includes(term) ||
+      lead.email?.toLowerCase().includes(term) ||
+      lead.telefone?.includes(term) ||
+      lead.origem?.toLowerCase().includes(term) ||
+      lead.referencia?.toLowerCase().includes(term) ||
+      lead.bairro_interesse?.toLowerCase().includes(term) ||
+      (lead.cadencia_chamada != null && `chamada ${lead.cadencia_chamada}`.includes(term));
+
     const matchesTemp = tempFilter ? lead.temperatura === tempFilter : true;
-    
+
+    const matchesStatusColuna = statusFilter === 'todos' ? true : lead.coluna_kanban_id === statusFilter;
+
     const matchesCorretor = corretorFilter === 'meus' ? lead.corretor_id === user?.id
       : corretorFilter !== 'todos' ? lead.corretor_id === corretorFilter
       : true;
@@ -226,7 +251,7 @@ function LeadsPage() {
     const isOverdue = lead.lembrete_follow_up && new Date(lead.lembrete_follow_up) <= new Date() && !lead.data_fechamento;
     const matchesOverdue = showOverdueOnly ? isOverdue : true;
 
-    return matchesSearch && matchesTemp && matchesCorretor && matchesCidade && matchesOverdue;
+    return matchesSearch && matchesTemp && matchesStatusColuna && matchesCorretor && matchesCidade && matchesOverdue;
   });
 
   const cidadesDisponiveis = Array.from(
@@ -271,6 +296,29 @@ function LeadsPage() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+
+            {colunas && colunas.length > 0 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className={`h-9 px-3 border-slate-200 ${statusFilter !== 'todos' ? 'bg-primary/5 border-primary/20' : ''}`}>
+                    <Filter className={`h-3.5 w-3.5 mr-1.5 ${statusFilter !== 'todos' ? 'text-primary' : 'text-slate-400'}`} />
+                    <span className="text-[10px] font-bold uppercase">
+                      {statusFilter !== 'todos' ? colunas.find(c => c.id === statusFilter)?.nome || 'Status' : 'Status'}
+                    </span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48 max-h-64 overflow-y-auto">
+                  <DropdownMenuLabel className="text-[10px] uppercase font-bold text-slate-400">Filtrar por status</DropdownMenuLabel>
+                  <DropdownMenuItem onClick={() => setStatusFilter('todos')} className="text-xs cursor-pointer font-bold">Todos os Status</DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  {colunas.map(coluna => (
+                    <DropdownMenuItem key={coluna.id} onClick={() => setStatusFilter(coluna.id)} className="text-xs cursor-pointer">
+                      {coluna.nome}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
 
             {cidadesDisponiveis.length > 0 && (
               <DropdownMenu>
@@ -321,12 +369,17 @@ function LeadsPage() {
             )}
 
             {canMonitor && (
-              <Button 
-                variant="outline" 
-                className="h-9 px-4 font-bold uppercase text-[10px] tracking-wider border-red-200 text-red-600 hover:bg-red-50 bg-white"
+              <Button
+                variant="outline"
+                className="h-9 px-4 font-bold uppercase text-[10px] tracking-wider border-red-200 text-red-600 hover:bg-red-50 bg-white relative"
                 onClick={() => setIsAprovacoesOpen(true)}
               >
                 Aprovações
+                {!!aprovacoesPendentesCount && (
+                  <span className="absolute -top-1.5 -right-1.5 h-4 min-w-4 px-1 rounded-full bg-red-600 text-white text-[9px] font-black flex items-center justify-center">
+                    {aprovacoesPendentesCount}
+                  </span>
+                )}
               </Button>
             )}
 
@@ -378,7 +431,7 @@ function LeadsPage() {
           <div className="relative flex-1 w-full max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
             <Input 
-              placeholder="Buscar por nome, e-mail ou telefone..." 
+              placeholder="Buscar por nome, e-mail, telefone, campanha, bairro, chamada..." 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-9 h-9 text-saas-sm border-slate-200 focus-visible:ring-primary/20" 

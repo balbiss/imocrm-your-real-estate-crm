@@ -20,7 +20,7 @@ import {
 import { MessageSquare, Phone, MoreVertical, Flame, Snowflake, Sun } from "lucide-react";
 import { LeadDetailsModal } from "./LeadDetailsModal";
 import { supabase } from "@/integrations/supabase/client";
-import { getRetrocompatibleStatus } from "@/lib/utils";
+import { getRetrocompatibleStatus, getColunaPorStatus } from "@/lib/utils";
 import { toast } from "sonner";
 
 interface Coluna {
@@ -88,6 +88,39 @@ export function LeadsTable({ leads, isLoading, colunas }: LeadsTableProps) {
     onError: (error: any) => toast.error("Erro ao atualizar status: " + (error?.message || "erro desconhecido")),
   });
 
+  // Mesma lógica do handleUpdateField("cadencia_chamada", ...) do modal:
+  // agenda follow-up +24h e move status+coluna pra "tarefas" (se não for
+  // venda/descarte), pra não duplicar comportamento divergente entre lista e modal.
+  const changeCadenciaMutation = useMutation({
+    mutationFn: async ({ lead, cadencia }: { lead: any; cadencia: number }) => {
+      const now = new Date();
+      const nextDate = new Date();
+      nextDate.setHours(nextDate.getHours() + 24);
+
+      const payload: any = {
+        cadencia_chamada: cadencia,
+        data_ultima_chamada: now.toISOString(),
+        lembrete_follow_up: nextDate.toISOString(),
+        ultima_acao_at: now.toISOString(),
+      };
+
+      if (lead.status !== "venda_concluida" && !lead.descartado_em) {
+        payload.status = "tarefas";
+        const colunaTarefas = getColunaPorStatus(colunas, "tarefas");
+        if (colunaTarefas) payload.coluna_kanban_id = colunaTarefas.id;
+      }
+
+      const { error } = await supabase.from("leads").update(payload).eq("id", lead.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["leads"] });
+      queryClient.invalidateQueries({ queryKey: ["compromissos"] });
+      toast.success("Cadência atualizada!");
+    },
+    onError: (error: any) => toast.error("Erro ao atualizar cadência: " + (error?.message || "erro desconhecido")),
+  });
+
   if (isLoading) {
     return (
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
@@ -111,6 +144,7 @@ export function LeadsTable({ leads, isLoading, colunas }: LeadsTableProps) {
           <TableRow>
             <TableHead className="text-[10px] uppercase font-bold text-slate-500 py-3">Lead</TableHead>
             <TableHead className="text-[10px] uppercase font-bold text-slate-500">Status</TableHead>
+            <TableHead className="text-[10px] uppercase font-bold text-slate-500">Cadência</TableHead>
             <TableHead className="text-[10px] uppercase font-bold text-slate-500">Origem</TableHead>
             <TableHead className="text-[10px] uppercase font-bold text-slate-500">Referência</TableHead>
             <TableHead className="text-[10px] uppercase font-bold text-slate-500">Corretor</TableHead>
@@ -165,6 +199,28 @@ export function LeadsTable({ leads, isLoading, colunas }: LeadsTableProps) {
                     {STATUS_LABELS[lead.status] || lead.status}
                   </Badge>
                 )}
+              </TableCell>
+              <TableCell>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button onClick={(e) => e.stopPropagation()}>
+                      <Badge variant="outline" className="text-[9px] font-bold uppercase px-1.5 h-4 cursor-pointer hover:opacity-80 border-slate-200 text-slate-600 bg-white">
+                        {lead.cadencia_chamada ? `Chamada ${lead.cadencia_chamada}` : "Início"}
+                      </Badge>
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" onClick={(e) => e.stopPropagation()}>
+                    {[0, 1, 2, 3, 4, 5, 6, 7].map((n) => (
+                      <DropdownMenuItem
+                        key={n}
+                        disabled={(lead.cadencia_chamada || 0) === n}
+                        onClick={() => changeCadenciaMutation.mutate({ lead, cadencia: n })}
+                      >
+                        {n === 0 ? "Início" : `Chamada ${n}`}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </TableCell>
               <TableCell>
                 <span className="text-[10px] font-medium text-slate-600 uppercase">

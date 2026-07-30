@@ -260,7 +260,10 @@ function AgendaPage() {
               </div>
               <div className="flex-1 grid grid-cols-7 auto-rows-[minmax(100px,1fr)] overflow-y-auto">
                 {days.map((day, idx) => {
-                  const dayEvents = allEvents.filter(e => isSameDay(e.date, day));
+                  // A grade do Calendário é só pra visita/FID agendada — os
+                  // follow-ups continuam aparecendo normalmente na aba
+                  // "Lista de Tarefas" (atrasadas/a fazer/futuras usam allEvents).
+                  const dayEvents = allEvents.filter(e => (e.type === 'visita' || e.type === 'fid') && isSameDay(e.date, day));
                   const isCurrentMonth = isSameMonth(day, currentMonth);
                   const isTodayDate = isToday(day);
 

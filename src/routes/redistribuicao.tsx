@@ -138,13 +138,15 @@ function RedistributionPage() {
     mutationFn: async (leadId: string) => {
       const { error } = await supabase
         .from("leads")
-        .update({ 
+        .update({
           corretor_id: null,
           descartado_em: null,
           descartado_por: null,
           motivo_descarte: null,
           status: "novo",
-          tentativas_contato: 0
+          tentativas_contato: 0,
+          lembrete_follow_up: null,
+          data_visita: null
         })
         .eq("id", leadId);
       if (error) throw error;

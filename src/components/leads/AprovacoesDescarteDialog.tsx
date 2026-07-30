@@ -75,6 +75,7 @@ export function AprovacoesDescarteDialog({ open, onOpenChange, imobiliariaId }: 
     onSuccess: () => {
       toast.success("Descarte aprovado. Lead removido!");
       queryClient.invalidateQueries({ queryKey: ["aprovacoes-descarte"] });
+      queryClient.invalidateQueries({ queryKey: ["aprovacoes-pendentes-count"] });
       queryClient.invalidateQueries({ queryKey: ["leads"] });
     },
     onError: (error: any) => toast.error(error.message)
@@ -104,6 +105,7 @@ export function AprovacoesDescarteDialog({ open, onOpenChange, imobiliariaId }: 
     onSuccess: () => {
       toast.info("Descarte rejeitado. O lead voltou para o corretor.");
       queryClient.invalidateQueries({ queryKey: ["aprovacoes-descarte"] });
+      queryClient.invalidateQueries({ queryKey: ["aprovacoes-pendentes-count"] });
       queryClient.invalidateQueries({ queryKey: ["leads"] });
     },
     onError: (error: any) => toast.error(error.message)

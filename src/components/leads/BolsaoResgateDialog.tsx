@@ -131,6 +131,8 @@ export function BolsaoResgateDialog({ open, onOpenChange, imobiliariaId }: Bolsa
         .update({
           corretor_id: user.id,
           status: "rebatida",
+          lembrete_follow_up: null,
+          data_visita: null,
           ...(colunaRebatida ? { coluna_kanban_id: colunaRebatida.id } : {}),
         })
         .eq("id", leadId);

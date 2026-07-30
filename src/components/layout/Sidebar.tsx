@@ -62,54 +62,48 @@ export function Sidebar({ collapsed, onClose }: { collapsed: boolean; onClose?: 
   // Mutação para alternar plantão
   const mutation = useMutation({
     mutationFn: async (newValue: boolean) => {
-      if (newValue) {
-        // Validar horário de check-in
-        const agora = new Date();
-        const horas = agora.getHours();
-        const minutos = agora.getMinutes();
-        const tempoAtual = horas * 60 + minutos;
-        const manhaAbre = 9 * 60 + 30; // 09:30
-        const tardeAbre = 13 * 60 + 45; // 13:45
-
-        if (tempoAtual < manhaAbre) {
-          throw new Error("A fila da manhã só abre às 09:30.");
-        }
-        if (tempoAtual >= 12 * 60 + 30 && tempoAtual < tardeAbre) { // assumindo almoço 12:30 às 13:45
-          throw new Error("A fila da tarde só abre às 13:45.");
-        }
-      }
-
       const { error: profileError } = await supabase
         .from("perfis")
-        .update({ 
+        .update({
           em_plantao: newValue,
           status_roleta: newValue,
           ultimo_checkin: newValue ? new Date().toISOString() : null,
           ultimo_checkin_roleta: newValue ? new Date().toISOString() : null
         })
         .eq("id", user?.id);
-      
+
       if (profileError) throw profileError;
 
-      // Sincronizar com a tabela de filas_atendimento
+      // A posição na fila (filas_atendimento) é permanente — só criamos uma
+      // linha na primeira vez que o corretor entra em plantão. Ficar
+      // ligando/desligando depois disso NUNCA mexe em filas_atendimento,
+      // porque isso jogava o corretor pro fim da fila a cada toggle
+      // (get_next_corretor_rodizio usa a posição salva + perfis.status_roleta
+      // pra decidir quem está elegível, sem precisar remover/recriar a linha).
       if (newValue) {
-        // Buscar última posição
-        const { data: lastPos } = await supabase
+        const { data: existing } = await supabase
           .from("filas_atendimento")
-          .select("posicao")
-          .order("posicao", { ascending: false })
-          .limit(1);
-        
-        const nextPos = (lastPos?.[0]?.posicao || 0) + 1;
+          .select("id")
+          .eq("corretor_id", user?.id)
+          .maybeSingle();
 
-        await supabase.from("filas_atendimento").upsert({
-          imobiliaria_id: profile?.imobiliaria_id,
-          corretor_id: user?.id,
-          posicao: nextPos,
-          status_on: true
-        });
-      } else {
-        await supabase.from("filas_atendimento").delete().eq("corretor_id", user?.id);
+        if (!existing) {
+          const { data: lastPos } = await supabase
+            .from("filas_atendimento")
+            .select("posicao")
+            .eq("imobiliaria_id", profile?.imobiliaria_id)
+            .order("posicao", { ascending: false })
+            .limit(1);
+
+          const nextPos = (lastPos?.[0]?.posicao || 0) + 1;
+
+          await supabase.from("filas_atendimento").insert({
+            imobiliaria_id: profile?.imobiliaria_id,
+            corretor_id: user?.id,
+            posicao: nextPos,
+            status_on: true
+          });
+        }
       }
     },
     onError: (error: any) => {
@@ -144,13 +138,24 @@ export function Sidebar({ collapsed, onClose }: { collapsed: boolean; onClose?: 
       const yesterday = new Date();
       yesterday.setHours(yesterday.getHours() - 24);
 
-      const { count: filaCount } = await supabase
+      // Mesma regra das duas abas de /redistribuicao (bolsão + presos), pra
+      // o número do badge bater com o que realmente aparece na tela.
+      const { count: bolsaoCount } = await supabase
         .from("leads")
         .select("*", { count: "exact", head: true })
         .eq("imobiliaria_id", profile.imobiliaria_id)
+        .is("corretor_id", null)
+        .is("descartado_em", null);
+
+      const { count: presosCount } = await supabase
+        .from("leads")
+        .select("*", { count: "exact", head: true })
+        .eq("imobiliaria_id", profile.imobiliaria_id)
+        .not("corretor_id", "is", null)
+        .is("descartado_em", null)
         .or(`tentativas_contato.gte.5,and(status.eq.novo,created_at.lt.${yesterday.toISOString()})`);
 
-      return { leads: leadsCount || 0, fila: filaCount || 0 };
+      return { leads: leadsCount || 0, fila: (bolsaoCount || 0) + (presosCount || 0) };
     },
     enabled: !!profile?.imobiliaria_id,
     staleTime: 1000 * 30,

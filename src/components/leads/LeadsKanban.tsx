@@ -168,9 +168,14 @@ export function LeadsKanban({ leads: initialLeads, isLoading: initialLoading, im
     setIsModalOpen(true);
   };
 
+  // Coluna sem nenhum lead fica oculta pra não poluir a tela — ela volta a
+  // aparecer sozinha assim que algum lead for movido pra ela (via dropdown de
+  // status no card/modal; não tem drag-and-drop nesse Kanban).
+  const stagesComLeads = stages.filter((stage) => leadsByStage[stage.id].length > 0);
+
   return (
     <div className="flex gap-3 h-[calc(100vh-10rem)] overflow-x-auto pb-4 custom-scrollbar">
-      {stages.map((stage) => (
+      {stagesComLeads.map((stage) => (
         <div key={stage.id} className="flex-shrink-0 w-72 flex flex-col gap-3">
           <div className="flex items-center justify-between px-1">
             <div className="flex items-center gap-1.5">
@@ -211,10 +216,13 @@ export function LeadsKanban({ leads: initialLeads, isLoading: initialLoading, im
                         </CardTitle>
                         <div className="flex items-center gap-1.5">
                           <span className="text-[9px] font-medium text-slate-400 uppercase tracking-tight">
-                            {Math.floor((new Date().getTime() - new Date(lead.created_at).getTime()) / (1000 * 60 * 60 * 24))} dias parado
+                            {Math.floor((new Date().getTime() - new Date(lead.ultima_acao_at || lead.created_at).getTime()) / (1000 * 60 * 60 * 24))} dias parado
                           </span>
                           {lead.sla_vencido && (
                             <Badge className="text-[8px] h-3.5 px-1 font-bold bg-red-100 text-red-600 border-none uppercase">SLA</Badge>
+                          )}
+                          {!!lead.cadencia_chamada && (
+                            <Badge className="text-[8px] h-3.5 px-1 font-bold bg-primary/10 text-primary border-none uppercase">Chamada {lead.cadencia_chamada}</Badge>
                           )}
                         </div>
                       </div>
@@ -286,11 +294,6 @@ export function LeadsKanban({ leads: initialLeads, isLoading: initialLoading, im
                   </CardContent>
                 </Card>
               ))}
-              {leadsByStage[stage.id].length === 0 && (
-                <div className="border border-dashed border-slate-200 rounded-lg p-6 flex flex-col items-center justify-center text-center bg-slate-50/50">
-                  <p className="text-[10px] text-slate-400 font-medium">Vazio</p>
-                </div>
-              )}
             </div>
           </ScrollArea>
         </div>

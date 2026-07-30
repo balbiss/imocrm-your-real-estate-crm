@@ -446,6 +446,8 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
       setFollowUpDate("");
       setFollowUpObs("");
       queryClient.invalidateQueries({ queryKey: ["lead", leadId] });
+      queryClient.invalidateQueries({ queryKey: ["leads"] });
+      queryClient.invalidateQueries({ queryKey: ["compromissos"] });
     } catch (error) {
       toast.error("Erro ao agendar lembrete");
     }
