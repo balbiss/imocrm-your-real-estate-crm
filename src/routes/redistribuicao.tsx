@@ -69,36 +69,84 @@ function RedistributionPage() {
     queryKey: ["leads-redistribution", profile?.imobiliaria_id, activeTab],
     queryFn: async () => {
       if (!profile?.imobiliaria_id) return [];
-      
-      let query = supabase
-        .from("leads")
-        .select(`
-          *,
-          corretor:perfis!corretor_id(nome)
-        `)
-        .eq("imobiliaria_id", profile.imobiliaria_id);
 
-      if (activeTab === "bolsao") {
-        query = query.is("corretor_id", null).is("descartado_em", null);
-      } else if (activeTab === "descartados") {
-        query = query.not("descartado_em", "is", null);
-      } else {
-        // Regra de redistribuição: tentativas >= 5 ou sem contato há > 24h
-        const yesterday = new Date();
-        yesterday.setHours(yesterday.getHours() - 24);
-        query = query
-          .not("corretor_id", "is", null)
-          .is("descartado_em", null)
-          .or(`tentativas_contato.gte.5,and(status.eq.novo,created_at.lt.${yesterday.toISOString()})`);
+      const buildQuery = () => {
+        let query = supabase
+          .from("leads")
+          .select(`
+            *,
+            corretor:perfis!corretor_id(nome)
+          `)
+          .eq("imobiliaria_id", profile.imobiliaria_id);
+
+        if (activeTab === "bolsao") {
+          query = query.is("corretor_id", null).is("descartado_em", null);
+        } else if (activeTab === "descartados") {
+          query = query.not("descartado_em", "is", null);
+        } else {
+          // Regra de redistribuição: tentativas >= 5 ou sem contato há > 24h
+          const yesterday = new Date();
+          yesterday.setHours(yesterday.getHours() - 24);
+          query = query
+            .not("corretor_id", "is", null)
+            .is("descartado_em", null)
+            .or(`tentativas_contato.gte.5,and(status.eq.novo,created_at.lt.${yesterday.toISOString()})`);
+        }
+
+        return query.order("created_at", { ascending: true });
+      };
+
+      // O Supabase/PostgREST limita cada resposta a 1000 linhas por padrao —
+      // com o Bolsao passando disso, a lista (e os cards de contagem que
+      // dependiam dela) ficava truncada silenciosamente. Busca em paginas de
+      // 1000 ate esgotar, pra sempre trazer a base inteira.
+      const PAGE_SIZE = 1000;
+      let allRows: any[] = [];
+      let from = 0;
+      while (true) {
+        const { data, error } = await buildQuery().range(from, from + PAGE_SIZE - 1);
+        if (error) throw error;
+        allRows = allRows.concat(data || []);
+        if (!data || data.length < PAGE_SIZE) break;
+        from += PAGE_SIZE;
       }
-
-      const { data, error } = await query.order("created_at", { ascending: true });
-      
-      if (error) throw error;
-      return data;
+      return allRows;
     },
     enabled: !!profile?.imobiliaria_id,
     refetchInterval: 10000, // Atualizar a cada 10 segundos para o dono
+    staleTime: 1000 * 30,
+  });
+
+  // Cards do topo mostram os totais reais de Bolsao/Presos, independente da
+  // aba ativa — antes eles liam do array `leads` (que so tinha a aba atual,
+  // e ainda por cima vinha truncado em 1000 linhas), entao o numero exibido
+  // nunca batia com a base real.
+  const { data: statCounts } = useQuery({
+    queryKey: ["leads-redistribution-stats", profile?.imobiliaria_id],
+    queryFn: async () => {
+      if (!profile?.imobiliaria_id) return { semContato: 0, abandonados: 0 };
+
+      const { count: semContato } = await supabase
+        .from("leads")
+        .select("*", { count: "exact", head: true })
+        .eq("imobiliaria_id", profile.imobiliaria_id)
+        .is("corretor_id", null)
+        .is("descartado_em", null);
+
+      const yesterday = new Date();
+      yesterday.setHours(yesterday.getHours() - 24);
+      const { count: abandonados } = await supabase
+        .from("leads")
+        .select("*", { count: "exact", head: true })
+        .eq("imobiliaria_id", profile.imobiliaria_id)
+        .not("corretor_id", "is", null)
+        .is("descartado_em", null)
+        .or(`tentativas_contato.gte.5,and(status.eq.novo,created_at.lt.${yesterday.toISOString()})`);
+
+      return { semContato: semContato || 0, abandonados: abandonados || 0 };
+    },
+    enabled: !!profile?.imobiliaria_id,
+    refetchInterval: 10000,
     staleTime: 1000 * 30,
   });
 
@@ -267,7 +315,7 @@ function RedistributionPage() {
                <div>
                   <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest leading-none mb-1">Sem Contato</p>
                   <p className="text-xl font-black text-slate-800">
-                    {leads?.filter(l => l.status === 'novo' && !l.descartado_em).length.toString().padStart(2, '0') || "00"}
+                    {(statCounts?.semContato ?? 0).toString().padStart(2, '0')}
                   </p>
                </div>
             </CardContent>
@@ -281,7 +329,7 @@ function RedistributionPage() {
                <div>
                   <p className="text-[10px] font-black text-red-600 uppercase tracking-widest leading-none mb-1">Abandonados</p>
                   <p className="text-xl font-black text-slate-800">
-                    {leads?.filter(l => l.tentativas_contato >= 5 && !l.descartado_em).length.toString().padStart(2, '0') || "00"}
+                    {(statCounts?.abandonados ?? 0).toString().padStart(2, '0')}
                   </p>
                </div>
             </CardContent>

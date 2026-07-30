@@ -65,12 +65,25 @@ function TeamPage() {
       if (membersError) throw membersError;
 
       // Busca TODOS os leads da imobiliária de uma vez para calcular métricas em memória (mais rápido e sem bugs de RLS)
-      const { data: allLeads, error: leadsError } = await supabase
-        .from("leads")
-        .select("id, corretor_id, status, created_at, primeiro_contato_em")
-        .eq("imobiliaria_id", profile.imobiliaria_id);
-
-      if (leadsError) throw leadsError;
+      // O Supabase/PostgREST limita cada resposta a 1000 linhas por padrao —
+      // busca em paginas ate esgotar, pra nao subestimar as metricas de
+      // equipe quando a base passar disso.
+      const PAGE_SIZE = 1000;
+      let allLeads: any[] = [];
+      {
+        let from = 0;
+        while (true) {
+          const { data, error: leadsError } = await supabase
+            .from("leads")
+            .select("id, corretor_id, status, created_at, primeiro_contato_em")
+            .eq("imobiliaria_id", profile.imobiliaria_id)
+            .range(from, from + PAGE_SIZE - 1);
+          if (leadsError) throw leadsError;
+          allLeads = allLeads.concat(data || []);
+          if (!data || data.length < PAGE_SIZE) break;
+          from += PAGE_SIZE;
+        }
+      }
 
       // Busca métricas de leads para cada membro
       const teamWithMetrics = members.map((member) => {

@@ -52,19 +52,33 @@ function DashboardPage() {
     queryFn: async () => {
       if (!profile?.imobiliaria_id || loadingPerms) return null;
 
-      let query = supabase
-        .from("leads")
-        .select("*, corretor:perfis!corretor_id(nome)")
-        .eq("imobiliaria_id", profile.imobiliaria_id);
+      const buildQuery = () => {
+        let query = supabase
+          .from("leads")
+          .select("*, corretor:perfis!corretor_id(nome)")
+          .eq("imobiliaria_id", profile.imobiliaria_id);
 
-      // Se for corretor, filtrar apenas os dele
-      if (role === 'corretor') {
-        query = query.eq("corretor_id", user?.id);
+        // Se for corretor, filtrar apenas os dele
+        if (role === 'corretor') {
+          query = query.eq("corretor_id", user?.id);
+        }
+
+        return query.order("created_at", { ascending: false });
+      };
+
+      // O Supabase/PostgREST limita cada resposta a 1000 linhas por padrao —
+      // busca em paginas ate esgotar, pra nao subestimar as metricas do
+      // dashboard quando a base passar disso.
+      const PAGE_SIZE = 1000;
+      let leads: any[] = [];
+      let from = 0;
+      while (true) {
+        const { data, error: leadsError } = await buildQuery().range(from, from + PAGE_SIZE - 1);
+        if (leadsError) throw leadsError;
+        leads = leads.concat(data || []);
+        if (!data || data.length < PAGE_SIZE) break;
+        from += PAGE_SIZE;
       }
-
-      const { data: leads, error: leadsError } = await query.order("created_at", { ascending: false });
-
-      if (leadsError) throw leadsError;
 
       const stats = {
         totalLeads: leads.length,

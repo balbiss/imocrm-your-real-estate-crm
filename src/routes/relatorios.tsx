@@ -62,11 +62,27 @@ function ReportsPage() {
     queryFn: async () => {
       if (!profile?.imobiliaria_id) return null;
 
-      const { data: leads, error: leadsError } = await supabase
-        .from("leads")
-        .select("*")
-        .eq("imobiliaria_id", profile.imobiliaria_id);
-      
+      // O Supabase/PostgREST limita cada resposta a 1000 linhas por padrao —
+      // busca em paginas ate esgotar, pra nao subestimar os relatorios
+      // quando a base passar disso.
+      const PAGE_SIZE = 1000;
+      let leads: any[] = [];
+      let leadsError: any = null;
+      {
+        let from = 0;
+        while (true) {
+          const { data, error } = await supabase
+            .from("leads")
+            .select("*")
+            .eq("imobiliaria_id", profile.imobiliaria_id)
+            .range(from, from + PAGE_SIZE - 1);
+          if (error) { leadsError = error; break; }
+          leads = leads.concat(data || []);
+          if (!data || data.length < PAGE_SIZE) break;
+          from += PAGE_SIZE;
+        }
+      }
+
       const { data: team, error: corrError } = await supabase
         .from("perfis")
         .select("id, nome, avatar_url")

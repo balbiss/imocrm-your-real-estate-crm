@@ -97,26 +97,40 @@ function LeadsPage() {
     queryFn: async () => {
       if (!profile?.imobiliaria_id || loadingPerms) return [];
 
-      let query = supabase
-        .from("leads")
-        .select(`
-          *,
-          corretor:perfis!corretor_id(nome, avatar_url)
-        `)
-        .eq("imobiliaria_id", profile.imobiliaria_id);
+      const buildQuery = () => {
+        let query = supabase
+          .from("leads")
+          .select(`
+            *,
+            corretor:perfis!corretor_id(nome, avatar_url)
+          `)
+          .eq("imobiliaria_id", profile.imobiliaria_id);
 
-      if (role === 'corretor') {
-        query = query.eq("corretor_id", user?.id);
-      }
+        if (role === 'corretor') {
+          query = query.eq("corretor_id", user?.id);
+        }
 
-      const { data, error } = await query.order("created_at", { ascending: false });
-      
-      if (error) {
-        console.error("Erro ao buscar leads:", error);
-        throw error;
+        return query.order("created_at", { ascending: false });
+      };
+
+      // O Supabase/PostgREST limita cada resposta a 1000 linhas por padrao —
+      // com a base passando disso, o Kanban/Lista ficavam faltando os leads
+      // mais antigos (a ordenacao e por created_at desc). Busca em paginas
+      // de 1000 ate esgotar, pra sempre trazer a base inteira.
+      const PAGE_SIZE = 1000;
+      let allRows: any[] = [];
+      let from = 0;
+      while (true) {
+        const { data, error } = await buildQuery().range(from, from + PAGE_SIZE - 1);
+        if (error) {
+          console.error("Erro ao buscar leads:", error);
+          throw error;
+        }
+        allRows = allRows.concat(data || []);
+        if (!data || data.length < PAGE_SIZE) break;
+        from += PAGE_SIZE;
       }
-      
-      return data;
+      return allRows;
     },
     enabled: !!profile?.imobiliaria_id && !loadingPerms,
     staleTime: 1000 * 60,

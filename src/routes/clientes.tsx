@@ -82,19 +82,33 @@ function ClientesPage() {
     queryFn: async () => {
       if (!profile?.imobiliaria_id || loadingPerms) return [];
 
-      let query = supabase
-        .from("leads")
-        .select("*")
-        .eq("imobiliaria_id", profile.imobiliaria_id);
+      const buildQuery = () => {
+        let query = supabase
+          .from("leads")
+          .select("*")
+          .eq("imobiliaria_id", profile.imobiliaria_id);
 
-      if (role === 'corretor') {
-        query = query.eq("corretor_id", user?.id);
+        if (role === 'corretor') {
+          query = query.eq("corretor_id", user?.id);
+        }
+
+        return query.order("nome");
+      };
+
+      // O Supabase/PostgREST limita cada resposta a 1000 linhas por padrao —
+      // busca em paginas ate esgotar, pra nao faltar clientes na lista
+      // quando a base passar disso.
+      const PAGE_SIZE = 1000;
+      let allRows: any[] = [];
+      let from = 0;
+      while (true) {
+        const { data, error } = await buildQuery().range(from, from + PAGE_SIZE - 1);
+        if (error) throw error;
+        allRows = allRows.concat(data || []);
+        if (!data || data.length < PAGE_SIZE) break;
+        from += PAGE_SIZE;
       }
-
-      const { data, error } = await query.order("nome");
-
-      if (error) throw error;
-      return data;
+      return allRows;
     },
     enabled: !!profile?.imobiliaria_id && !loadingPerms,
   });
