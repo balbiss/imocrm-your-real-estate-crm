@@ -179,7 +179,10 @@ async function criarLeadDoWhatsapp(contactPhone, receivingPhoneNumber, pushName)
   const { data: rodizio } = await supabaseAdmin.rpc("get_next_corretor_rodizio", {
     p_imobiliaria_id: dono.imobiliariaId,
   });
-  const corretorId = rodizio?.[0]?.corretor_id || dono.userId;
+  // Sem ninguem online na roleta, o lead fica sem corretor (cai no Bolsao
+  // pro dono distribuir manualmente depois) em vez de acumular tudo na
+  // conta do dono.
+  const corretorId = rodizio?.[0]?.corretor_id || null;
 
   const { data: novoLead, error } = await supabaseAdmin
     .from("leads")
