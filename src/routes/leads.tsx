@@ -8,7 +8,7 @@ import { AprovacoesDescarteDialog } from "@/components/leads/AprovacoesDescarteD
 import { ManageColumnsDialog } from "@/components/leads/ManageColumnsDialog";
 
 import { Button } from "@/components/ui/button";
-import { Plus, Filter, Search, List, Kanban, AlertCircle, Clock, Flame, Snowflake, Sun, Loader2, RefreshCw, User, Sliders } from "lucide-react";
+import { Plus, Filter, Search, List, Kanban, AlertCircle, Clock, Flame, Snowflake, Sun, Loader2, RefreshCw, User, Sliders, MapPin } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -43,6 +43,7 @@ function LeadsPage() {
   const [view, setView] = useState("kanban");
   const [tempFilter, setTempFilter] = useState<string | null>(null);
   const [corretorFilter, setCorretorFilter] = useState<string>('todos');
+  const [cidadeFilter, setCidadeFilter] = useState<string>('todas');
   const [showOverdueOnly, setShowOverdueOnly] = useState(false);
   
   const queryClient = useQueryClient();
@@ -216,15 +217,21 @@ function LeadsPage() {
     
     const matchesTemp = tempFilter ? lead.temperatura === tempFilter : true;
     
-    const matchesCorretor = corretorFilter === 'meus' ? lead.corretor_id === user?.id 
-      : corretorFilter !== 'todos' ? lead.corretor_id === corretorFilter 
+    const matchesCorretor = corretorFilter === 'meus' ? lead.corretor_id === user?.id
+      : corretorFilter !== 'todos' ? lead.corretor_id === corretorFilter
       : true;
+
+    const matchesCidade = cidadeFilter === 'todas' ? true : lead.bairro_interesse === cidadeFilter;
 
     const isOverdue = lead.lembrete_follow_up && new Date(lead.lembrete_follow_up) <= new Date() && !lead.data_fechamento;
     const matchesOverdue = showOverdueOnly ? isOverdue : true;
-    
-    return matchesSearch && matchesTemp && matchesCorretor && matchesOverdue;
+
+    return matchesSearch && matchesTemp && matchesCorretor && matchesCidade && matchesOverdue;
   });
+
+  const cidadesDisponiveis = Array.from(
+    new Set((leads || []).map(l => l.bairro_interesse).filter((c): c is string => !!c))
+  ).sort();
 
   const leadsVencidosCount = leads?.filter(l => 
     l.lembrete_follow_up && new Date(l.lembrete_follow_up) <= new Date() && !l.data_fechamento
@@ -264,6 +271,29 @@ function LeadsPage() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+
+            {cidadesDisponiveis.length > 0 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className={`h-9 px-3 border-slate-200 ${cidadeFilter !== 'todas' ? 'bg-primary/5 border-primary/20' : ''}`}>
+                    <MapPin className={`h-3.5 w-3.5 mr-1.5 ${cidadeFilter !== 'todas' ? 'text-primary' : 'text-slate-400'}`} />
+                    <span className="text-[10px] font-bold uppercase">
+                      {cidadeFilter !== 'todas' ? cidadeFilter : 'Cidade'}
+                    </span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48 max-h-64 overflow-y-auto">
+                  <DropdownMenuLabel className="text-[10px] uppercase font-bold text-slate-400">Filtrar por cidade</DropdownMenuLabel>
+                  <DropdownMenuItem onClick={() => setCidadeFilter('todas')} className="text-xs cursor-pointer font-bold">Todas as Cidades</DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  {cidadesDisponiveis.map(cidade => (
+                    <DropdownMenuItem key={cidade} onClick={() => setCidadeFilter(cidade)} className="text-xs cursor-pointer">
+                      {cidade}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
 
             {canMonitor && (
               <DropdownMenu>

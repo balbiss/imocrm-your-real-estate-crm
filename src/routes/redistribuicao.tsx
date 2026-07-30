@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, RefreshCw, Users, Shuffle, CheckCircle2, History, UserPlus, AlertCircle, AlertTriangle, Clock, UserCheck, Search } from "lucide-react";
+import { Loader2, RefreshCw, Users, Shuffle, CheckCircle2, History, UserPlus, AlertCircle, AlertTriangle, Clock, UserCheck, Search, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import {
   Select,
@@ -43,6 +43,7 @@ function RedistributionPage() {
   const [activeTab, setActiveTab] = useState("bolsao");
   const [isDistributing, setIsDistributing] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [cidadeFilter, setCidadeFilter] = useState<string>("todas");
 
   // Proteção de rota
   React.useEffect(() => {
@@ -222,7 +223,13 @@ function RedistributionPage() {
     );
   };
 
+  const cidadesDisponiveis = Array.from(
+    new Set((leads || []).map(l => l.bairro_interesse).filter((c): c is string => !!c))
+  ).sort();
+
   const filteredLeads = leads?.filter((lead) => {
+    if (cidadeFilter !== "todas" && lead.bairro_interesse !== cidadeFilter) return false;
+
     if (!searchTerm.trim()) return true;
     const term = searchTerm.toLowerCase();
     return (
@@ -349,14 +356,31 @@ function RedistributionPage() {
             )}
           </div>
 
-          <div className="relative max-w-sm mb-4">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-            <Input
-              placeholder="Buscar por nome, telefone ou corretor..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-9 h-9 text-xs border-slate-200"
-            />
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-4">
+            <div className="relative max-w-sm w-full">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+              <Input
+                placeholder="Buscar por nome, telefone ou corretor..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9 h-9 text-xs border-slate-200"
+              />
+            </div>
+
+            {cidadesDisponiveis.length > 0 && (
+              <Select value={cidadeFilter} onValueChange={setCidadeFilter}>
+                <SelectTrigger className="w-[180px] h-9 text-xs border-slate-200">
+                  <MapPin className="h-3.5 w-3.5 text-slate-400 mr-1" />
+                  <SelectValue placeholder="Cidade" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todas" className="text-xs">Todas as Cidades</SelectItem>
+                  {cidadesDisponiveis.map(cidade => (
+                    <SelectItem key={cidade} value={cidade} className="text-xs">{cidade}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
 
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
