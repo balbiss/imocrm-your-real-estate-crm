@@ -170,6 +170,13 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
   });
 
   const handleMoveColuna = (colunaId: string, nomeColuna: string, posicao: number) => {
+    // Negócio já fechado é estado terminal — não deixa mudar de coluna por
+    // aqui sobrescrever o status 'venda_concluida' (ver LeadsTable.tsx pro
+    // mesmo guard e o motivo: vendas sumindo dos relatórios).
+    if (lead?.status === "venda_concluida") {
+      toast.error("Negócio já fechado — não é possível mudar a coluna por aqui.");
+      return;
+    }
     const retroStatus = getRetrocompatibleStatus(nomeColuna, posicao, colunas ? colunas.length : 10);
     updateMutation.mutate({
       updates: { coluna_kanban_id: colunaId, status: retroStatus },
@@ -432,15 +439,21 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      // followUpDate vem sem timezone ("YYYY-MM-DDTHH:mm", horário local
+      // digitado pelo corretor) — new Date(...).toISOString() converte pro
+      // UTC certo antes de salvar, senão o Postgres assume UTC direto e o
+      // horário exibido depois fica 3h a menos (fuso de Brasília).
+      const followUpDateUtc = new Date(followUpDate).toISOString();
+
       await supabase.from("lembretes_followup").insert({
         lead_id: leadId!,
         corretor_id: user.id,
-        datetime: followUpDate,
+        datetime: followUpDateUtc,
         observacao: followUpObs,
       });
 
       await supabase.from("leads").update({
-        lembrete_follow_up: followUpDate,
+        lembrete_follow_up: followUpDateUtc,
         ultima_acao_at: new Date().toISOString()
       }).eq("id", leadId);
 
@@ -841,15 +854,15 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
                             <SelectItem value="FID" className="font-bold text-green-600">FID</SelectItem>
                           </SelectContent>
                         </Select>
-                        <Input 
-                          type="date" 
-                          value={lead.data_visita ? format(new Date(lead.data_visita), "yyyy-MM-dd") : ""} 
-                          onChange={(e) => handleUpdateField("data_visita", `${e.target.value}T${lead.data_visita ? format(new Date(lead.data_visita), "HH:mm") : "09:00"}`)}
-                          className="flex-1 h-10 text-sm border-primary/20 bg-primary/5 font-bold" 
+                        <Input
+                          type="date"
+                          value={lead.data_visita ? format(new Date(lead.data_visita), "yyyy-MM-dd") : ""}
+                          onChange={(e) => handleUpdateField("data_visita", new Date(`${e.target.value}T${lead.data_visita ? format(new Date(lead.data_visita), "HH:mm") : "09:00"}`).toISOString())}
+                          className="flex-1 h-10 text-sm border-primary/20 bg-primary/5 font-bold"
                         />
-                        <Select 
-                          value={lead.data_visita ? format(new Date(lead.data_visita), "HH:mm") : "09:00"} 
-                          onValueChange={(v) => handleUpdateField("data_visita", `${lead.data_visita ? format(new Date(lead.data_visita), "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd")}T${v}`)}
+                        <Select
+                          value={lead.data_visita ? format(new Date(lead.data_visita), "HH:mm") : "09:00"}
+                          onValueChange={(v) => handleUpdateField("data_visita", new Date(`${lead.data_visita ? format(new Date(lead.data_visita), "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd")}T${v}`).toISOString())}
                         >
                           <SelectTrigger className="w-[90px] h-10 text-xs font-bold border-primary/20 bg-primary/5">
                             <SelectValue />

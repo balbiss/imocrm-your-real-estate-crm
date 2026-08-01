@@ -48,18 +48,25 @@ export function ScheduleTaskModal({ open, onOpenChange }: ScheduleTaskModalProps
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Não autenticado");
 
+      // O <input type="datetime-local"> devolve string sem timezone (ex.:
+      // "2026-08-01T14:30"). new Date(...) interpreta isso como horário
+      // local do navegador e .toISOString() converte certo pra UTC — sem
+      // isso o Postgres assumia UTC direto e o horário salvo ficava 3h
+      // adiantado (3h a menos na hora de exibir de volta em -03).
+      const dateUtc = new Date(date).toISOString();
+
       // 1. Inserir na tabela de lembretes
       const { error: errorLembrete } = await supabase.from("lembretes_followup").insert({
         lead_id: selectedLead.id,
         corretor_id: user.id,
-        datetime: date,
+        datetime: dateUtc,
         observacao: obs,
       });
       if (errorLembrete) throw errorLembrete;
 
       // 2. Atualizar campo no lead para visualização rápida
       const { error: errorLead } = await supabase.from("leads").update({
-        lembrete_follow_up: date
+        lembrete_follow_up: dateUtc
       }).eq("id", selectedLead.id);
       if (errorLead) throw errorLead;
     },

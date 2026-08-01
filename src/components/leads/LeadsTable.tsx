@@ -73,12 +73,19 @@ export function LeadsTable({ leads, isLoading, colunas }: LeadsTableProps) {
   // do kanban juntos (mesma logica de handleMoveColuna no LeadDetailsModal),
   // senao o card fica visualmente parado na coluna antiga.
   const changeStatusMutation = useMutation({
-    mutationFn: async ({ leadId, coluna }: { leadId: string; coluna: Coluna }) => {
+    mutationFn: async ({ lead, coluna }: { lead: any; coluna: Coluna }) => {
+      // Negócio já fechado (handleFechamento em LeadDetailsModal) é estado
+      // terminal — mudar a coluna do kanban não pode sobrescrever o status
+      // 'venda_concluida' por baixo, senão a venda some dos relatórios
+      // (achado real: 3 de 4 vendas fechadas perderam o status assim).
+      if (lead.status === "venda_concluida") {
+        throw new Error("Negócio já fechado — não é possível mudar a coluna por aqui.");
+      }
       const status = getRetrocompatibleStatus(coluna.nome, coluna.posicao, colunas?.length || 1);
       const { error } = await supabase
         .from("leads")
         .update({ coluna_kanban_id: coluna.id, status } as any)
-        .eq("id", leadId);
+        .eq("id", lead.id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -187,7 +194,7 @@ export function LeadsTable({ leads, isLoading, colunas }: LeadsTableProps) {
                         <DropdownMenuItem
                           key={coluna.id}
                           disabled={lead.coluna_kanban_id === coluna.id}
-                          onClick={() => changeStatusMutation.mutate({ leadId: lead.id, coluna })}
+                          onClick={() => changeStatusMutation.mutate({ lead, coluna })}
                         >
                           {coluna.nome}
                         </DropdownMenuItem>
