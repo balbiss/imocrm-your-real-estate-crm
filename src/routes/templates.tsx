@@ -30,12 +30,20 @@ function IconeAnexo({ tipo, className }: { tipo: string | null; className?: stri
   return <FileIcon className={className} />;
 }
 
+type Anexo = { url: string; tipo: string; nome: string };
+
+function anexosDoTemplate(template: any): Anexo[] {
+  if (template?.anexos?.length) return template.anexos;
+  if (template?.anexo_url) return [{ url: template.anexo_url, tipo: template.anexo_tipo, nome: template.anexo_nome }];
+  return [];
+}
+
 function TemplatesPage() {
   const queryClient = useQueryClient();
   const [isOpen, setIsOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<any>(null);
-  const [anexoFile, setAnexoFile] = useState<File | null>(null);
-  const [removerAnexoExistente, setRemoverAnexoExistente] = useState(false);
+  const [anexosExistentes, setAnexosExistentes] = useState<Anexo[]>([]);
+  const [anexosNovos, setAnexosNovos] = useState<File[]>([]);
 
   const { data: templates, isLoading } = useQuery({
     queryKey: ["templates"],
@@ -54,26 +62,30 @@ function TemplatesPage() {
       const { data: userData } = await supabase.auth.getUser();
       if (!userData.user) throw new Error("Não autenticado");
 
-      if (anexoFile) {
-        const fileExt = anexoFile.name.split(".").pop();
+      const novosUploads: Anexo[] = [];
+      for (const file of anexosNovos) {
+        const fileExt = file.name.split(".").pop();
         const filePath = `${userData.user.id}/${crypto.randomUUID()}.${fileExt}`;
         const { error: uploadError } = await supabase.storage
           .from("templates_anexos")
-          .upload(filePath, anexoFile);
+          .upload(filePath, file);
         if (uploadError) throw uploadError;
 
         const { data: { publicUrl } } = supabase.storage
           .from("templates_anexos")
           .getPublicUrl(filePath);
 
-        values.anexo_url = publicUrl;
-        values.anexo_tipo = tipoAnexoPorArquivo(anexoFile);
-        values.anexo_nome = anexoFile.name;
-      } else if (removerAnexoExistente) {
-        values.anexo_url = null;
-        values.anexo_tipo = null;
-        values.anexo_nome = null;
+        novosUploads.push({ url: publicUrl, tipo: tipoAnexoPorArquivo(file), nome: file.name });
       }
+
+      const anexosFinais = [...anexosExistentes, ...novosUploads];
+      values.anexos = anexosFinais;
+      // Colunas legadas (anexo_url/tipo/nome) ficam sincronizadas com o
+      // primeiro anexo, pra qualquer código antigo que ainda leia só elas
+      // continuar funcionando.
+      values.anexo_url = anexosFinais[0]?.url || null;
+      values.anexo_tipo = anexosFinais[0]?.tipo || null;
+      values.anexo_nome = anexosFinais[0]?.nome || null;
 
       if (editingTemplate) {
         const { error } = await supabase
@@ -98,8 +110,8 @@ function TemplatesPage() {
       queryClient.invalidateQueries({ queryKey: ["templates"] });
       setIsOpen(false);
       setEditingTemplate(null);
-      setAnexoFile(null);
-      setRemoverAnexoExistente(false);
+      setAnexosExistentes([]);
+      setAnexosNovos([]);
       toast.success(editingTemplate ? "Template atualizado!" : "Template criado!");
     },
     onError: (error: any) => toast.error("Erro ao salvar: " + (error?.message || "erro desconhecido")),
@@ -124,7 +136,7 @@ function TemplatesPage() {
             <h1 className="text-xl font-bold tracking-tight text-slate-900">Biblioteca de Mensagens</h1>
             <p className="text-saas-sm text-muted-foreground">Padronize o atendimento com templates inteligentes.</p>
           </div>
-          <Button onClick={() => { setEditingTemplate(null); setAnexoFile(null); setRemoverAnexoExistente(false); setIsOpen(true); }} className="h-9 text-[11px] font-bold uppercase tracking-wider px-6">
+          <Button onClick={() => { setEditingTemplate(null); setAnexosExistentes([]); setAnexosNovos([]); setIsOpen(true); }} className="h-9 text-[11px] font-bold uppercase tracking-wider px-6">
             <Plus className="mr-1.5 h-3.5 w-3.5" /> Adicionar Template
           </Button>
         </div>
@@ -148,8 +160,8 @@ function TemplatesPage() {
                     <div className="flex opacity-0 group-hover:opacity-100 transition-opacity">
                       <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-primary" onClick={() => {
                         setEditingTemplate(template);
-                        setAnexoFile(null);
-                        setRemoverAnexoExistente(false);
+                        setAnexosExistentes(anexosDoTemplate(template));
+                        setAnexosNovos([]);
                         setIsOpen(true);
                       }}>
                         <Edit className="h-3.5 w-3.5" />
@@ -161,13 +173,26 @@ function TemplatesPage() {
                   </div>
                 </CardHeader>
                 <CardContent className="p-4 flex-1 flex flex-col">
-                  {template.anexo_url && (
-                    template.anexo_tipo === "imagem" ? (
-                      <img src={template.anexo_url} alt={template.anexo_nome || ""} className="mb-2 h-24 w-full object-cover rounded-lg border border-slate-100" />
+                  {anexosDoTemplate(template).length > 0 && (
+                    anexosDoTemplate(template).length === 1 && anexosDoTemplate(template)[0].tipo === "imagem" ? (
+                      <img src={anexosDoTemplate(template)[0].url} alt={anexosDoTemplate(template)[0].nome || ""} className="mb-2 h-24 w-full object-cover rounded-lg border border-slate-100" />
+                    ) : anexosDoTemplate(template).every(a => a.tipo === "imagem") ? (
+                      <div className="mb-2 grid grid-cols-3 gap-1">
+                        {anexosDoTemplate(template).slice(0, 3).map((a, i) => (
+                          <div key={i} className="relative h-16">
+                            <img src={a.url} alt={a.nome || ""} className="h-16 w-full object-cover rounded-md border border-slate-100" />
+                            {i === 2 && anexosDoTemplate(template).length > 3 && (
+                              <div className="absolute inset-0 bg-black/50 rounded-md flex items-center justify-center text-white text-[10px] font-bold">
+                                +{anexosDoTemplate(template).length - 3}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
                     ) : (
                       <div className="mb-2 flex items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-saas-xs text-slate-500">
-                        <IconeAnexo tipo={template.anexo_tipo} className="h-3.5 w-3.5 shrink-0" />
-                        <span className="truncate">{template.anexo_nome}</span>
+                        <IconeAnexo tipo={anexosDoTemplate(template)[0].tipo} className="h-3.5 w-3.5 shrink-0" />
+                        <span className="truncate">{anexosDoTemplate(template).length} anexo(s)</span>
                       </div>
                     )
                   )}
@@ -207,7 +232,7 @@ function TemplatesPage() {
               e.preventDefault();
               const formData = new FormData(e.currentTarget);
               const conteudo = (formData.get("conteudo") as string) || "";
-              const temAnexo = !!anexoFile || (!!editingTemplate?.anexo_url && !removerAnexoExistente);
+              const temAnexo = anexosNovos.length > 0 || anexosExistentes.length > 0;
               if (!conteudo.trim() && !temAnexo) {
                 toast.error("Adicione um texto ou um anexo (imagem/vídeo) pro template.");
                 return;
@@ -250,35 +275,44 @@ function TemplatesPage() {
                 </div>
               </div>
               <div className="space-y-1.5">
-                <label className="text-saas-xs font-bold text-slate-500 uppercase tracking-wider">Anexo (imagem, vídeo, áudio ou documento)</label>
-                {editingTemplate?.anexo_url && !anexoFile && !removerAnexoExistente ? (
-                  <div className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <IconeAnexo tipo={editingTemplate.anexo_tipo} className="h-4 w-4 shrink-0 text-slate-400" />
-                      <span className="text-saas-sm text-slate-600 truncate">{editingTemplate.anexo_nome}</span>
-                    </div>
-                    <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-slate-400 hover:text-red-500 shrink-0" onClick={() => setRemoverAnexoExistente(true)}>
-                      <X className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <Input
-                      type="file"
-                      accept="image/*,video/*,audio/*,application/pdf,.doc,.docx,.xls,.xlsx"
-                      className="h-9 text-saas-sm border-slate-200"
-                      onChange={(e) => {
-                        setAnexoFile(e.target.files?.[0] || null);
-                        setRemoverAnexoExistente(false);
-                      }}
-                    />
-                    {anexoFile && (
-                      <Button type="button" variant="ghost" size="icon" className="h-9 w-9 text-slate-400 hover:text-red-500 shrink-0" onClick={() => setAnexoFile(null)}>
-                        <X className="h-3.5 w-3.5" />
-                      </Button>
-                    )}
+                <label className="text-saas-xs font-bold text-slate-500 uppercase tracking-wider">Anexos (pode escolher várias imagens/vídeos de uma vez)</label>
+                {(anexosExistentes.length > 0 || anexosNovos.length > 0) && (
+                  <div className="flex flex-col gap-1.5">
+                    {anexosExistentes.map((a, i) => (
+                      <div key={`existente-${i}`} className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <IconeAnexo tipo={a.tipo} className="h-4 w-4 shrink-0 text-slate-400" />
+                          <span className="text-saas-sm text-slate-600 truncate">{a.nome}</span>
+                        </div>
+                        <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-slate-400 hover:text-red-500 shrink-0" onClick={() => setAnexosExistentes(prev => prev.filter((_, idx) => idx !== i))}>
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    ))}
+                    {anexosNovos.map((f, i) => (
+                      <div key={`novo-${i}`} className="flex items-center justify-between gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <IconeAnexo tipo={tipoAnexoPorArquivo(f)} className="h-4 w-4 shrink-0 text-primary" />
+                          <span className="text-saas-sm text-slate-700 truncate">{f.name}</span>
+                        </div>
+                        <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-slate-400 hover:text-red-500 shrink-0" onClick={() => setAnexosNovos(prev => prev.filter((_, idx) => idx !== i))}>
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    ))}
                   </div>
                 )}
+                <Input
+                  type="file"
+                  multiple
+                  accept="image/*,video/*,audio/*,application/pdf,.doc,.docx,.xls,.xlsx"
+                  className="h-9 text-saas-sm border-slate-200"
+                  onChange={(e) => {
+                    const novos = Array.from(e.target.files || []);
+                    if (novos.length) setAnexosNovos(prev => [...prev, ...novos]);
+                    e.target.value = "";
+                  }}
+                />
               </div>
               <DialogFooter className="pt-4 border-t border-slate-50">
                 <Button type="button" variant="ghost" size="sm" onClick={() => setIsOpen(false)} className="text-saas-xs font-bold uppercase">Cancelar</Button>

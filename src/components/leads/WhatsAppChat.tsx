@@ -17,6 +17,7 @@ interface Message {
   direcao: "inbound" | "outbound";
   tipo: string;
   status?: string;
+  metadata?: any;
 }
 
 interface WhatsAppChatProps {
@@ -35,6 +36,13 @@ interface Template {
   anexo_url: string | null;
   anexo_tipo: string | null;
   anexo_nome: string | null;
+  anexos?: { url: string; tipo: string; nome: string }[] | null;
+}
+
+function anexosDoTemplate(t: Template) {
+  if (t.anexos?.length) return t.anexos;
+  if (t.anexo_url) return [{ url: t.anexo_url, tipo: t.anexo_tipo || "documento", nome: t.anexo_nome || "anexo" }];
+  return [];
 }
 
 export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, leadName, fullHeight, onHeaderClick }: WhatsAppChatProps) {
@@ -107,6 +115,8 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, leadName, ful
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
   const [templates, setTemplates] = useState<Template[]>([]);
+  const [imagemAberta, setImagemAberta] = useState<string | null>(null);
+  const [respondendoA, setRespondendoA] = useState<Message | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const templatesRef = useRef<HTMLDivElement>(null);
@@ -130,7 +140,7 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, leadName, ful
     const fetchTemplates = async () => {
       const { data, error } = await supabase
         .from("templates_mensagem")
-        .select("id, titulo, conteudo, anexo_url, anexo_tipo, anexo_nome")
+        .select("id, titulo, conteudo, anexo_url, anexo_tipo, anexo_nome, anexos")
         .eq("imobiliaria_id", imobiliariaId)
         .eq("tipo", "whatsapp")
         .order("titulo", { ascending: true });
@@ -178,6 +188,56 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, leadName, ful
       reader.onerror = (error) => reject(error);
     });
 
+  // Template com mais de um anexo não cabe no modelo de "1 mensagem = 1
+  // anexo" desse chat — manda cada anexo como uma mensagem separada em
+  // sequência (texto do template vira legenda só da primeira), em vez de
+  // só popular a caixa de digitação como no caso de anexo único.
+  const enviarTemplateComMultiplosAnexos = async (anexos: { url: string; tipo: string; nome: string }[], texto: string) => {
+    if (!whatsappConnected) {
+      toast.error("O WhatsApp do seu corretor não está conectado!");
+      return;
+    }
+    setSending(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    let falhas = 0;
+    for (let i = 0; i < anexos.length; i++) {
+      const anexo = anexos[i];
+      try {
+        const res = await fetch(anexo.url);
+        const blob = await res.blob();
+        const file = new File([blob], anexo.nome || "anexo", { type: blob.type });
+        const base64 = await toBase64(file);
+        const legenda = i === 0 ? texto : "";
+
+        await sendWhatsappMessage(phoneNumber, legenda, {
+          base64,
+          mimetype: blob.type,
+          fileName: anexo.nome,
+        });
+
+        await supabase.from("mensagens_whatsapp" as any).insert({
+          id: crypto.randomUUID(),
+          lead_id: leadId,
+          imobiliaria_id: imobiliariaId,
+          corretor_id: user?.id,
+          conteudo: `[Anexo]: ${anexo.url}${legenda ? `\n${legenda}` : ""}`,
+          direcao: "outbound",
+          tipo: anexo.tipo === "imagem" ? "image" : anexo.tipo === "video" ? "video" : "document",
+          status: "sent",
+        });
+      } catch (err) {
+        console.error("Erro ao enviar anexo do template:", err);
+        falhas++;
+      }
+    }
+    setSending(false);
+    if (falhas === 0) {
+      toast.success(`${anexos.length} anexos enviados!`);
+    } else {
+      toast.error(`${falhas} de ${anexos.length} anexos falharam ao enviar.`);
+    }
+  };
+
   const handleSendMessage = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if ((!newMessage.trim() && !attachment) || sending) return;
@@ -189,8 +249,13 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, leadName, ful
     setSending(true);
     const messageContent = newMessage;
     const pendingAttachment = attachment;
+    // Só dá pra citar nativamente mensagem que RECEBEMOS — é a única que
+    // guarda o objeto bruto do Baileys inteiro (metadata) que a citação
+    // precisa. Responder mensagem nossa mostra o contexto só na tela do CRM.
+    const quoted = respondendoA?.direcao === "inbound" ? respondendoA.metadata : undefined;
     setNewMessage("");
     setAttachment(null);
+    setRespondendoA(null);
 
     const messageId = crypto.randomUUID();
 
@@ -241,10 +306,10 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, leadName, ful
           base64,
           mimetype,
           fileName: pendingAttachment.name,
-        });
+        }, quoted);
       } else {
         // Envia apenas o texto — o backend resolve o JID e faz o envio
-        await sendWhatsappMessage(phoneNumber, messageContent);
+        await sendWhatsappMessage(phoneNumber, messageContent, undefined, quoted);
       }
 
       // 2. Salvar no banco (direção outbound)
@@ -268,6 +333,7 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, leadName, ful
       toast.error(`Falha ao enviar: ${error.message}`);
       setNewMessage(messageContent); // Devolve o texto se falhar
       if (pendingAttachment) setAttachment(pendingAttachment); // Devolve o anexo tambem
+      if (quoted) setRespondendoA(respondendoA); // Devolve a citação tambem
     } finally {
       setSending(false);
     }
@@ -345,13 +411,33 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, leadName, ful
               contentText = lines.slice(1).join('\n');
             }
 
+            const reacao = (msg as any).metadata?.reacao as string | null | undefined;
+
+            const botaoResponder = (
+              <button
+                type="button"
+                title="Responder"
+                onClick={() => setRespondendoA(msg)}
+                className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-[#54656F] hover:text-[#111B21] shrink-0"
+              >
+                <MessageSquare className="h-3.5 w-3.5" />
+              </button>
+            );
+
             return (
               <div
                 key={msg.id}
-                className={`flex ${msg.direcao === "outbound" ? "justify-end" : "justify-start"}`}
+                className={`group flex items-center gap-1.5 ${msg.direcao === "outbound" ? "justify-end" : "justify-start"}`}
               >
+                {msg.direcao === "outbound" && botaoResponder}
+                <div className="relative max-w-[75%]">
+                {reacao && (
+                  <div className="absolute -bottom-2.5 right-1 bg-white rounded-full shadow border border-slate-100 text-[13px] leading-none px-1 py-0.5 z-10">
+                    {reacao}
+                  </div>
+                )}
                 <div
-                  className={`max-w-[75%] p-2 px-3 rounded-lg text-[14px] shadow-[0_1px_0.5px_rgba(11,20,26,.13)] relative ${
+                  className={`p-2 px-3 rounded-lg text-[14px] shadow-[0_1px_0.5px_rgba(11,20,26,.13)] relative ${
                     msg.direcao === "outbound"
                       ? "bg-[#D9FDD3] text-[#111B21] rounded-tr-none"
                       : "bg-[#FFFFFF] text-[#111B21] rounded-tl-none"
@@ -359,22 +445,28 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, leadName, ful
                 >
                   {hasAnexo && anexoUrl && (
                     <div className="mb-1 mt-1">
-                      {anexoUrl.match(/\.(jpeg|jpg|gif|png)$/i) ? (
-                        <img 
-                          src={anexoUrl} 
-                          alt="Anexo" 
-                          className="rounded-md max-h-[250px] object-contain cursor-pointer hover:opacity-95" 
-                          onClick={() => window.open(anexoUrl, '_blank')}
-                          onLoad={() => {
-                            scrollRef.current?.scrollIntoView({ behavior: "smooth" });
-                          }}
+                      {(msg as any).tipo === "sticker" ? (
+                        <img
+                          src={anexoUrl}
+                          alt="Figurinha"
+                          className="max-h-[120px] max-w-[120px] object-contain cursor-pointer hover:opacity-90"
+                          onClick={() => setImagemAberta(anexoUrl)}
+                          onLoad={() => scrollRef.current?.scrollIntoView({ behavior: "smooth" })}
                         />
-                      ) : anexoUrl.match(/\.(ogg|mp3|wav|m4a)$/i) ? (
+                      ) : (msg as any).tipo === "image" || anexoUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i) ? (
+                        <img
+                          src={anexoUrl}
+                          alt="Anexo"
+                          className="rounded-md max-h-[250px] object-contain cursor-pointer hover:opacity-95"
+                          onClick={() => setImagemAberta(anexoUrl)}
+                          onLoad={() => scrollRef.current?.scrollIntoView({ behavior: "smooth" })}
+                        />
+                      ) : (msg as any).tipo === "audio" || anexoUrl.match(/\.(ogg|mp3|wav|m4a)$/i) ? (
                         <audio src={anexoUrl} controls className="max-w-full my-1 focus:outline-none" />
-                      ) : anexoUrl.match(/\.(mp4|webm|ogv|mov|3gp)$/i) ? (
-                        <video 
-                          src={anexoUrl} 
-                          controls 
+                      ) : (msg as any).tipo === "video" || anexoUrl.match(/\.(mp4|webm|ogv|mov|3gp)$/i) ? (
+                        <video
+                          src={anexoUrl}
+                          controls
                           className="rounded-md max-h-[250px] max-w-full my-1 focus:outline-none"
                           onLoadedData={() => {
                             scrollRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -404,6 +496,8 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, leadName, ful
                     </div>
                   </div>
                 </div>
+                </div>
+                {msg.direcao === "inbound" && botaoResponder}
               </div>
             );
           })}
@@ -413,6 +507,19 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, leadName, ful
 
       {/* Input de Envio */}
       <div className="flex flex-col bg-[#F0F2F5] z-10 shrink-0 border-t border-[#D1D7DB]">
+        {respondendoA && (
+          <div className="px-4 pt-3 pb-1 flex items-center gap-2 bg-[#F0F2F5]">
+            <div className="flex-1 min-w-0 bg-[#E9EDEF] border-l-4 border-[#00A884] text-[13px] px-3 py-1.5 rounded-md flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-[#00A884] font-bold text-[11px]">Respondendo</p>
+                <p className="truncate text-[#54656F]">{respondendoA.conteudo}</p>
+              </div>
+              <button onClick={() => setRespondendoA(null)} className="p-1 hover:bg-[#D1D7DB] rounded-full transition-colors shrink-0">
+                <X className="h-3.5 w-3.5 text-[#54656F]" />
+              </button>
+            </div>
+          </div>
+        )}
         {attachment && (
           <div className="px-4 pt-3 pb-1 flex items-center gap-2 bg-[#F0F2F5]">
             <div className="bg-[#E9EDEF] border border-[#D1D7DB] text-[#54656F] text-[13px] px-3 py-2 rounded-lg flex items-center gap-3 max-w-full shadow-sm">
@@ -479,13 +586,23 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, leadName, ful
                       onClick={async () => {
                         const primeiroNome = (leadName || "").trim().split(/\s+/)[0] || "";
                         const conteudoPersonalizado = t.conteudo.replace(/\{nome\}/gi, primeiroNome);
-                        setNewMessage((prev) => (prev ? `${prev}\n${conteudoPersonalizado}` : conteudoPersonalizado));
+                        const anexos = anexosDoTemplate(t);
                         setShowTemplates(false);
-                        if (t.anexo_url) {
+
+                        if (anexos.length > 1) {
+                          // Vários anexos: manda tudo direto em sequência
+                          // (não dá pra pré-visualizar múltiplos na caixa
+                          // de digitação como acontece com só 1 anexo).
+                          await enviarTemplateComMultiplosAnexos(anexos, conteudoPersonalizado);
+                          return;
+                        }
+
+                        setNewMessage((prev) => (prev ? `${prev}\n${conteudoPersonalizado}` : conteudoPersonalizado));
+                        if (anexos[0]) {
                           try {
-                            const res = await fetch(t.anexo_url);
+                            const res = await fetch(anexos[0].url);
                             const blob = await res.blob();
-                            setAttachment(new File([blob], t.anexo_nome || "anexo", { type: blob.type }));
+                            setAttachment(new File([blob], anexos[0].nome || "anexo", { type: blob.type }));
                           } catch {
                             toast.error("Não consegui carregar o anexo do template.");
                           }
@@ -494,8 +611,10 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, leadName, ful
                     >
                       <p className="text-xs font-bold text-slate-700">{t.titulo}</p>
                       <p className="text-xs text-slate-500 truncate">{t.conteudo}</p>
-                      {t.anexo_nome && (
-                        <p className="text-[10px] text-primary/70 truncate mt-0.5">📎 {t.anexo_nome}</p>
+                      {anexosDoTemplate(t).length > 0 && (
+                        <p className="text-[10px] text-primary/70 truncate mt-0.5">
+                          📎 {anexosDoTemplate(t).length > 1 ? `${anexosDoTemplate(t).length} anexos` : anexosDoTemplate(t)[0].nome}
+                        </p>
                       )}
                     </button>
                   ))
@@ -554,6 +673,21 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, leadName, ful
           </Button>
         </form>
       </div>
+
+      {imagemAberta && (
+        <div
+          className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-6 cursor-zoom-out"
+          onClick={() => setImagemAberta(null)}
+        >
+          <img src={imagemAberta} alt="Visualização ampliada" className="max-h-full max-w-full object-contain rounded-md" />
+          <button
+            onClick={() => setImagemAberta(null)}
+            className="absolute top-4 right-4 h-9 w-9 flex items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

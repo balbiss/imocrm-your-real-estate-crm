@@ -230,6 +230,29 @@ async function handleSingleMessage(msg, receivingPhoneNumber) {
     .maybeSingle();
   if (existing) return;
 
+  // Reação (emoji em cima de uma mensagem) não é mensagem nova — antes disso
+  // caia no fallback "Arquivo não suportado" e virava um card fantasma no
+  // chat. Agora atualiza o metadata da mensagem original em vez de inserir.
+  const reactionMessage = msg?.message?.reactionMessage;
+  if (reactionMessage) {
+    const targetMessageId = reactionMessage.key?.id;
+    const emoji = reactionMessage.text || null; // string vazia = reação removida
+    if (targetMessageId) {
+      const { data: targetMsg } = await supabaseAdmin
+        .from("mensagens_whatsapp")
+        .select("id, metadata")
+        .eq("whatsapp_message_id", targetMessageId)
+        .maybeSingle();
+      if (targetMsg) {
+        await supabaseAdmin
+          .from("mensagens_whatsapp")
+          .update({ metadata: { ...(targetMsg.metadata || {}), reacao: emoji } })
+          .eq("id", targetMsg.id);
+      }
+    }
+    return;
+  }
+
   const { data: leads, error: searchError } = await supabaseAdmin.rpc(
     "buscar_lead_por_telefone",
     { telefone_busca: contactPhone }

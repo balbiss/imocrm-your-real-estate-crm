@@ -123,7 +123,7 @@ whatsappRouter.delete("/instance", async (req, res) => {
 
 whatsappRouter.post("/send", async (req, res) => {
   try {
-    const { phone, text, attachment } = req.body || {};
+    const { phone, text, attachment, quoted } = req.body || {};
     if (!phone) return res.status(400).json({ error: "phone obrigatorio" });
 
     const instance = await getInstance(req.userId);
@@ -170,7 +170,11 @@ whatsappRouter.post("/send", async (req, res) => {
       messageContent.text = text || "";
     }
 
-    const result = await baileys.sendMessage(instance.phone_number, jid, messageContent);
+    // "quoted" replica a mensagem original (formato bruto salvo em
+    // mensagens_whatsapp.metadata) pra baileys-api renderizar a citação
+    // nativa do WhatsApp — só funciona respondendo mensagem que RECEBEMOS
+    // (é a unica que guardamos o objeto bruto completo).
+    const result = await baileys.sendMessage(instance.phone_number, jid, messageContent, quoted ? { quoted } : undefined);
     const messageId = result?.data?.key?.id || null;
 
     res.json({ success: true, jid, messageId });

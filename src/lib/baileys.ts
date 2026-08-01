@@ -70,12 +70,12 @@ export interface SendAttachment {
   fileName?: string;
 }
 
-export function sendWhatsappMessage(phone: string, text?: string, attachment?: SendAttachment) {
+export function sendWhatsappMessage(phone: string, text?: string, attachment?: SendAttachment, quoted?: any) {
   return call<{ success: boolean; jid: string; messageId: string | null }>(
     "/api/whatsapp/send",
     {
       method: "POST",
-      body: JSON.stringify({ phone, text, attachment }),
+      body: JSON.stringify({ phone, text, attachment, quoted }),
     }
   );
 }

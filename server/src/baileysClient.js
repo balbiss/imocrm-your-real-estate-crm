@@ -62,10 +62,10 @@ export async function resolveJid(ownerPhoneNumber, targetPhoneOrJid) {
   return found?.jid || null;
 }
 
-export function sendMessage(ownerPhoneNumber, jid, messageContent) {
+export function sendMessage(ownerPhoneNumber, jid, messageContent, options) {
   return request(`/connections/${withPlus(ownerPhoneNumber)}/send-message`, {
     method: "POST",
-    body: { jid, messageContent },
+    body: options ? { jid, messageContent, options } : { jid, messageContent },
   });
 }
 

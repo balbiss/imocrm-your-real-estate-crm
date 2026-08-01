@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { MessageCircle, Search, User } from "lucide-react";
+import { MessageCircle, Search, User, Pin, PinOff, MailOpen } from "lucide-react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -29,6 +29,7 @@ interface Conversa {
   ultima_mensagem_em: string;
   ultima_direcao: string;
   nao_lidas: number;
+  fixada: boolean;
 }
 
 function ConversasPage() {
@@ -37,6 +38,7 @@ function ConversasPage() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [corretorFiltro, setCorretorFiltro] = useState<string>("todos");
+  const [somenteNaoLidas, setSomenteNaoLidas] = useState(false);
   const [selected, setSelected] = useState<Conversa | null>(null);
   const [leadCardAberto, setLeadCardAberto] = useState(false);
 
@@ -100,8 +102,20 @@ function ConversasPage() {
     }
   };
 
+  const marcarNaoLida = async (leadId: string) => {
+    await supabase.rpc("marcar_conversa_nao_lida", { p_lead_id: leadId });
+    queryClient.invalidateQueries({ queryKey: ["conversas"] });
+    queryClient.invalidateQueries({ queryKey: ["sidebar-nao-lidas"] });
+  };
+
+  const toggleFixada = async (leadId: string, fixadaAtual: boolean) => {
+    await supabase.from("leads").update({ conversa_fixada: !fixadaAtual }).eq("id", leadId);
+    queryClient.invalidateQueries({ queryKey: ["conversas"] });
+  };
+
   const filtered = (conversas || []).filter((c) => {
     if (corretorFiltro !== "todos" && c.corretor_id !== corretorFiltro) return false;
+    if (somenteNaoLidas && c.nao_lidas === 0) return false;
     if (!search.trim()) return true;
     const term = search.toLowerCase();
     return (
@@ -142,6 +156,17 @@ function ConversasPage() {
                 </SelectContent>
               </Select>
             )}
+            <button
+              type="button"
+              onClick={() => setSomenteNaoLidas((v) => !v)}
+              className={`mt-2 flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[11px] font-bold border transition-colors ${
+                somenteNaoLidas
+                  ? "bg-primary text-white border-primary"
+                  : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
+              }`}
+            >
+              <MailOpen className="h-3 w-3" /> Só não lidas
+            </button>
           </div>
 
           <div className="flex-1 overflow-y-auto">
@@ -156,41 +181,61 @@ function ConversasPage() {
               </div>
             ) : (
               filtered.map((c) => (
-                <button
+                <div
                   key={c.lead_id}
-                  onClick={() => handleSelect(c)}
-                  className={`w-full text-left px-4 py-3 border-b border-slate-100 flex items-start gap-3 transition-colors hover:bg-slate-50 ${
+                  className={`group relative w-full border-b border-slate-100 transition-colors hover:bg-slate-50 ${
                     selected?.lead_id === c.lead_id ? "bg-slate-50" : ""
-                  }`}
+                  } ${c.fixada ? "bg-amber-50/40" : ""}`}
                 >
-                  <div className="h-10 w-10 rounded-full bg-slate-200 flex items-center justify-center shrink-0 text-slate-500 font-semibold text-sm">
-                    {c.lead_nome ? c.lead_nome.charAt(0).toUpperCase() : <User className="h-5 w-5" />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-semibold text-sm text-slate-800 truncate">
-                        {c.lead_nome || c.lead_telefone || "Sem nome"}
-                      </span>
-                      <span className="text-[10px] text-slate-400 shrink-0">
-                        {formatDistanceToNow(new Date(c.ultima_mensagem_em), { locale: ptBR, addSuffix: false })}
-                      </span>
+                  <button onClick={() => handleSelect(c)} className="w-full text-left px-4 py-3 flex items-start gap-3">
+                    <div className="h-10 w-10 rounded-full bg-slate-200 flex items-center justify-center shrink-0 text-slate-500 font-semibold text-sm">
+                      {c.lead_nome ? c.lead_nome.charAt(0).toUpperCase() : <User className="h-5 w-5" />}
                     </div>
-                    {canVerTodas && c.corretor_nome && (
-                      <p className="text-[10px] text-primary font-medium truncate">{c.corretor_nome}</p>
-                    )}
-                    <div className="flex items-center justify-between gap-2 mt-0.5">
-                      <p className="text-xs text-slate-500 truncate">
-                        {c.ultima_direcao === "outbound" ? "Você: " : ""}
-                        {c.ultima_mensagem}
-                      </p>
-                      {c.nao_lidas > 0 && (
-                        <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-bold text-white shrink-0">
-                          {c.nao_lidas}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-semibold text-sm text-slate-800 truncate flex items-center gap-1">
+                          {c.fixada && <Pin className="h-3 w-3 text-amber-500 shrink-0 fill-amber-500" />}
+                          {c.lead_nome || c.lead_telefone || "Sem nome"}
                         </span>
+                        <span className="text-[10px] text-slate-400 shrink-0 group-hover:opacity-0 transition-opacity">
+                          {formatDistanceToNow(new Date(c.ultima_mensagem_em), { locale: ptBR, addSuffix: false })}
+                        </span>
+                      </div>
+                      {canVerTodas && c.corretor_nome && (
+                        <p className="text-[10px] text-primary font-medium truncate">{c.corretor_nome}</p>
                       )}
+                      <div className="flex items-center justify-between gap-2 mt-0.5">
+                        <p className="text-xs text-slate-500 truncate">
+                          {c.ultima_direcao === "outbound" ? "Você: " : ""}
+                          {c.ultima_mensagem}
+                        </p>
+                        {c.nao_lidas > 0 && (
+                          <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-bold text-white shrink-0">
+                            {c.nao_lidas}
+                          </span>
+                        )}
+                      </div>
                     </div>
+                  </button>
+                  <div className="absolute top-2.5 right-3 hidden group-hover:flex items-center gap-1 bg-white/95 rounded-md shadow-sm border border-slate-100">
+                    <button
+                      type="button"
+                      title={c.fixada ? "Desafixar conversa" : "Fixar conversa"}
+                      onClick={(e) => { e.stopPropagation(); toggleFixada(c.lead_id, c.fixada); }}
+                      className="h-6 w-6 flex items-center justify-center text-slate-400 hover:text-amber-500"
+                    >
+                      {c.fixada ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
+                    </button>
+                    <button
+                      type="button"
+                      title="Marcar como não lida"
+                      onClick={(e) => { e.stopPropagation(); marcarNaoLida(c.lead_id); }}
+                      className="h-6 w-6 flex items-center justify-center text-slate-400 hover:text-primary"
+                    >
+                      <MailOpen className="h-3.5 w-3.5" />
+                    </button>
                   </div>
-                </button>
+                </div>
               ))
             )}
           </div>
