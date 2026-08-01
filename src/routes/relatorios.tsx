@@ -24,6 +24,7 @@ import { Users, Target, CheckCircle, Clock, Calendar, BarChart3, Loader2, Phone 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { LeadDetailsModal } from "@/components/leads/LeadDetailsModal";
 

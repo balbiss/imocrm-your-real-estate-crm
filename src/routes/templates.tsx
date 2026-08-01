@@ -220,8 +220,8 @@ function TemplatesPage() {
           setIsOpen(val);
           if (!val) {
             setEditingTemplate(null);
-            setAnexoFile(null);
-            setRemoverAnexoExistente(false);
+            setAnexosExistentes([]);
+            setAnexosNovos([]);
           }
         }}>
           <DialogContent className="sm:max-w-[500px]">
