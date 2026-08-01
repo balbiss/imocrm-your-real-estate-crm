@@ -98,7 +98,9 @@ export function ImportClientesDialog({ open, onOpenChange }: ImportClientesDialo
           origem: item.ID ? `Importação (ID: ${item.ID})` : "Importação",
           created_at: parsedDate,
           imobiliaria_id: perfil.imobiliaria_id,
-          corretor_id: user.id,
+          // Sem corretor_id: cai no Bolsão pra distribuição normal (roleta
+          // ou puxada manualmente), em vez de ficar preso automaticamente
+          // com quem só fez o upload do CSV.
           status: "novo"
         };
       });

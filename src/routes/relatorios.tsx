@@ -43,6 +43,11 @@ function ReportsPage() {
   const { role, isLoading: loadingPerms } = usePermissions();
   const [statusSelecionado, setStatusSelecionado] = React.useState<string | null>(null);
   const [leadSelecionadoId, setLeadSelecionadoId] = React.useState<string | null>(null);
+  const [colunaSelecionada, setColunaSelecionada] = React.useState<{ id: string; nome: string } | null>(null);
+  const mesAtual = new Date().toISOString().slice(0, 7);
+  const [mesFiltro, setMesFiltro] = React.useState<string>(mesAtual);
+  const [corretorFiltroRel, setCorretorFiltroRel] = React.useState<string>("todos");
+  const [origemFiltroRel, setOrigemFiltroRel] = React.useState<string>("todas");
 
   // Proteção de rota
   React.useEffect(() => {
@@ -62,8 +67,8 @@ function ReportsPage() {
     enabled: !!user,
   });
 
-  const { data: stats, isLoading } = useQuery({
-    queryKey: ["reports-dashboard", profile?.imobiliaria_id],
+  const { data: raw, isLoading } = useQuery({
+    queryKey: ["reports-dashboard-raw", profile?.imobiliaria_id],
     queryFn: async () => {
       if (!profile?.imobiliaria_id) return null;
 
@@ -93,78 +98,117 @@ function ReportsPage() {
         .select("id, nome, avatar_url")
         .eq("imobiliaria_id", profile.imobiliaria_id);
 
-      if (leadsError || corrError) throw leadsError || corrError;
+      const { data: colunas, error: colunasError } = await supabase
+        .from("colunas_kanban")
+        .select("id, nome, posicao")
+        .eq("imobiliaria_id", profile.imobiliaria_id)
+        .order("posicao", { ascending: true });
 
-      // Agrupar por Origem
-      const byOrigin = leads.reduce((acc: any, lead) => {
-        acc[lead.origem || "Outros"] = (acc[lead.origem || "Outros"] || 0) + 1;
-        return acc;
-      }, {});
-      const originData = Object.keys(byOrigin).map(key => ({ name: key, value: byOrigin[key] }));
+      if (leadsError || corrError || colunasError) throw leadsError || corrError || colunasError;
 
-      // Agrupar por Status
-      const byStatus = leads.reduce((acc: any, lead) => {
-        acc[lead.status] = (acc[lead.status] || 0) + 1;
-        return acc;
-      }, {});
-      const statusData = Object.keys(byStatus).map(key => ({ name: key, value: byStatus[key] }));
-
-      // Agrupar por Temperatura
-      const byTemp = leads.reduce((acc: any, lead) => {
-        const t = lead.temperatura || "Não definido";
-        acc[t] = (acc[t] || 0) + 1;
-        return acc;
-      }, {});
-      const tempData = [
-        { name: "Quente", value: byTemp["quente"] || 0, color: "#ef4444" },
-        { name: "Morno", value: byTemp["morno"] || 0, color: "#f59e0b" },
-        { name: "Frio", value: byTemp["frio"] || 0, color: "#3b82f6" },
-      ];
-
-      const respondedLeads = leads.filter(l => l.primeiro_contato_em);
-      const avgResponseTime = respondedLeads.length > 0 
-        ? respondedLeads.reduce((acc, lead) => {
-            const diff = new Date(lead.primeiro_contato_em!).getTime() - new Date(lead.created_at).getTime();
-            return acc + diff;
-          }, 0) / respondedLeads.length / (1000 * 60)
-        : 0;
-
-      // Performance por Corretor
-      const brokerPerformance = team?.map(broker => {
-        const brokerLeads = leads.filter(l => l.corretor_id === broker.id);
-        const brokerConverted = brokerLeads.filter(l => l.status === "venda_concluida").length;
-        const brokerResponded = brokerLeads.filter(l => l.primeiro_contato_em);
-        const brokerAvgSLA = brokerResponded.length > 0
-          ? brokerResponded.reduce((acc, lead) => {
-              const diff = new Date(lead.primeiro_contato_em!).getTime() - new Date(lead.created_at).getTime();
-              return acc + diff;
-            }, 0) / brokerResponded.length / (1000 * 60)
-          : 0;
-
-        return {
-          id: broker.id,
-          nome: broker.nome,
-          avatar: broker.avatar_url,
-          leads: brokerLeads.length,
-          vendas: brokerConverted,
-          sla: Math.round(brokerAvgSLA),
-          conversao: brokerLeads.length > 0 ? ((brokerConverted / brokerLeads.length) * 100).toFixed(1) : "0"
-        };
-      }) || [];
-
-      return {
-        totalLeads: leads.length,
-        converted: leads.filter(l => l.status === "venda_concluida").length,
-        avgResponseTime: Math.round(avgResponseTime),
-        originData,
-        statusData,
-        tempData,
-        brokerPerformance: brokerPerformance.sort((a, b) => b.vendas - a.vendas),
-        leads,
-      };
+      return { leads, team: team || [], colunas: colunas || [] };
     },
     enabled: !!profile?.imobiliaria_id
   });
+
+  const origensDisponiveis = React.useMemo(() => {
+    const set = new Set<string>();
+    raw?.leads.forEach((l: any) => set.add(l.origem || "Outros"));
+    return Array.from(set).sort();
+  }, [raw]);
+
+  const stats = React.useMemo(() => {
+    if (!raw) return null;
+
+    const leads = raw.leads.filter((l: any) => {
+      if (mesFiltro && !l.created_at?.startsWith(mesFiltro)) return false;
+      if (corretorFiltroRel !== "todos" && l.corretor_id !== corretorFiltroRel) return false;
+      if (origemFiltroRel !== "todas" && (l.origem || "Outros") !== origemFiltroRel) return false;
+      return true;
+    });
+    const team = raw.team;
+
+    // Agrupar por Origem
+    const byOrigin = leads.reduce((acc: any, lead: any) => {
+      acc[lead.origem || "Outros"] = (acc[lead.origem || "Outros"] || 0) + 1;
+      return acc;
+    }, {});
+    const originData = Object.keys(byOrigin).map(key => ({ name: key, value: byOrigin[key] }));
+
+    // Agrupar por Status
+    const byStatus = leads.reduce((acc: any, lead: any) => {
+      acc[lead.status] = (acc[lead.status] || 0) + 1;
+      return acc;
+    }, {});
+    const statusData = Object.keys(byStatus).map(key => ({ name: key, value: byStatus[key] }));
+
+    // Agrupar por Temperatura
+    const byTemp = leads.reduce((acc: any, lead: any) => {
+      const t = lead.temperatura || "Não definido";
+      acc[t] = (acc[t] || 0) + 1;
+      return acc;
+    }, {});
+    const tempData = [
+      { name: "Quente", value: byTemp["quente"] || 0, color: "#ef4444" },
+      { name: "Morno", value: byTemp["morno"] || 0, color: "#f59e0b" },
+      { name: "Frio", value: byTemp["frio"] || 0, color: "#3b82f6" },
+    ];
+
+    // Funil real — pelas colunas de kanban de verdade da imobiliária (cada
+    // uma tem o nome que o dono escolheu, ex: "Análise de Crédito", "FID"),
+    // em vez do status retrocompatível fixo, que não tem esses nomes.
+    // Venda entra como etapa final separada (não é uma coluna do kanban).
+    const funil = raw.colunas.map((c: any) => ({
+      id: c.id,
+      nome: c.nome,
+      value: leads.filter((l: any) => l.coluna_kanban_id === c.id).length,
+    }));
+    const vendasDoMes = leads.filter((l: any) => l.status === "venda_concluida").length;
+
+    const respondedLeads = leads.filter((l: any) => l.primeiro_contato_em);
+    const avgResponseTime = respondedLeads.length > 0
+      ? respondedLeads.reduce((acc: number, lead: any) => {
+          const diff = new Date(lead.primeiro_contato_em!).getTime() - new Date(lead.created_at).getTime();
+          return acc + diff;
+        }, 0) / respondedLeads.length / (1000 * 60)
+      : 0;
+
+    // Performance por Corretor
+    const brokerPerformance = team?.map((broker: any) => {
+      const brokerLeads = leads.filter((l: any) => l.corretor_id === broker.id);
+      const brokerConverted = brokerLeads.filter((l: any) => l.status === "venda_concluida").length;
+      const brokerResponded = brokerLeads.filter((l: any) => l.primeiro_contato_em);
+      const brokerAvgSLA = brokerResponded.length > 0
+        ? brokerResponded.reduce((acc: number, lead: any) => {
+            const diff = new Date(lead.primeiro_contato_em!).getTime() - new Date(lead.created_at).getTime();
+            return acc + diff;
+          }, 0) / brokerResponded.length / (1000 * 60)
+        : 0;
+
+      return {
+        id: broker.id,
+        nome: broker.nome,
+        avatar: broker.avatar_url,
+        leads: brokerLeads.length,
+        vendas: brokerConverted,
+        sla: Math.round(brokerAvgSLA),
+        conversao: brokerLeads.length > 0 ? ((brokerConverted / brokerLeads.length) * 100).toFixed(1) : "0"
+      };
+    }) || [];
+
+    return {
+      totalLeads: leads.length,
+      converted: leads.filter((l: any) => l.status === "venda_concluida").length,
+      avgResponseTime: Math.round(avgResponseTime),
+      originData,
+      statusData,
+      tempData,
+      funil,
+      vendasDoMes,
+      brokerPerformance: brokerPerformance.sort((a: any, b: any) => b.vendas - a.vendas),
+      leads,
+    };
+  }, [raw, mesFiltro, corretorFiltroRel, origemFiltroRel]);
 
   if (isLoading || !profile) {
     return (
@@ -185,19 +229,92 @@ function ReportsPage() {
             <h1 className="text-xl font-bold tracking-tight text-slate-900">Analytics & Performance</h1>
             <p className="text-saas-sm text-muted-foreground">Visão geral da saúde comercial e conversão.</p>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" className="h-8 text-[11px] font-bold">
-              <Calendar className="mr-1.5 h-3.5 w-3.5" /> Últimos 30 dias
-            </Button>
+          <div className="flex flex-wrap gap-2">
+            <div className="relative">
+              <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none z-10" />
+              <input
+                type="month"
+                value={mesFiltro}
+                onChange={(e) => setMesFiltro(e.target.value)}
+                className="h-8 pl-8 pr-2 text-[11px] font-bold border border-slate-200 rounded-md text-slate-700 bg-white"
+              />
+            </div>
+            {(role === "dono" || role === "gerente") && (
+              <Select value={corretorFiltroRel} onValueChange={setCorretorFiltroRel}>
+                <SelectTrigger className="h-8 w-[160px] text-[11px] font-bold">
+                  <SelectValue placeholder="Corretor" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos os corretores</SelectItem>
+                  {raw?.team.map((t: any) => (
+                    <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            <Select value={origemFiltroRel} onValueChange={setOrigemFiltroRel}>
+              <SelectTrigger className="h-8 w-[180px] text-[11px] font-bold">
+                <SelectValue placeholder="Campanha" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todas">Todas as campanhas</SelectItem>
+                {origensDisponiveis.map((o) => (
+                  <SelectItem key={o} value={o} className="truncate">{o}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <StatCard title="Total de Leads" value={stats?.totalLeads} trend="+15%" icon={<Users />} color="text-primary" />
+          <StatCard title="Leads no Mês" value={stats?.totalLeads} trend={mesFiltro} icon={<Users />} color="text-primary" />
           <StatCard title="SLA de Atendimento" value={`${stats?.avgResponseTime} min`} trend="Meta: 5min" icon={<Clock />} color="text-amber-500" />
-          <StatCard title="Taxa de Conversão" value={`${((stats?.converted || 0) / (stats?.totalLeads || 1) * 100).toFixed(1)}%`} trend="+2.4%" icon={<Target />} color="text-blue-500" />
-          <StatCard title="Vendas Mensais" value={stats?.converted} trend="+10%" icon={<CheckCircle />} color="text-emerald-500" />
+          <StatCard title="Taxa de Conversão" value={`${((stats?.converted || 0) / (stats?.totalLeads || 1) * 100).toFixed(1)}%`} trend="No período filtrado" icon={<Target />} color="text-blue-500" />
+          <StatCard title="Vendas no Mês" value={stats?.vendasDoMes} trend="Fechamentos" icon={<CheckCircle />} color="text-emerald-500" />
         </div>
+
+        <Card className="border-none shadow-soft bg-white overflow-hidden">
+          <CardHeader className="py-4 px-5 border-b border-slate-50">
+            <CardTitle className="text-sm font-bold">Funil Completo</CardTitle>
+            <CardDescription className="text-saas-xs">Quantos leads passaram por cada etapa no período filtrado — clique numa barra pra ver os cards</CardDescription>
+          </CardHeader>
+          <CardContent className="p-6 space-y-2.5">
+            {stats?.funil.map((etapa: any) => {
+              const max = Math.max(1, ...(stats.funil.map((e: any) => e.value)), stats.vendasDoMes);
+              return (
+                <button
+                  key={etapa.id}
+                  onClick={() => setColunaSelecionada({ id: etapa.id, nome: etapa.nome })}
+                  className="w-full flex items-center gap-3 group"
+                >
+                  <span className="w-36 shrink-0 text-[10px] font-bold text-slate-500 uppercase text-right truncate group-hover:text-primary">{etapa.nome}</span>
+                  <div className="flex-1 h-6 bg-slate-50 rounded-md overflow-hidden">
+                    <div
+                      className="h-full bg-blue-500/80 group-hover:bg-blue-600 transition-all rounded-md flex items-center justify-end px-2"
+                      style={{ width: `${Math.max(4, (etapa.value / max) * 100)}%` }}
+                    >
+                      {etapa.value > 0 && <span className="text-[10px] font-bold text-white">{etapa.value}</span>}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+            <button
+              onClick={() => setStatusSelecionado("venda_concluida")}
+              className="w-full flex items-center gap-3 group pt-1 border-t border-slate-100"
+            >
+              <span className="w-36 shrink-0 text-[10px] font-bold text-emerald-600 uppercase text-right truncate">Venda</span>
+              <div className="flex-1 h-6 bg-slate-50 rounded-md overflow-hidden">
+                <div
+                  className="h-full bg-emerald-500/80 group-hover:bg-emerald-600 transition-all rounded-md flex items-center justify-end px-2"
+                  style={{ width: `${Math.max(4, (stats?.vendasDoMes || 0) / Math.max(1, ...(stats?.funil.map((e: any) => e.value) || [1]), stats?.vendasDoMes || 1) * 100)}%` }}
+                >
+                  {(stats?.vendasDoMes || 0) > 0 && <span className="text-[10px] font-bold text-white">{stats?.vendasDoMes}</span>}
+                </div>
+              </div>
+            </button>
+          </CardContent>
+        </Card>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           <Card className="lg:col-span-7 border-none shadow-soft bg-white overflow-hidden">
@@ -357,6 +474,32 @@ function ReportsPage() {
                 <button
                   key={lead.id}
                   onClick={() => { setLeadSelecionadoId(lead.id); setStatusSelecionado(null); }}
+                  className="w-full text-left flex items-center justify-between gap-3 p-2.5 rounded-lg border border-slate-100 hover:bg-slate-50 transition-colors"
+                >
+                  <span className="text-xs font-bold text-slate-700 truncate">{lead.nome}</span>
+                  <span className="text-[10px] text-slate-400 flex items-center gap-1 shrink-0">
+                    <Phone className="h-3 w-3" /> {lead.telefone}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!colunaSelecionada} onOpenChange={(open) => { if (!open) setColunaSelecionada(null); }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-sm font-bold uppercase">
+              {colunaSelecionada?.nome} · {stats?.leads.filter((l: any) => l.coluna_kanban_id === colunaSelecionada?.id).length} leads
+            </DialogTitle>
+          </DialogHeader>
+          <ScrollArea className="max-h-[60vh]">
+            <div className="space-y-1.5 pr-3">
+              {stats?.leads.filter((l: any) => l.coluna_kanban_id === colunaSelecionada?.id).map((lead: any) => (
+                <button
+                  key={lead.id}
+                  onClick={() => { setLeadSelecionadoId(lead.id); setColunaSelecionada(null); }}
                   className="w-full text-left flex items-center justify-between gap-3 p-2.5 rounded-lg border border-slate-100 hover:bg-slate-50 transition-colors"
                 >
                   <span className="text-xs font-bold text-slate-700 truncate">{lead.nome}</span>

@@ -209,7 +209,7 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, leadName, ful
         const base64 = await toBase64(file);
         const legenda = i === 0 ? texto : "";
 
-        await sendWhatsappMessage(phoneNumber, legenda, {
+        const result = await sendWhatsappMessage(phoneNumber, legenda, {
           base64,
           mimetype: blob.type,
           fileName: anexo.nome,
@@ -221,6 +221,7 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, leadName, ful
           imobiliaria_id: imobiliariaId,
           corretor_id: user?.id,
           conteudo: `[Anexo]: ${anexo.url}${legenda ? `\n${legenda}` : ""}`,
+          whatsapp_message_id: result?.messageId || null,
           direcao: "outbound",
           tipo: anexo.tipo === "imagem" ? "image" : anexo.tipo === "video" ? "video" : "document",
           status: "sent",
@@ -300,16 +301,19 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, leadName, ful
       } as any;
       setMessages((prev) => [...prev, optimisticMessage]);
 
+      let whatsappMessageId: string | null = null;
       if (pendingAttachment && base64) {
         // O backend resolve o JID certo (com/sem nono dígito) e envia via baileys-api
-        await sendWhatsappMessage(phoneNumber, messageContent, {
+        const result = await sendWhatsappMessage(phoneNumber, messageContent, {
           base64,
           mimetype,
           fileName: pendingAttachment.name,
         }, quoted);
+        whatsappMessageId = result?.messageId || null;
       } else {
         // Envia apenas o texto — o backend resolve o JID e faz o envio
-        await sendWhatsappMessage(phoneNumber, messageContent, undefined, quoted);
+        const result = await sendWhatsappMessage(phoneNumber, messageContent, undefined, quoted);
+        whatsappMessageId = result?.messageId || null;
       }
 
       // 2. Salvar no banco (direção outbound)
@@ -321,6 +325,11 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, leadName, ful
         imobiliaria_id: imobiliariaId,
         corretor_id: user?.id,
         conteudo: finalConteudo,
+        // Guarda o id real do Baileys pra o webhook reconhecer o eco dessa
+        // mesma mensagem (fromMe=true) e nao duplicar — sem isso nao dava
+        // pra distinguir "eco do que o CRM mandou" de "mensagem mandada
+        // direto do celular", e ficava tudo bloqueado.
+        whatsapp_message_id: whatsappMessageId,
         direcao: "outbound",
         tipo: typeSent,
         status: "sent",

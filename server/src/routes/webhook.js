@@ -207,7 +207,6 @@ async function criarLeadDoWhatsapp(contactPhone, receivingPhoneNumber, pushName)
 async function handleSingleMessage(msg, receivingPhoneNumber) {
   const remoteJid = msg?.key?.remoteJid;
   if (!remoteJid || remoteJid.includes("@g.us")) return; // ignora grupos
-  if (msg?.key?.fromMe) return; // eco do que a gente mesmo mandou
 
   const remoteJidAlt = msg?.key?.remoteJidAlt;
   let contactPhone;
@@ -324,16 +323,23 @@ async function handleSingleMessage(msg, receivingPhoneNumber) {
 
   if (!text) text = "📎 Arquivo não suportado ou vazio";
 
+  // fromMe=true chega tanto pro eco do que o proprio CRM manda (ja
+  // descartado pelo dedupe acima, porque o insert do CRM grava
+  // whatsapp_message_id com o id retornado pelo /send) quanto pra mensagem
+  // mandada direto do celular do corretor, fora do CRM — essa segunda
+  // precisamos sincronizar como outbound normal.
+  const isFromMe = !!msg?.key?.fromMe;
+
   const { error: insertError } = await supabaseAdmin.from("mensagens_whatsapp").insert({
     lead_id: lead.id,
     imobiliaria_id: lead.imobiliaria_id,
     corretor_id: leadDetail?.corretor_id || null,
     conteudo: text,
-    direcao: "inbound",
-    status: "delivered",
+    direcao: isFromMe ? "outbound" : "inbound",
+    status: isFromMe ? "sent" : "delivered",
     whatsapp_message_id: sourceId,
     tipo,
-    lida: false,
+    lida: isFromMe ? true : false,
     metadata: msg,
   });
   if (insertError) console.error("Erro ao inserir mensagem:", insertError);
