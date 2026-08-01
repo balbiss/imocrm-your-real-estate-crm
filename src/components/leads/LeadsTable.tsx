@@ -22,7 +22,7 @@ import { LeadDetailsModal } from "./LeadDetailsModal";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
-import { getRetrocompatibleStatus, getColunaPorStatus } from "@/lib/utils";
+import { getRetrocompatibleStatus, getColunaPorStatus, calcularProximaCadencia } from "@/lib/utils";
 import { toast } from "sonner";
 
 interface Coluna {
@@ -106,13 +106,13 @@ export function LeadsTable({ leads, isLoading, colunas }: LeadsTableProps) {
   });
 
   // Mesma lógica do handleUpdateField("cadencia_chamada", ...) do modal:
-  // agenda follow-up +24h e move status+coluna pra "tarefas" (se não for
-  // venda/descarte), pra não duplicar comportamento divergente entre lista e modal.
+  // agenda follow-up no horário fixo da cadência e move status+coluna pra
+  // "tarefas" (se não for venda/descarte), pra não duplicar comportamento
+  // divergente entre lista e modal.
   const changeCadenciaMutation = useMutation({
     mutationFn: async ({ lead, cadencia }: { lead: any; cadencia: number }) => {
       const now = new Date();
-      const nextDate = new Date();
-      nextDate.setHours(nextDate.getHours() + 24);
+      const nextDate = calcularProximaCadencia(now);
 
       const payload: any = {
         cadencia_chamada: cadencia,

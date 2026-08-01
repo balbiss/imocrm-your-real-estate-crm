@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { LeadDetailsModal } from "./LeadDetailsModal";
-import { getColunaPorStatus } from "@/lib/utils";
+import { getColunaPorStatus, calcularProximaCadencia } from "@/lib/utils";
 
 const STAGES = [
   { id: "novo", title: "LEAD NOVO", color: "bg-blue-500" },
@@ -180,12 +180,12 @@ export function LeadsKanban({ leads: initialLeads, isLoading: initialLoading, im
     setIsModalOpen(true);
   };
 
-  // Mesma lógica da LeadsTable: agenda follow-up +24h e move status+coluna pra "tarefas".
+  // Mesma lógica da LeadsTable: agenda follow-up no horário fixo da
+  // cadência e move status+coluna pra "tarefas".
   const changeCadenciaMutation = useMutation({
     mutationFn: async ({ lead, cadencia }: { lead: any; cadencia: number }) => {
       const now = new Date();
-      const nextDate = new Date();
-      nextDate.setHours(nextDate.getHours() + 24);
+      const nextDate = calcularProximaCadencia(now);
 
       const payload: any = {
         cadencia_chamada: cadencia,

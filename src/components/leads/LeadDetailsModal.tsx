@@ -54,7 +54,7 @@ import { format, isToday } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAuth } from "@/context/AuthContext";
-import { getRetrocompatibleStatus, getColunaPorStatus } from "@/lib/utils";
+import { getRetrocompatibleStatus, getColunaPorStatus, calcularProximaCadencia } from "@/lib/utils";
 
 interface LeadDetailsModalProps {
   leadId: string | null;
@@ -494,9 +494,8 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
       const now = new Date();
       payload.data_ultima_chamada = now.toISOString();
       
-      // Agenda a próxima tarefa para +24h
-      const nextDate = new Date();
-      nextDate.setHours(nextDate.getHours() + 24);
+      // Agenda a próxima tarefa no horário fixo da cadência
+      const nextDate = calcularProximaCadencia(now);
       payload.lembrete_follow_up = nextDate.toISOString();
       
       // Move para tarefas (se não for venda ou descarte) — precisa mudar o

@@ -251,15 +251,17 @@ function FilasPage() {
 
   const toggleStatusMutation = useMutation({
     mutationFn: async ({ profileId, status }: { profileId: string, status: boolean }) => {
-      const { error } = await supabase
-        .from("perfis")
-        .update({
-          status_roleta: !status,
-          em_plantao: !status,
-          ultimo_checkin_roleta: !status ? new Date().toISOString() : null
-        })
-        .eq("id", profileId);
-      if (error) throw error;
+      if (!status) {
+        // Ligando: mesma regra do timer de 10min pos-embaralhar do check-in.
+        const { error } = await supabase.rpc("entrar_na_roleta", { p_corretor_id: profileId });
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("perfis")
+          .update({ status_roleta: false, em_plantao: false })
+          .eq("id", profileId);
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["fila-atendimento"] });
@@ -272,14 +274,7 @@ function FilasPage() {
   const checkinMutation = useMutation({
     mutationFn: async () => {
       if (!user) return;
-      const { error } = await supabase
-        .from("perfis")
-        .update({ 
-          status_roleta: true,
-          ultimo_checkin_roleta: new Date().toISOString(),
-          em_plantao: true
-        })
-        .eq("id", user.id);
+      const { error } = await supabase.rpc("entrar_na_roleta", { p_corretor_id: user.id });
       if (error) throw error;
     },
     onError: (error: any) => {
@@ -306,9 +301,24 @@ function FilasPage() {
         [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
       }
       await updatePosicoesMutation.mutateAsync(shuffled);
+
+      // Reinicia o "turno" (quem chegar em ate 10min ainda entra nessa
+      // roleta; depois disso so participa do proximo embaralhar) e
+      // distribui automaticamente quem estava parado no Bolsao pra quem
+      // esta online agora, seguindo a ordem da roleta recem-embaralhada.
+      const { data: distribuidos, error } = await supabase.rpc("registrar_embaralhamento", {
+        p_imobiliaria_id: profile!.imobiliaria_id,
+      });
+      if (error) throw error;
+      return distribuidos as number;
     },
-    onSuccess: () => {
-      toast.info("Roleta embaralhada!");
+    onSuccess: (distribuidos) => {
+      queryClient.invalidateQueries({ queryKey: ["leads"] });
+      if (distribuidos) {
+        toast.info(`Roleta embaralhada! ${distribuidos} lead(s) do Bolsão foram distribuídos.`);
+      } else {
+        toast.info("Roleta embaralhada!");
+      }
     },
     onError: (error: any) => {
       toast.error("Erro ao embaralhar: " + (error?.message || "erro desconhecido"));
