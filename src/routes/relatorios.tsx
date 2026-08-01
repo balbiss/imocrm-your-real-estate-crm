@@ -1,4 +1,6 @@
 import React from "react";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { createFileRoute } from "@tanstack/react-router";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useQuery } from "@tanstack/react-query";
@@ -268,7 +270,7 @@ function ReportsPage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <StatCard title="Leads no Mês" value={stats?.totalLeads} trend={mesFiltro} icon={<Users />} color="text-primary" />
+          <StatCard title="Leads no Mês" value={stats?.totalLeads} trend={format(new Date(`${mesFiltro}-02`), "MMMM 'de' yyyy", { locale: ptBR })} icon={<Users />} color="text-primary" />
           <StatCard title="SLA de Atendimento" value={`${stats?.avgResponseTime} min`} trend="Meta: 5min" icon={<Clock />} color="text-amber-500" />
           <StatCard title="Taxa de Conversão" value={`${((stats?.converted || 0) / (stats?.totalLeads || 1) * 100).toFixed(1)}%`} trend="No período filtrado" icon={<Target />} color="text-blue-500" />
           <StatCard title="Vendas no Mês" value={stats?.vendasDoMes} trend="Fechamentos" icon={<CheckCircle />} color="text-emerald-500" />
