@@ -8,6 +8,7 @@ import { MainLayout } from "@/components/layout/MainLayout";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { WhatsAppChat } from "@/components/leads/WhatsAppChat";
+import { LeadDetailsModal } from "@/components/leads/LeadDetailsModal";
 import { useAuth } from "@/context/AuthContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { supabase } from "@/integrations/supabase/client";
@@ -37,6 +38,7 @@ function ConversasPage() {
   const [search, setSearch] = useState("");
   const [corretorFiltro, setCorretorFiltro] = useState<string>("todos");
   const [selected, setSelected] = useState<Conversa | null>(null);
+  const [leadCardAberto, setLeadCardAberto] = useState(false);
 
   const canVerTodas = role === "dono" || role === "gerente";
 
@@ -202,7 +204,9 @@ function ConversasPage() {
               leadId={selected.lead_id}
               imobiliariaId={selected.imobiliaria_id}
               phoneNumber={selected.lead_telefone || ""}
+              leadName={selected.lead_nome}
               fullHeight
+              onHeaderClick={() => setLeadCardAberto(true)}
             />
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-slate-300">
@@ -212,6 +216,12 @@ function ConversasPage() {
           )}
         </div>
       </div>
+
+      <LeadDetailsModal
+        leadId={selected?.lead_id ?? null}
+        open={leadCardAberto}
+        onOpenChange={setLeadCardAberto}
+      />
     </MainLayout>
   );
 }

@@ -24,9 +24,11 @@ export function AprovacoesDescarteDialog({ open, onOpenChange, imobiliariaId }: 
       const { data, error } = await supabase
         .from("leads")
         .select(`
-          id, 
-          nome, 
-          motivo_descarte, 
+          id,
+          nome,
+          telefone,
+          email,
+          motivo_descarte,
           corretor:perfis!leads_corretor_id_fkey(nome),
           interacoes:leads_interacoes(conteudo, created_at, tipo)
         `)
@@ -143,6 +145,10 @@ export function AprovacoesDescarteDialog({ open, onOpenChange, imobiliariaId }: 
                         <h4 className="text-sm font-bold text-slate-800">{lead.nome}</h4>
                         <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">
                           Corretor: <span className="text-slate-600">{lead.corretor?.nome || "Desconhecido"}</span>
+                        </p>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">
+                          Tel: <span className="text-slate-600 normal-case">{lead.telefone || "-"}</span>
+                          {lead.email && <> · E-mail: <span className="text-slate-600 normal-case">{lead.email}</span></>}
                         </p>
                       </div>
                       <span className="bg-red-50 text-red-700 text-[9px] px-2 py-1 rounded font-bold border border-red-100 uppercase">

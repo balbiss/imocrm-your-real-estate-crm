@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -8,7 +8,10 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MoreHorizontal, MessageSquare, Phone, User, RefreshCw, Flame, Snowflake, Sun, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { toast } from "sonner";
 import { LeadDetailsModal } from "./LeadDetailsModal";
+import { getColunaPorStatus } from "@/lib/utils";
 
 const STAGES = [
   { id: "novo", title: "LEAD NOVO", color: "bg-blue-500" },
@@ -33,8 +36,10 @@ interface LeadsKanbanProps {
 
 export function LeadsKanban({ leads: initialLeads, isLoading: initialLoading, imobiliariaId }: LeadsKanbanProps) {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalInitialTab, setModalInitialTab] = useState<"detalhes" | "chat">("detalhes");
 
   // Buscar perfil se não foi passado imobiliariaId
   const { data: profile } = useQuery({
@@ -165,8 +170,46 @@ export function LeadsKanban({ leads: initialLeads, isLoading: initialLoading, im
 
   const handleLeadClick = (id: string) => {
     setSelectedLeadId(id);
+    setModalInitialTab("detalhes");
     setIsModalOpen(true);
   };
+
+  const handleOpenChat = (id: string) => {
+    setSelectedLeadId(id);
+    setModalInitialTab("chat");
+    setIsModalOpen(true);
+  };
+
+  // Mesma lógica da LeadsTable: agenda follow-up +24h e move status+coluna pra "tarefas".
+  const changeCadenciaMutation = useMutation({
+    mutationFn: async ({ lead, cadencia }: { lead: any; cadencia: number }) => {
+      const now = new Date();
+      const nextDate = new Date();
+      nextDate.setHours(nextDate.getHours() + 24);
+
+      const payload: any = {
+        cadencia_chamada: cadencia,
+        data_ultima_chamada: now.toISOString(),
+        lembrete_follow_up: nextDate.toISOString(),
+        ultima_acao_at: now.toISOString(),
+      };
+
+      if (lead.status !== "venda_concluida" && !lead.descartado_em) {
+        payload.status = "tarefas";
+        const colunaTarefas = getColunaPorStatus(colunas, "tarefas");
+        if (colunaTarefas) payload.coluna_kanban_id = colunaTarefas.id;
+      }
+
+      const { error } = await supabase.from("leads").update(payload).eq("id", lead.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["leads"] });
+      queryClient.invalidateQueries({ queryKey: ["compromissos"] });
+      toast.success("Cadência atualizada!");
+    },
+    onError: (error: any) => toast.error("Erro ao atualizar cadência: " + (error?.message || "erro desconhecido")),
+  });
 
   // Coluna sem nenhum lead fica oculta pra não poluir a tela — ela volta a
   // aparecer sozinha assim que algum lead for movido pra ela (via dropdown de
@@ -221,9 +264,26 @@ export function LeadsKanban({ leads: initialLeads, isLoading: initialLoading, im
                           {lead.sla_vencido && (
                             <Badge className="text-[8px] h-3.5 px-1 font-bold bg-red-100 text-red-600 border-none uppercase">SLA</Badge>
                           )}
-                          {!!lead.cadencia_chamada && (
-                            <Badge className="text-[8px] h-3.5 px-1 font-bold bg-primary/10 text-primary border-none uppercase">Chamada {lead.cadencia_chamada}</Badge>
-                          )}
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button onClick={(e) => e.stopPropagation()}>
+                                <Badge className={`text-[8px] h-3.5 px-1 font-bold border-none uppercase cursor-pointer hover:opacity-80 ${lead.cadencia_chamada ? "bg-primary/10 text-primary" : "bg-slate-100 text-slate-500"}`}>
+                                  {lead.cadencia_chamada ? `Chamada ${lead.cadencia_chamada}` : "Cadência"}
+                                </Badge>
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start" onClick={(e) => e.stopPropagation()}>
+                              {[0, 1, 2, 3, 4, 5, 6, 7].map((n) => (
+                                <DropdownMenuItem
+                                  key={n}
+                                  disabled={(lead.cadencia_chamada || 0) === n}
+                                  onClick={() => changeCadenciaMutation.mutate({ lead, cadencia: n })}
+                                >
+                                  {n === 0 ? "Início" : `Chamada ${n}`}
+                                </DropdownMenuItem>
+                              ))}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
                       </div>
                       <Badge
@@ -255,7 +315,7 @@ export function LeadsKanban({ leads: initialLeads, isLoading: initialLoading, im
                           className="h-6 w-6 rounded text-green-600 hover:bg-green-50"
                           onClick={(e) => {
                             e.stopPropagation();
-                            window.open(`https://wa.me/55${lead.telefone.replace(/\D/g, "")}`, "_blank");
+                            handleOpenChat(lead.id);
                           }}
                         >
                           <MessageSquare className="h-3.5 w-3.5" />
@@ -299,10 +359,11 @@ export function LeadsKanban({ leads: initialLeads, isLoading: initialLoading, im
         </div>
       ))}
 
-      <LeadDetailsModal 
+      <LeadDetailsModal
         leadId={selectedLeadId}
         open={isModalOpen}
         onOpenChange={setIsModalOpen}
+        initialTab={modalInitialTab}
       />
     </div>
   );

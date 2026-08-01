@@ -206,9 +206,15 @@ function TemplatesPage() {
             <form onSubmit={(e) => {
               e.preventDefault();
               const formData = new FormData(e.currentTarget);
+              const conteudo = (formData.get("conteudo") as string) || "";
+              const temAnexo = !!anexoFile || (!!editingTemplate?.anexo_url && !removerAnexoExistente);
+              if (!conteudo.trim() && !temAnexo) {
+                toast.error("Adicione um texto ou um anexo (imagem/vídeo) pro template.");
+                return;
+              }
               saveTemplate.mutate({
                 titulo: formData.get("titulo"),
-                conteudo: formData.get("conteudo"),
+                conteudo,
                 tipo: formData.get("tipo"),
               });
             }} className="space-y-4 py-4">
@@ -232,12 +238,11 @@ function TemplatesPage() {
               </div>
               <div className="space-y-1.5">
                 <label className="text-saas-xs font-bold text-slate-500 uppercase tracking-wider">Corpo da Mensagem</label>
-                <Textarea 
-                  name="conteudo" 
-                  defaultValue={editingTemplate?.conteudo} 
-                  placeholder="Olá {nome}, vi que você se interessou pelo imóvel..." 
+                <Textarea
+                  name="conteudo"
+                  defaultValue={editingTemplate?.conteudo}
+                  placeholder="Olá {nome}, vi que você se interessou pelo imóvel... (opcional se anexar imagem/vídeo)"
                   className="min-h-[160px] text-saas-sm border-slate-200 resize-none leading-relaxed"
-                  required 
                 />
                 <div className="flex items-center gap-2 mt-1">
                     <CheckCircle2 className="h-3 w-3 text-emerald-500" />

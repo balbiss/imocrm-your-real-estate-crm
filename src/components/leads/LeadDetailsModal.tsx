@@ -95,6 +95,7 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
 
   const [editNome, setEditNome] = useState("");
   const [editTelefone, setEditTelefone] = useState("");
+  const [editEmail, setEditEmail] = useState("");
   const [slaTimeLeft, setSlaTimeLeft] = useState<number | null>(null);
 
   // Buscar dados do lead
@@ -210,6 +211,7 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
     if (lead) {
       setEditNome(lead.nome);
       setEditTelefone(lead.telefone);
+      setEditEmail(lead.email || "");
     }
   }, [lead]);
 
@@ -612,7 +614,7 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">E-mail</Label>
-                      <Input value={lead.email || ""} placeholder="Adicionar e-mail..." className="h-9 text-sm border-slate-200" onBlur={(e) => handleUpdateField("email", e.target.value)} />
+                      <Input value={editEmail} onChange={(e) => setEditEmail(e.target.value)} placeholder="Adicionar e-mail..." className="h-9 text-sm border-slate-200" onBlur={() => handleUpdateField("email", editEmail)} />
                     </div>
                   </div>
                 </CardContent>
@@ -1055,10 +1057,11 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
 
               {activeTab === "chat" && (
                 <div className="mt-4">
-                  <WhatsAppChat 
-                    leadId={lead.id} 
-                    imobiliariaId={lead.imobiliaria_id} 
-                    phoneNumber={lead.telefone} 
+                  <WhatsAppChat
+                    leadId={lead.id}
+                    imobiliariaId={lead.imobiliaria_id}
+                    phoneNumber={lead.telefone}
+                    leadName={lead.nome}
                   />
                 </div>
               )}

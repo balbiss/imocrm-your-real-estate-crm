@@ -23,7 +23,9 @@ interface WhatsAppChatProps {
   leadId: string;
   imobiliariaId: string;
   phoneNumber: string;
+  leadName?: string | null;
   fullHeight?: boolean;
+  onHeaderClick?: () => void;
 }
 
 interface Template {
@@ -35,7 +37,7 @@ interface Template {
   anexo_nome: string | null;
 }
 
-export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, fullHeight }: WhatsAppChatProps) {
+export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, leadName, fullHeight, onHeaderClick }: WhatsAppChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(true);
@@ -290,7 +292,10 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, fullHeight }:
       
       {/* Cabeçalho do Chat */}
       <div className="bg-[#F0F2F5] p-3 border-b border-[#D1D7DB] flex items-center justify-between z-10">
-        <div className="flex items-center gap-3">
+        <div
+          className={`flex items-center gap-3 ${onHeaderClick ? "cursor-pointer" : ""}`}
+          onClick={onHeaderClick}
+        >
           <div className="h-10 w-10 rounded-full bg-[#DFE5E7] flex items-center justify-center text-slate-500 overflow-hidden shrink-0 shadow-sm border border-black/5">
             {leadAvatar ? (
               <img src={leadAvatar} alt="Lead Avatar" className="h-full w-full object-cover" />
@@ -299,7 +304,7 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, fullHeight }:
             )}
           </div>
           <div>
-            <p className="text-[15px] font-medium text-[#111B21]">{phoneNumber}</p>
+            <p className="text-[15px] font-medium text-[#111B21]">{leadName || phoneNumber}</p>
             <div className="flex items-center gap-1.5 text-[13px] text-[#00A884]">
               <div className="h-2 w-2 bg-[#00A884] rounded-full mt-[1px]"></div>
               WhatsApp
@@ -472,7 +477,9 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, fullHeight }:
                       type="button"
                       className="w-full text-left px-3 py-2.5 border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors"
                       onClick={async () => {
-                        setNewMessage((prev) => (prev ? `${prev}\n${t.conteudo}` : t.conteudo));
+                        const primeiroNome = (leadName || "").trim().split(/\s+/)[0] || "";
+                        const conteudoPersonalizado = t.conteudo.replace(/\{nome\}/gi, primeiroNome);
+                        setNewMessage((prev) => (prev ? `${prev}\n${conteudoPersonalizado}` : conteudoPersonalizado));
                         setShowTemplates(false);
                         if (t.anexo_url) {
                           try {
