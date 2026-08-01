@@ -19,6 +19,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { MessageSquare, Phone, MoreVertical, Flame, Snowflake, Sun } from "lucide-react";
 import { LeadDetailsModal } from "./LeadDetailsModal";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { getRetrocompatibleStatus, getColunaPorStatus } from "@/lib/utils";
 import { toast } from "sonner";
@@ -56,6 +58,8 @@ export function LeadsTable({ leads, isLoading, colunas }: LeadsTableProps) {
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalInitialTab, setModalInitialTab] = useState<"detalhes" | "chat">("detalhes");
+  const [pendingStatusChange, setPendingStatusChange] = useState<{ lead: any; coluna: Coluna } | null>(null);
+  const [followUpDateTemp, setFollowUpDateTemp] = useState("");
 
   const handleLeadClick = (id: string) => {
     setSelectedLeadId(id);
@@ -73,7 +77,7 @@ export function LeadsTable({ leads, isLoading, colunas }: LeadsTableProps) {
   // do kanban juntos (mesma logica de handleMoveColuna no LeadDetailsModal),
   // senao o card fica visualmente parado na coluna antiga.
   const changeStatusMutation = useMutation({
-    mutationFn: async ({ lead, coluna }: { lead: any; coluna: Coluna }) => {
+    mutationFn: async ({ lead, coluna, followUpDate }: { lead: any; coluna: Coluna; followUpDate?: string }) => {
       // Negócio já fechado (handleFechamento em LeadDetailsModal) é estado
       // terminal — mudar a coluna do kanban não pode sobrescrever o status
       // 'venda_concluida' por baixo, senão a venda some dos relatórios
@@ -82,14 +86,20 @@ export function LeadsTable({ leads, isLoading, colunas }: LeadsTableProps) {
         throw new Error("Negócio já fechado — não é possível mudar a coluna por aqui.");
       }
       const status = getRetrocompatibleStatus(coluna.nome, coluna.posicao, colunas?.length || 1);
+      const payload: any = { coluna_kanban_id: coluna.id, status };
+      // followUpDate vem de <input type="datetime-local"> (sem timezone) —
+      // converte pro UTC certo antes de salvar (mesmo ajuste feito em
+      // ScheduleTaskModal/LeadDetailsModal, senão fica 3h errado).
+      if (followUpDate) payload.lembrete_follow_up = new Date(followUpDate).toISOString();
       const { error } = await supabase
         .from("leads")
-        .update({ coluna_kanban_id: coluna.id, status } as any)
+        .update(payload)
         .eq("id", lead.id);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["leads"] });
+      if (variables.followUpDate) queryClient.invalidateQueries({ queryKey: ["compromissos"] });
       toast.success("Status atualizado!");
     },
     onError: (error: any) => toast.error("Erro ao atualizar status: " + (error?.message || "erro desconhecido")),
@@ -194,7 +204,7 @@ export function LeadsTable({ leads, isLoading, colunas }: LeadsTableProps) {
                         <DropdownMenuItem
                           key={coluna.id}
                           disabled={lead.coluna_kanban_id === coluna.id}
-                          onClick={() => changeStatusMutation.mutate({ lead, coluna })}
+                          onClick={() => { setFollowUpDateTemp(""); setPendingStatusChange({ lead, coluna }); }}
                         >
                           {coluna.nome}
                         </DropdownMenuItem>
@@ -297,6 +307,55 @@ export function LeadsTable({ leads, isLoading, colunas }: LeadsTableProps) {
         onOpenChange={setIsModalOpen}
         initialTab={modalInitialTab}
       />
+
+      <Dialog open={!!pendingStatusChange} onOpenChange={(open) => { if (!open) setPendingStatusChange(null); }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-sm font-bold">
+              Mover para "{pendingStatusChange?.coluna.nome}"
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-1.5 py-2">
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">
+              Agendar próximo follow-up (opcional)
+            </label>
+            <Input
+              type="datetime-local"
+              value={followUpDateTemp}
+              onChange={(e) => setFollowUpDateTemp(e.target.value)}
+              className="h-9 text-sm border-slate-200"
+            />
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="text-saas-xs font-bold uppercase"
+              onClick={() => {
+                if (!pendingStatusChange) return;
+                changeStatusMutation.mutate({ lead: pendingStatusChange.lead, coluna: pendingStatusChange.coluna });
+                setPendingStatusChange(null);
+              }}
+            >
+              Salvar sem agendar
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              className="text-saas-xs font-bold uppercase px-6"
+              disabled={!followUpDateTemp}
+              onClick={() => {
+                if (!pendingStatusChange) return;
+                changeStatusMutation.mutate({ lead: pendingStatusChange.lead, coluna: pendingStatusChange.coluna, followUpDate: followUpDateTemp });
+                setPendingStatusChange(null);
+              }}
+            >
+              Salvar e agendar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

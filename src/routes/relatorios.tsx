@@ -20,9 +20,12 @@ import {
   Area
 } from "recharts";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Users, Target, CheckCircle, Clock, Calendar, BarChart3, Loader2 } from "lucide-react";
+import { Users, Target, CheckCircle, Clock, Calendar, BarChart3, Loader2, Phone } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { LeadDetailsModal } from "@/components/leads/LeadDetailsModal";
 
 import { useNavigate } from "@tanstack/react-router";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -38,6 +41,8 @@ function ReportsPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { role, isLoading: loadingPerms } = usePermissions();
+  const [statusSelecionado, setStatusSelecionado] = React.useState<string | null>(null);
+  const [leadSelecionadoId, setLeadSelecionadoId] = React.useState<string | null>(null);
 
   // Proteção de rota
   React.useEffect(() => {
@@ -154,7 +159,8 @@ function ReportsPage() {
         originData,
         statusData,
         tempData,
-        brokerPerformance: brokerPerformance.sort((a, b) => b.vendas - a.vendas)
+        brokerPerformance: brokerPerformance.sort((a, b) => b.vendas - a.vendas),
+        leads,
       };
     },
     enabled: !!profile?.imobiliaria_id
@@ -238,6 +244,8 @@ function ReportsPage() {
                     paddingAngle={8}
                     dataKey="value"
                     stroke="none"
+                    className="cursor-pointer"
+                    onClick={(entry: any) => setStatusSelecionado(entry.name)}
                   >
                     {stats?.statusData.map((entry: any, index: number) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -253,7 +261,11 @@ function ReportsPage() {
             </CardContent>
             <div className="px-6 pb-6 grid grid-cols-2 gap-2">
                 {stats?.statusData.map((item: any, index: number) => (
-                  <div key={item.name} className="flex items-center gap-2">
+                  <div
+                    key={item.name}
+                    className="flex items-center gap-2 cursor-pointer hover:opacity-70 rounded px-1 -mx-1"
+                    onClick={() => setStatusSelecionado(item.name)}
+                  >
                     <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
                     <span className="text-[10px] font-bold text-slate-500 uppercase truncate max-w-[100px]">{item.name.replace('_', ' ')}</span>
                     <span className="text-[10px] font-bold ml-auto">{item.value}</span>
@@ -331,6 +343,38 @@ function ReportsPage() {
           </Card>
         </div>
       </div>
+
+      <Dialog open={!!statusSelecionado} onOpenChange={(open) => { if (!open) setStatusSelecionado(null); }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-sm font-bold uppercase">
+              {statusSelecionado?.replace('_', ' ')} · {stats?.leads.filter((l: any) => l.status === statusSelecionado).length} leads
+            </DialogTitle>
+          </DialogHeader>
+          <ScrollArea className="max-h-[60vh]">
+            <div className="space-y-1.5 pr-3">
+              {stats?.leads.filter((l: any) => l.status === statusSelecionado).map((lead: any) => (
+                <button
+                  key={lead.id}
+                  onClick={() => { setLeadSelecionadoId(lead.id); setStatusSelecionado(null); }}
+                  className="w-full text-left flex items-center justify-between gap-3 p-2.5 rounded-lg border border-slate-100 hover:bg-slate-50 transition-colors"
+                >
+                  <span className="text-xs font-bold text-slate-700 truncate">{lead.nome}</span>
+                  <span className="text-[10px] text-slate-400 flex items-center gap-1 shrink-0">
+                    <Phone className="h-3 w-3" /> {lead.telefone}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
+
+      <LeadDetailsModal
+        leadId={leadSelecionadoId}
+        open={!!leadSelecionadoId}
+        onOpenChange={(open) => { if (!open) setLeadSelecionadoId(null); }}
+      />
     </MainLayout>
   );
 }

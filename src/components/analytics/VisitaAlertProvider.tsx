@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/context/AuthContext";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, Clock, Calendar, MapPin, User, CheckCircle2 } from "lucide-react";
+import { AlertTriangle, Clock, Calendar, MapPin, User, CheckCircle2, X } from "lucide-react";
 import { format, differenceInHours, differenceInMinutes, isSameDay, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
@@ -17,6 +17,10 @@ export function VisitaAlertProvider() {
     type: "17h" | "2h";
   } | null>(null);
   const [isConfirming, setIsConfirming] = useState(false);
+  // Guarda quando cada alerta foi "fechado sem confirmar" — soneca de
+  // 10min antes de voltar a interromper o corretor com o mesmo alerta.
+  const [snoozedAte, setSnoozedAte] = useState<Record<string, number>>({});
+  const SNOOZE_MS = 10 * 60 * 1000;
 
   useEffect(() => {
     if (!user) return;
@@ -39,7 +43,7 @@ export function VisitaAlertProvider() {
       for (const lead of leads) {
         if (!lead.data_visita) continue;
         const visitaDate = new Date(lead.data_visita);
-        
+
         // --- Alerta 1: Às 17h do dia anterior ---
         // A data da visita é 'visitaDate'. O dia anterior é 'visitaDate - 1 dia'.
         // O alerta dispara se o 'now' já passou das 17:00 do dia anterior.
@@ -47,7 +51,9 @@ export function VisitaAlertProvider() {
         diaAnterior17h.setDate(diaAnterior17h.getDate() - 1);
         diaAnterior17h.setHours(17, 0, 0, 0);
 
-        if (!lead.alerta_visita_17h_ciente && now >= diaAnterior17h && now < visitaDate) {
+        const chave17h = `${lead.id}-17h`;
+        const emSoneca17h = snoozedAte[chave17h] && now.getTime() < snoozedAte[chave17h];
+        if (!lead.alerta_visita_17h_ciente && !emSoneca17h && now >= diaAnterior17h && now < visitaDate) {
           setActiveAlert({ lead, type: "17h" });
           return; // Para e mostra esse alerta
         }
@@ -56,7 +62,9 @@ export function VisitaAlertProvider() {
         const duasHorasAntes = new Date(visitaDate);
         duasHorasAntes.setHours(duasHorasAntes.getHours() - 2);
 
-        if (!lead.alerta_visita_2h_ciente && now >= duasHorasAntes && now <= visitaDate) {
+        const chave2h = `${lead.id}-2h`;
+        const emSoneca2h = snoozedAte[chave2h] && now.getTime() < snoozedAte[chave2h];
+        if (!lead.alerta_visita_2h_ciente && !emSoneca2h && now >= duasHorasAntes && now <= visitaDate) {
           setActiveAlert({ lead, type: "2h" });
           return; // Para e mostra esse alerta
         }
@@ -67,7 +75,14 @@ export function VisitaAlertProvider() {
     checkAlerts(); // Execução inicial
 
     return () => clearInterval(interval);
-  }, [user, activeAlert]);
+  }, [user, activeAlert, snoozedAte]);
+
+  const handleFechar = () => {
+    if (!activeAlert) return;
+    const chave = `${activeAlert.lead.id}-${activeAlert.type}`;
+    setSnoozedAte((prev) => ({ ...prev, [chave]: Date.now() + SNOOZE_MS }));
+    setActiveAlert(null);
+  };
 
   const handleCiente = async () => {
     if (!activeAlert) return;
@@ -109,8 +124,8 @@ export function VisitaAlertProvider() {
   const visitaDate = new Date(lead.data_visita);
 
   return (
-    <Dialog open={true} onOpenChange={() => {}}>
-      <DialogContent className="sm:max-w-md border-red-500 border-2 shadow-[0_0_50px_rgba(239,68,68,0.3)] pointer-events-auto z-[9999]" hideCloseButton>
+    <Dialog open={true} onOpenChange={(open) => { if (!open) handleFechar(); }}>
+      <DialogContent className="sm:max-w-md border-red-500 border-2 shadow-[0_0_50px_rgba(239,68,68,0.3)] pointer-events-auto z-[9999]">
         <DialogHeader className="space-y-3">
           <div className="mx-auto bg-red-100 p-4 rounded-full animate-pulse">
             <AlertTriangle className="h-10 w-10 text-red-600" />
@@ -153,12 +168,12 @@ export function VisitaAlertProvider() {
 
         <div className="bg-red-50 p-3 rounded-lg border border-red-100 text-center">
           <p className="text-xs font-bold text-red-700">
-            O CRM permanecerá travado até você confirmar ciência desta visita.
+            Se você fechar sem confirmar, esse alerta volta a aparecer em 10 minutos.
           </p>
         </div>
 
-        <DialogFooter className="sm:justify-center pt-2">
-          <Button 
+        <DialogFooter className="sm:justify-center pt-2 flex-col gap-2">
+          <Button
             className="w-full h-12 text-sm font-black uppercase tracking-widest bg-red-600 hover:bg-red-700 hover:scale-[1.02] transition-all shadow-lg shadow-red-200"
             onClick={handleCiente}
             disabled={isConfirming}
@@ -168,6 +183,14 @@ export function VisitaAlertProvider() {
                 <CheckCircle2 className="mr-2 h-5 w-5" /> ESTOU CIENTE
               </>
             )}
+          </Button>
+          <Button
+            variant="ghost"
+            className="w-full h-9 text-xs font-bold text-slate-500 hover:text-slate-700"
+            onClick={handleFechar}
+            disabled={isConfirming}
+          >
+            <X className="mr-1.5 h-3.5 w-3.5" /> Fechar (lembrar em 10 min)
           </Button>
         </DialogFooter>
       </DialogContent>

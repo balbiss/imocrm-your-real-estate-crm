@@ -44,6 +44,14 @@ function ConversasPage() {
 
   const canVerTodas = role === "dono" || role === "gerente";
 
+  // Gerente (não dono) entra vendo só as próprias conversas por padrão —
+  // ainda pode trocar pro filtro "Todos os corretores" manualmente.
+  useEffect(() => {
+    if (role === "gerente" && user?.id) {
+      setCorretorFiltro((atual) => (atual === "todos" ? user.id : atual));
+    }
+  }, [role, user?.id]);
+
   const { data: corretores } = useQuery({
     queryKey: ["corretores-filtro-conversas", user?.id],
     queryFn: async () => {

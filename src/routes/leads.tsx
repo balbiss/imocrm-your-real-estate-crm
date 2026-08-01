@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -49,6 +49,14 @@ function LeadsPage() {
   
   const queryClient = useQueryClient();
   const canMonitor = role === 'gerente' || role === 'dono';
+
+  // Gerente (não dono) entra vendo só os próprios leads por padrão — ainda
+  // pode trocar pro filtro "Todos os corretores" manualmente.
+  useEffect(() => {
+    if (role === "gerente" && user?.id) {
+      setCorretorFilter((atual) => (atual === "todos" ? user.id : atual));
+    }
+  }, [role, user?.id]);
 
   const { data: profile, isLoading: loadingProfile } = useQuery({
     queryKey: ["user-profile-leads", user?.id],
