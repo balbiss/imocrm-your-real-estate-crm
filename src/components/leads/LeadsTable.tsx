@@ -17,10 +17,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MessageSquare, Phone, MoreVertical, Flame, Snowflake, Sun } from "lucide-react";
+import { MessageSquare, Phone, MoreVertical, Flame, Snowflake, Sun, Shuffle } from "lucide-react";
 import { LeadDetailsModal } from "./LeadDetailsModal";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { getRetrocompatibleStatus, getColunaPorStatus, calcularProximaCadencia } from "@/lib/utils";
 import { toast } from "sonner";
@@ -61,6 +62,9 @@ export function LeadsTable({ leads, isLoading, colunas, role }: LeadsTableProps)
   const [modalInitialTab, setModalInitialTab] = useState<"detalhes" | "chat">("detalhes");
   const [pendingStatusChange, setPendingStatusChange] = useState<{ lead: any; coluna: Coluna } | null>(null);
   const [followUpDateTemp, setFollowUpDateTemp] = useState("");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [confirmBolsao, setConfirmBolsao] = useState(false);
+  const podeSelecionar = role === "dono" || role === "gerente";
 
   const handleLeadClick = (id: string) => {
     setSelectedLeadId(id);
@@ -139,6 +143,44 @@ export function LeadsTable({ leads, isLoading, colunas, role }: LeadsTableProps)
     onError: (error: any) => toast.error("Erro ao atualizar cadência: " + (error?.message || "erro desconhecido")),
   });
 
+  // Pedido do dono: selecionar vários leads (ex: parados em Lead Novo) e
+  // mandar em massa pro Bolsão — tira o corretor e classifica como rebatida,
+  // igual ao "Resgatar do Bolsão" já faz individualmente na volta.
+  const bulkToBolsaoMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const colunaRebatida = getColunaPorStatus(colunas, "rebatida");
+      const { error } = await supabase
+        .from("leads")
+        .update({
+          corretor_id: null,
+          status: "rebatida",
+          ...(colunaRebatida ? { coluna_kanban_id: colunaRebatida.id } : {}),
+          tentativas_contato: 0,
+          lembrete_follow_up: null,
+          data_visita: null,
+        })
+        .in("id", ids);
+      if (error) throw error;
+    },
+    onSuccess: (_data, ids) => {
+      queryClient.invalidateQueries({ queryKey: ["leads"] });
+      queryClient.invalidateQueries({ queryKey: ["leads-redistribution"] });
+      toast.success(`${ids.length} lead(s) enviados para o Bolsão (Rebatida).`);
+      setSelectedIds([]);
+      setConfirmBolsao(false);
+    },
+    onError: (error: any) => toast.error("Erro ao mandar para o Bolsão: " + (error?.message || "erro desconhecido")),
+  });
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
+  const toggleSelectAll = () => {
+    if (!leads) return;
+    setSelectedIds((prev) => (prev.length === leads.length ? [] : leads.map((l) => l.id)));
+  };
+
   if (isLoading) {
     return (
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
@@ -157,9 +199,37 @@ export function LeadsTable({ leads, isLoading, colunas, role }: LeadsTableProps)
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+      {podeSelecionar && selectedIds.length > 0 && (
+        <div className="flex items-center justify-between gap-3 px-4 py-2.5 bg-primary/5 border-b border-primary/10">
+          <span className="text-[11px] font-bold text-primary uppercase tracking-wide">
+            {selectedIds.length} selecionado{selectedIds.length > 1 ? "s" : ""}
+          </span>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" className="h-7 text-[10px] font-bold uppercase" onClick={() => setSelectedIds([])}>
+              Limpar
+            </Button>
+            <Button
+              size="sm"
+              className="h-7 text-[10px] font-bold uppercase gap-1.5 bg-primary"
+              onClick={() => setConfirmBolsao(true)}
+            >
+              <Shuffle className="h-3 w-3" /> Mandar para o Bolsão
+            </Button>
+          </div>
+        </div>
+      )}
       <Table>
         <TableHeader className="bg-slate-50/50">
           <TableRow>
+            {podeSelecionar && (
+              <TableHead className="w-9 py-3">
+                <Checkbox
+                  checked={!!leads?.length && selectedIds.length === leads.length}
+                  onCheckedChange={toggleSelectAll}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </TableHead>
+            )}
             <TableHead className="text-[10px] uppercase font-bold text-slate-500 py-3">Lead</TableHead>
             <TableHead className="text-[10px] uppercase font-bold text-slate-500">Status</TableHead>
             <TableHead className="text-[10px] uppercase font-bold text-slate-500">Cadência</TableHead>
@@ -177,6 +247,11 @@ export function LeadsTable({ leads, isLoading, colunas, role }: LeadsTableProps)
               className="cursor-pointer hover:bg-slate-50 transition-colors group"
               onClick={() => handleLeadClick(lead.id)}
             >
+              {podeSelecionar && (
+                <TableCell className="w-9" onClick={(e) => e.stopPropagation()}>
+                  <Checkbox checked={selectedIds.includes(lead.id)} onCheckedChange={() => toggleSelected(lead.id)} />
+                </TableCell>
+              )}
               <TableCell className="py-3">
                 <div className="flex flex-col gap-0.5">
                   <div className="flex items-center gap-2">
@@ -356,6 +431,33 @@ export function LeadsTable({ leads, isLoading, colunas, role }: LeadsTableProps)
               }}
             >
               Salvar e agendar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={confirmBolsao} onOpenChange={setConfirmBolsao}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-sm font-bold">
+              Mandar {selectedIds.length} lead(s) para o Bolsão?
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-[12.5px] text-slate-500 py-1">
+            Os leads selecionados perdem o corretor atual e viram <strong>Rebatida</strong>, disponíveis pra qualquer corretor puxar em "Resgatar do Bolsão".
+          </p>
+          <DialogFooter>
+            <Button type="button" variant="ghost" size="sm" className="text-saas-xs font-bold uppercase" onClick={() => setConfirmBolsao(false)}>
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              className="text-saas-xs font-bold uppercase px-6 bg-primary"
+              disabled={bulkToBolsaoMutation.isPending}
+              onClick={() => bulkToBolsaoMutation.mutate(selectedIds)}
+            >
+              {bulkToBolsaoMutation.isPending ? "Enviando..." : "Confirmar"}
             </Button>
           </DialogFooter>
         </DialogContent>
