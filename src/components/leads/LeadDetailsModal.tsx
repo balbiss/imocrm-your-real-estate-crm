@@ -569,9 +569,11 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
                   <Badge variant="secondary" className="h-4 px-1.5 text-[9px] font-bold uppercase bg-slate-100 text-slate-500 border-none">
                     {lead.status.replace("_", " ")}
                   </Badge>
-                  <span className="text-[10px] font-medium text-slate-400">
-                    Desde {format(new Date(lead.created_at), "dd/MM/yy")}
-                  </span>
+                  {(lead.status !== "rebatida" || role !== "corretor") && (
+                    <span className="text-[10px] font-medium text-slate-400">
+                      Desde {format(new Date(lead.created_at), "dd/MM/yy 'às' HH:mm")}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -824,7 +826,7 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
                         >
                           <SelectTrigger className="w-[90px] h-10 text-xs border-slate-200"><SelectValue /></SelectTrigger>
                           <SelectContent>
-                            {Array.from({length: 15}).map((_, i) => { const h = (i + 7).toString().padStart(2, '0') + ":00"; return <SelectItem key={h} value={h}>{h}</SelectItem> })}
+                            {Array.from({length: 30}).map((_, i) => { const totalMin = i * 30; const h = `${(7 + Math.floor(totalMin / 60)).toString().padStart(2, '0')}:${(totalMin % 60).toString().padStart(2, '0')}`; return <SelectItem key={h} value={h}>{h}</SelectItem> })}
                           </SelectContent>
                         </Select>
                         <Button onClick={handleAgendarFollowUp} disabled={!followUpDate} className="h-10 text-[11px] font-bold bg-primary px-4">
@@ -867,7 +869,7 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            {Array.from({length: 15}).map((_, i) => { const h = (i + 7).toString().padStart(2, '0') + ":00"; return <SelectItem key={h} value={h}>{h}</SelectItem> })}
+                            {Array.from({length: 30}).map((_, i) => { const totalMin = i * 30; const h = `${(7 + Math.floor(totalMin / 60)).toString().padStart(2, '0')}:${(totalMin % 60).toString().padStart(2, '0')}`; return <SelectItem key={h} value={h}>{h}</SelectItem> })}
                           </SelectContent>
                         </Select>
                       </div>

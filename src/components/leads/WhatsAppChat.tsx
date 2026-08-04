@@ -319,21 +319,31 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, leadName, ful
       // 2. Salvar no banco (direção outbound)
       const { data: { user } } = await supabase.auth.getUser();
 
-      await supabase.from("mensagens_whatsapp" as any).insert({
-        id: messageId, // Usa o mesmo ID otimista
-        lead_id: leadId,
-        imobiliaria_id: imobiliariaId,
-        corretor_id: user?.id,
-        conteudo: finalConteudo,
-        // Guarda o id real do Baileys pra o webhook reconhecer o eco dessa
-        // mesma mensagem (fromMe=true) e nao duplicar — sem isso nao dava
-        // pra distinguir "eco do que o CRM mandou" de "mensagem mandada
-        // direto do celular", e ficava tudo bloqueado.
-        whatsapp_message_id: whatsappMessageId,
-        direcao: "outbound",
-        tipo: typeSent,
-        status: "sent",
-      });
+      // upsert com ignoreDuplicates em vez de insert: o webhook do baileys
+      // recebe o eco (fromMe=true) dessa mesma mensagem e pode gravar ela
+      // primeiro (corrida real, confirmado em produção — 178 mensagens
+      // duplicadas entre 01/08 e 03/08). Com o índice único parcial em
+      // whatsapp_message_id, quem chegar depois vira no-op em vez de duplicar
+      // (ou, sem isso, um insert comum daria erro e derrubaria a bolha otimista
+      // mesmo a mensagem já tendo sido enviada com sucesso).
+      await supabase.from("mensagens_whatsapp" as any).upsert(
+        {
+          id: messageId, // Usa o mesmo ID otimista
+          lead_id: leadId,
+          imobiliaria_id: imobiliariaId,
+          corretor_id: user?.id,
+          conteudo: finalConteudo,
+          // Guarda o id real do Baileys pra o webhook reconhecer o eco dessa
+          // mesma mensagem (fromMe=true) e nao duplicar — sem isso nao dava
+          // pra distinguir "eco do que o CRM mandou" de "mensagem mandada
+          // direto do celular", e ficava tudo bloqueado.
+          whatsapp_message_id: whatsappMessageId,
+          direcao: "outbound",
+          tipo: typeSent,
+          status: "sent",
+        },
+        { onConflict: "whatsapp_message_id", ignoreDuplicates: true }
+      );
 
     } catch (error: any) {
       // Remove a mensagem otimista se der erro

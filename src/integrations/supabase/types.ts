@@ -908,6 +908,7 @@ export type Database = {
         Row: {
           avatar_url: string | null
           created_at: string
+          em_almoco: boolean
           em_plantao: boolean | null
           id: string
           imobiliaria_id: string | null
@@ -923,6 +924,7 @@ export type Database = {
         Insert: {
           avatar_url?: string | null
           created_at?: string
+          em_almoco?: boolean
           em_plantao?: boolean | null
           id: string
           imobiliaria_id?: string | null
@@ -938,6 +940,7 @@ export type Database = {
         Update: {
           avatar_url?: string | null
           created_at?: string
+          em_almoco?: boolean
           em_plantao?: boolean | null
           id?: string
           imobiliaria_id?: string | null

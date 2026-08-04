@@ -330,18 +330,30 @@ async function handleSingleMessage(msg, receivingPhoneNumber) {
   // precisamos sincronizar como outbound normal.
   const isFromMe = !!msg?.key?.fromMe;
 
-  const { error: insertError } = await supabaseAdmin.from("mensagens_whatsapp").insert({
-    lead_id: lead.id,
-    imobiliaria_id: lead.imobiliaria_id,
-    corretor_id: leadDetail?.corretor_id || null,
-    conteudo: text,
-    direcao: isFromMe ? "outbound" : "inbound",
-    status: isFromMe ? "sent" : "delivered",
-    whatsapp_message_id: sourceId,
-    tipo,
-    lida: isFromMe ? true : false,
-    metadata: msg,
-  });
+  // upsert com ignoreDuplicates em vez de insert: a checagem de dedupe acima
+  // (SELECT por whatsapp_message_id) tem uma corrida real contra o insert
+  // que o proprio CRM faz em paralelo pro eco da mensagem que ELE mandou
+  // (WhatsAppChat.tsx) — os dois podem passar pelo SELECT antes de o outro
+  // ter commitado o INSERT, e cada um nao ve o registro do outro ainda.
+  // O indice unico parcial em whatsapp_message_id (nao-null) e o upsert
+  // tornam isso atomico: quem chegar primeiro grava, o outro vira um no-op.
+  const { error: insertError } = await supabaseAdmin
+    .from("mensagens_whatsapp")
+    .upsert(
+      {
+        lead_id: lead.id,
+        imobiliaria_id: lead.imobiliaria_id,
+        corretor_id: leadDetail?.corretor_id || null,
+        conteudo: text,
+        direcao: isFromMe ? "outbound" : "inbound",
+        status: isFromMe ? "sent" : "delivered",
+        whatsapp_message_id: sourceId,
+        tipo,
+        lida: isFromMe ? true : false,
+        metadata: msg,
+      },
+      { onConflict: "whatsapp_message_id", ignoreDuplicates: true }
+    );
   if (insertError) console.error("Erro ao inserir mensagem:", insertError);
 
   await supabaseAdmin

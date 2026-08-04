@@ -99,6 +99,11 @@ function SortableItem({ id, profile, index, isNext, canManage, onToggleStatus }:
                 OFFLINE
               </Badge>
             )}
+            {isOnline && profile?.em_almoco && (
+              <Badge variant="outline" className="text-[9px] h-4 px-1.5 font-black uppercase tracking-tighter text-amber-600 border-amber-200 bg-amber-50">
+                ALMOÇO
+              </Badge>
+            )}
           </div>
           <div className="flex items-center gap-3 mt-1">
             <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wider flex items-center gap-1">
@@ -151,7 +156,7 @@ function FilasPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("filas_atendimento")
-        .select("*, perfis(nome, avatar_url, status_roleta, ultimo_checkin_roleta)")
+        .select("*, perfis(nome, avatar_url, status_roleta, ultimo_checkin_roleta, em_almoco)")
         .order("posicao", { ascending: true });
       if (error) throw error;
       return data;
@@ -285,6 +290,30 @@ function FilasPage() {
       queryClient.invalidateQueries({ queryKey: ["team-list"] });
       queryClient.invalidateQueries({ queryKey: ["profile-with-imobiliaria"] });
       toast.success("Check-in realizado com sucesso!");
+    },
+  });
+
+  const minhaEntradaNaFila = fila?.find((item) => item.corretor_id === user?.id);
+  const estouEmAlmoco = !!minhaEntradaNaFila?.perfis?.em_almoco;
+
+  const almocoMutation = useMutation({
+    mutationFn: async () => {
+      if (!user) return;
+      // So pausa o recebimento de leads (get_next_corretor_rodizio pula quem
+      // esta em almoco) -- nao mexe na posicao da fila nem tira do plantao,
+      // pra nao perder a vez quando voltar.
+      const { error } = await supabase
+        .from("perfis")
+        .update({ em_almoco: !estouEmAlmoco })
+        .eq("id", user.id);
+      if (error) throw error;
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Erro ao atualizar status de almoço.");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["fila-atendimento"] });
+      toast.success(estouEmAlmoco ? "De volta do almoço!" : "Almoço registrado — você não vai receber leads novos até voltar.");
     },
   });
 
@@ -425,7 +454,15 @@ function FilasPage() {
                   >
                     <Shuffle className="h-3.5 w-3.5" /> EMBARALHAR
                   </Button>
-                  <Button 
+                  <Button
+                    variant="outline"
+                    className={`font-bold text-xs gap-2 border-slate-200 ${estouEmAlmoco ? "text-amber-600 bg-amber-50 hover:bg-amber-100" : ""}`}
+                    onClick={() => almocoMutation.mutate()}
+                    disabled={almocoMutation.isPending || !minhaEntradaNaFila}
+                  >
+                    <Clock className="h-3.5 w-3.5" /> {estouEmAlmoco ? "VOLTAR DO ALMOÇO" : "ALMOÇO"}
+                  </Button>
+                  <Button
                     className="font-bold text-xs gap-2 bg-green-600 hover:bg-green-700"
                     onClick={() => checkinMutation.mutate()}
                     disabled={checkinMutation.isPending}

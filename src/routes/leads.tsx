@@ -477,7 +477,7 @@ function LeadsPage() {
           {view === "kanban" ? (
             <LeadsKanban leads={filteredLeads} isLoading={isLoading} imobiliariaId={profile?.imobiliaria_id || ""} />
           ) : (
-            <LeadsTable leads={filteredLeads} isLoading={isLoading} colunas={colunas} />
+            <LeadsTable leads={filteredLeads} isLoading={isLoading} colunas={colunas} role={role} />
           )}
         </div>
 

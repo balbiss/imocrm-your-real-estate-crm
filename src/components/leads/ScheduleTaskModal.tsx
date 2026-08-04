@@ -145,8 +145,9 @@ export function ScheduleTaskModal({ open, onOpenChange }: ScheduleTaskModalProps
             <Label className="text-[10px] font-bold uppercase text-slate-500">Data e Hora</Label>
             <div className="relative">
               <Calendar className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-              <Input 
-                type="datetime-local" 
+              <Input
+                type="datetime-local"
+                step={1800}
                 className="pl-9 h-9 text-sm"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}

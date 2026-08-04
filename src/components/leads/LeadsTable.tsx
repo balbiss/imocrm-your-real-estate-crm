@@ -35,6 +35,7 @@ interface LeadsTableProps {
   leads?: any[];
   isLoading?: boolean;
   colunas?: Coluna[];
+  role?: string;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -53,7 +54,7 @@ const STATUS_LABELS: Record<string, string> = {
   venda_concluida: "Venda Concluída",
 };
 
-export function LeadsTable({ leads, isLoading, colunas }: LeadsTableProps) {
+export function LeadsTable({ leads, isLoading, colunas, role }: LeadsTableProps) {
   const queryClient = useQueryClient();
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -263,9 +264,11 @@ export function LeadsTable({ leads, isLoading, colunas }: LeadsTableProps) {
                 )}
               </TableCell>
               <TableCell>
-                <span className="text-[10px] text-slate-500">
-                  {new Date(lead.created_at).toLocaleDateString('pt-BR')}
-                </span>
+                {(lead.status !== "rebatida" || role !== "corretor") && (
+                  <span className="text-[10px] text-slate-500">
+                    {new Date(lead.created_at).toLocaleDateString('pt-BR')} às {new Date(lead.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                )}
               </TableCell>
               <TableCell className="text-right">
                 <div className="flex items-center justify-end gap-1">
@@ -321,6 +324,7 @@ export function LeadsTable({ leads, isLoading, colunas }: LeadsTableProps) {
             </label>
             <Input
               type="datetime-local"
+              step={1800}
               value={followUpDateTemp}
               onChange={(e) => setFollowUpDateTemp(e.target.value)}
               className="h-9 text-sm border-slate-200"

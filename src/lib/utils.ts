@@ -22,7 +22,7 @@ export function calcularProximaCadencia(agora: Date = new Date()): Date {
     proxima.setHours(16, 30, 0, 0);
   } else {
     proxima.setDate(proxima.getDate() + 1);
-    proxima.setHours(10, 30, 0, 0);
+    proxima.setHours(11, 0, 0, 0);
     if (proxima.getDay() === 0) {
       proxima.setDate(proxima.getDate() + 1);
     }

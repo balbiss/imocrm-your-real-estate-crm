@@ -166,7 +166,27 @@ function ReportsPage() {
       nome: c.nome,
       value: leads.filter((l: any) => l.coluna_kanban_id === c.id).length,
     }));
-    const vendasDoMes = leads.filter((l: any) => l.status === "venda_concluida").length;
+    // Vendas usa data_fechamento (quando a venda foi FECHADA), não created_at
+    // (quando o lead ENTROU) — um lead criado em junho e fechado em agosto
+    // precisa aparecer no relatório de agosto, senão a venda "some" do mês
+    // em que ela realmente aconteceu (bug reportado: "vendas não aparecem
+    // em relatórios"). Aplica os mesmos filtros de corretor/campanha, só
+    // troca o filtro de data.
+    const leadsFechadosNoMes = raw.leads.filter((l: any) => {
+      if (!l.data_fechamento || !l.data_fechamento.startsWith(mesFiltro)) return false;
+      if (corretorFiltroRel !== "todos" && l.corretor_id !== corretorFiltroRel) return false;
+      if (origemFiltroRel !== "todas" && (l.origem || "Outros") !== origemFiltroRel) return false;
+      return true;
+    });
+    const vendasDoMes = leadsFechadosNoMes.length;
+
+    const colunaIdsPorNome = (padrao: string) =>
+      raw.colunas.filter((c: any) => c.nome.toLowerCase().includes(padrao)).map((c: any) => c.id);
+    const idsAnaliseCredito = colunaIdsPorNome("analise") .concat(colunaIdsPorNome("crédito")).concat(colunaIdsPorNome("credito"));
+    const idsFid = colunaIdsPorNome("fid");
+    const idsAgendado = colunaIdsPorNome("agenda").concat(colunaIdsPorNome("reunião")).concat(colunaIdsPorNome("reuniao"));
+    const idsVisitou = colunaIdsPorNome("visita");
+    const idsAprovado = colunaIdsPorNome("aprovado").concat(colunaIdsPorNome("fechamento"));
 
     const respondedLeads = leads.filter((l: any) => l.primeiro_contato_em);
     const avgResponseTime = respondedLeads.length > 0
@@ -176,10 +196,13 @@ function ReportsPage() {
         }, 0) / respondedLeads.length / (1000 * 60)
       : 0;
 
-    // Performance por Corretor
+    // Performance por Corretor — pedido do dono: além de leads/vendas/conversão,
+    // quebrar por etapa (rebatidas puxadas, agendados, visitou, análise de
+    // crédito, aprovado, FID) pra ele conseguir cobrar cada corretor por
+    // etapa do funil, não só pelo total.
     const brokerPerformance = team?.map((broker: any) => {
       const brokerLeads = leads.filter((l: any) => l.corretor_id === broker.id);
-      const brokerConverted = brokerLeads.filter((l: any) => l.status === "venda_concluida").length;
+      const brokerConverted = leadsFechadosNoMes.filter((l: any) => l.corretor_id === broker.id).length;
       const brokerResponded = brokerLeads.filter((l: any) => l.primeiro_contato_em);
       const brokerAvgSLA = brokerResponded.length > 0
         ? brokerResponded.reduce((acc: number, lead: any) => {
@@ -193,6 +216,12 @@ function ReportsPage() {
         nome: broker.nome,
         avatar: broker.avatar_url,
         leads: brokerLeads.length,
+        rebatidas: brokerLeads.filter((l: any) => l.status === "rebatida").length,
+        agendados: brokerLeads.filter((l: any) => idsAgendado.includes(l.coluna_kanban_id)).length,
+        visitou: brokerLeads.filter((l: any) => idsVisitou.includes(l.coluna_kanban_id)).length,
+        analiseCredito: brokerLeads.filter((l: any) => idsAnaliseCredito.includes(l.coluna_kanban_id)).length,
+        aprovado: brokerLeads.filter((l: any) => idsAprovado.includes(l.coluna_kanban_id)).length,
+        fid: brokerLeads.filter((l: any) => idsFid.includes(l.coluna_kanban_id)).length,
         vendas: brokerConverted,
         sla: Math.round(brokerAvgSLA),
         conversao: brokerLeads.length > 0 ? ((brokerConverted / brokerLeads.length) * 100).toFixed(1) : "0"
@@ -201,13 +230,14 @@ function ReportsPage() {
 
     return {
       totalLeads: leads.length,
-      converted: leads.filter((l: any) => l.status === "venda_concluida").length,
+      converted: vendasDoMes,
       avgResponseTime: Math.round(avgResponseTime),
       originData,
       statusData,
       tempData,
       funil,
       vendasDoMes,
+      leadsFechadosNoMes,
       brokerPerformance: brokerPerformance.sort((a: any, b: any) => b.vendas - a.vendas),
       leads,
     };
@@ -431,9 +461,15 @@ function ReportsPage() {
                     <thead>
                       <tr className="border-b border-slate-50 bg-slate-50/50">
                         <th className="px-5 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider">Consultor</th>
-                        <th className="px-5 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-center">Leads</th>
-                        <th className="px-5 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-center">Vendas</th>
-                        <th className="px-5 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-center">Conv.</th>
+                        <th className="px-3 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-center">Novos</th>
+                        <th className="px-3 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-center">Rebat.</th>
+                        <th className="px-3 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-center">Agend.</th>
+                        <th className="px-3 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-center">Visitou</th>
+                        <th className="px-3 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-center">An. Créd.</th>
+                        <th className="px-3 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-center">Aprov.</th>
+                        <th className="px-3 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-center">FID</th>
+                        <th className="px-3 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-center">Vendas</th>
+                        <th className="px-3 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-center">Conv.</th>
                         <th className="px-5 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-center">SLA</th>
                       </tr>
                     </thead>
@@ -448,9 +484,15 @@ function ReportsPage() {
                                 <span className="text-saas-xs font-bold text-slate-700">{broker.nome}</span>
                              </div>
                           </td>
-                          <td className="px-5 py-3 text-center text-saas-xs font-medium text-slate-600">{broker.leads}</td>
-                          <td className="px-5 py-3 text-center text-saas-xs font-bold text-emerald-600">{broker.vendas}</td>
-                          <td className="px-5 py-3 text-center">
+                          <td className="px-3 py-3 text-center text-saas-xs font-medium text-slate-600">{broker.leads}</td>
+                          <td className="px-3 py-3 text-center text-saas-xs font-medium text-slate-600">{broker.rebatidas}</td>
+                          <td className="px-3 py-3 text-center text-saas-xs font-medium text-slate-600">{broker.agendados}</td>
+                          <td className="px-3 py-3 text-center text-saas-xs font-medium text-slate-600">{broker.visitou}</td>
+                          <td className="px-3 py-3 text-center text-saas-xs font-medium text-slate-600">{broker.analiseCredito}</td>
+                          <td className="px-3 py-3 text-center text-saas-xs font-medium text-slate-600">{broker.aprovado}</td>
+                          <td className="px-3 py-3 text-center text-saas-xs font-medium text-slate-600">{broker.fid}</td>
+                          <td className="px-3 py-3 text-center text-saas-xs font-bold text-emerald-600">{broker.vendas}</td>
+                          <td className="px-3 py-3 text-center">
                              <Badge variant="outline" className="h-5 px-1.5 text-[9px] font-black border-none bg-slate-100 text-slate-600">{broker.conversao}%</Badge>
                           </td>
                           <td className="px-5 py-3 text-center text-saas-xs font-bold text-slate-700">{broker.sla}m</td>
@@ -468,12 +510,12 @@ function ReportsPage() {
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="text-sm font-bold uppercase">
-              {statusSelecionado?.replace('_', ' ')} · {stats?.leads.filter((l: any) => l.status === statusSelecionado).length} leads
+              {statusSelecionado?.replace('_', ' ')} · {(statusSelecionado === "venda_concluida" ? stats?.leadsFechadosNoMes : stats?.leads.filter((l: any) => l.status === statusSelecionado))?.length || 0} leads
             </DialogTitle>
           </DialogHeader>
           <ScrollArea className="max-h-[60vh]">
             <div className="space-y-1.5 pr-3">
-              {stats?.leads.filter((l: any) => l.status === statusSelecionado).map((lead: any) => (
+              {(statusSelecionado === "venda_concluida" ? stats?.leadsFechadosNoMes : stats?.leads.filter((l: any) => l.status === statusSelecionado))?.map((lead: any) => (
                 <button
                   key={lead.id}
                   onClick={() => { setLeadSelecionadoId(lead.id); setStatusSelecionado(null); }}
