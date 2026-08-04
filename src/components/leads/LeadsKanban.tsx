@@ -340,10 +340,15 @@ export function LeadsKanban({ leads: initialLeads, isLoading: initialLoading, im
                           </div>
                         )}
                         {lead.corretor ? (
-                          <Avatar className="h-5 w-5 border border-slate-100">
-                            <AvatarImage src={lead.corretor.avatar_url} />
-                            <AvatarFallback className="text-[8px]">{lead.corretor.nome?.[0]}</AvatarFallback>
-                          </Avatar>
+                          <div className="flex items-center gap-1 min-w-0" title={lead.corretor.nome}>
+                            <span className="text-[9px] font-bold text-slate-500 truncate max-w-[64px]">
+                              {lead.corretor.nome?.split(" ")[0]}
+                            </span>
+                            <Avatar className="h-5 w-5 border border-slate-100 shrink-0">
+                              <AvatarImage src={lead.corretor.avatar_url} />
+                              <AvatarFallback className="text-[8px]">{lead.corretor.nome?.[0]}</AvatarFallback>
+                            </Avatar>
+                          </div>
                         ) : (
                           <div className="h-5 w-5 rounded-full bg-slate-100 flex items-center justify-center border border-slate-200">
                             <User className="h-2.5 w-2.5 text-slate-400" />
