@@ -184,6 +184,29 @@ async function criarLeadDoWhatsapp(contactPhone, receivingPhoneNumber, pushName)
   // conta do dono.
   const corretorId = rodizio?.[0]?.corretor_id || null;
 
+  // Cliente que chama primeiro no WhatsApp de um corretor disponivel ja
+  // "esta conversando" -- entra direto na coluna Conversando (nao Lead Novo)
+  // com uma tarefa de follow-up pro mesmo horario que ele mandou a mensagem,
+  // pra aparecer imediatamente em Atrasadas/A Fazer e o corretor responder
+  // logo. Sem corretor disponivel, mantem o fluxo normal (cai no
+  // Bolsao/Rebatida). "conversando" nao existe no enum lead_status (so a
+  // coluna do kanban tem esse nome) -- usa 'tarefas' (status retrocompatible
+  // generico pos-triagem) e aponta coluna_kanban_id direto pra coluna real,
+  // que e' o que decide a posicao visual (ver getRetrocompatibleStatus).
+  const agora = new Date().toISOString();
+  let colunaConversando = null;
+  if (corretorId) {
+    const { data: coluna } = await supabaseAdmin
+      .from("colunas_kanban")
+      .select("id")
+      .eq("imobiliaria_id", dono.imobiliariaId)
+      .ilike("nome", "%conversando%")
+      .order("posicao")
+      .limit(1)
+      .maybeSingle();
+    colunaConversando = coluna?.id || null;
+  }
+
   const { data: novoLead, error } = await supabaseAdmin
     .from("leads")
     .insert({
@@ -192,7 +215,9 @@ async function criarLeadDoWhatsapp(contactPhone, receivingPhoneNumber, pushName)
       imobiliaria_id: dono.imobiliariaId,
       corretor_id: corretorId,
       origem: "WhatsApp",
-      status: "novo",
+      status: corretorId ? "tarefas" : "novo",
+      ...(colunaConversando ? { coluna_kanban_id: colunaConversando } : {}),
+      lembrete_follow_up: corretorId ? agora : null,
     })
     .select("id, imobiliaria_id, corretor_id, nome, telefone, status")
     .single();
