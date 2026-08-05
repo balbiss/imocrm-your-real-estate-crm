@@ -111,7 +111,12 @@ function LeadsPage() {
             *,
             corretor:perfis!corretor_id(nome, avatar_url)
           `)
-          .eq("imobiliaria_id", profile.imobiliaria_id);
+          .eq("imobiliaria_id", profile.imobiliaria_id)
+          // Tela de Leads (Kanban/Lista) so mostra quem ja esta com um
+          // corretor -- a Rebatida geral (sem corretor, disponivel pra
+          // qualquer um puxar em "+ Mais Rebatidas") nao entra aqui, senao
+          // polui a tela de todo mundo com o pool inteiro.
+          .not("corretor_id", "is", null);
 
         if (role === 'corretor') {
           query = query.eq("corretor_id", user?.id);
