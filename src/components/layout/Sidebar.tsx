@@ -205,7 +205,7 @@ export function Sidebar({ collapsed, onClose }: { collapsed: boolean; onClose?: 
   const tools: Item[] = [];
 
   if (can('configure_system')) {
-    tools.push({ to: "/redistribuicao", label: "Redistribuição", icon: Layers, badge: counts?.fila, badgeTone: "red" });
+    tools.push({ to: "/redistribuicao", label: "Rebatidas", icon: Layers, badge: counts?.fila, badgeTone: "red" });
   }
 
   if (can('manage_team')) {
