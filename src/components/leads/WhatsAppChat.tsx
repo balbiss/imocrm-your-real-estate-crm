@@ -115,6 +115,10 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, leadName, ful
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
   const [templates, setTemplates] = useState<Template[]>([]);
+  const filtroTemplate = newMessage.startsWith("/") ? newMessage.slice(1).trim().toLowerCase() : "";
+  const templatesFiltrados = filtroTemplate
+    ? templates.filter((t) => t.titulo.toLowerCase().includes(filtroTemplate))
+    : templates;
   const [imagemAberta, setImagemAberta] = useState<string | null>(null);
   const [respondendoA, setRespondendoA] = useState<Message | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -596,8 +600,12 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, leadName, ful
                   <p className="p-4 text-xs text-slate-400 text-center">
                     Nenhuma mensagem pronta cadastrada. Crie em "Templates" no menu.
                   </p>
+                ) : templatesFiltrados.length === 0 ? (
+                  <p className="p-4 text-xs text-slate-400 text-center">
+                    Nenhum template com esse título.
+                  </p>
                 ) : (
-                  templates.map((t) => (
+                  templatesFiltrados.map((t) => (
                     <button
                       key={t.id}
                       type="button"
@@ -616,7 +624,9 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, leadName, ful
                           return;
                         }
 
-                        setNewMessage((prev) => (prev ? `${prev}\n${conteudoPersonalizado}` : conteudoPersonalizado));
+                        // Se veio do atalho "/filtro", substitui o texto
+                        // digitado (não concatena o filtro junto).
+                        setNewMessage((prev) => (prev && !prev.startsWith("/") ? `${prev}\n${conteudoPersonalizado}` : conteudoPersonalizado));
                         if (anexos[0]) {
                           try {
                             const res = await fetch(anexos[0].url);
@@ -661,12 +671,11 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, leadName, ful
               value={newMessage}
               onChange={(e) => {
                 const value = e.target.value;
-                if (value === "/") {
-                  setShowTemplates(true);
-                  setNewMessage("");
-                } else {
-                  setNewMessage(value);
-                }
+                // "/" abre a lista de templates; continuar digitando depois
+                // do "/" filtra pelo título (antes limpava o texto na hora
+                // e não dava pra filtrar nada digitando).
+                setShowTemplates(value.startsWith("/"));
+                setNewMessage(value);
                 e.target.style.height = 'auto';
                 e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
               }}

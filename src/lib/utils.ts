@@ -12,14 +12,14 @@ export function isCorretorOnlineNaRoleta(statusRoleta: boolean | null | undefine
   return !!statusRoleta;
 }
 
-// Horário fixo da próxima cadência de chamada (pedido do dono, substitui o
-// "+24h" corrido que existia antes): ligou antes do meio-dia -> hoje às
-// 16:30; ligou meio-dia em diante -> amanhã às 10:30 (pulando pra
-// segunda-feira se o dia seguinte cair num domingo).
+// Horário fixo da próxima cadência de chamada (especificação formal do
+// dono, 04/08 — substitui a regra de 12h/16:30/11:00 anterior): executada
+// antes das 13h -> mesmo dia às 17:00; executada a partir das 13h ->
+// dia seguinte às 11:00 (pulando pra segunda-feira se cair domingo).
 export function calcularProximaCadencia(agora: Date = new Date()): Date {
   const proxima = new Date(agora);
-  if (agora.getHours() < 12) {
-    proxima.setHours(16, 30, 0, 0);
+  if (agora.getHours() < 13) {
+    proxima.setHours(17, 0, 0, 0);
   } else {
     proxima.setDate(proxima.getDate() + 1);
     proxima.setHours(11, 0, 0, 0);

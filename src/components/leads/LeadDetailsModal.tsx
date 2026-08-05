@@ -169,6 +169,14 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
     onError: (error: any) => toast.error("Erro ao transferir: " + error.message),
   });
 
+  // Especificação do dono (04/08): mover pra qualquer uma dessas colunas
+  // exige já ter um Próximo Contato agendado no futuro — sem isso o card
+  // trava e não é possível mudar de status.
+  const COLUNAS_AGENDAMENTO_OBRIGATORIO = [
+    "conversando", "visitou", "cobrar doc", "pendente",
+    "aprovado", "reprovado", "restricao", "restrição", "futuros",
+  ];
+
   const handleMoveColuna = (colunaId: string, nomeColuna: string, posicao: number) => {
     // Negócio já fechado é estado terminal — não deixa mudar de coluna por
     // aqui sobrescrever o status 'venda_concluida' (ver LeadsTable.tsx pro
@@ -177,6 +185,14 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
       toast.error("Negócio já fechado — não é possível mudar a coluna por aqui.");
       return;
     }
+
+    const exigeAgendamento = COLUNAS_AGENDAMENTO_OBRIGATORIO.some((n) => nomeColuna.toLowerCase().includes(n));
+    const temProximoContatoFuturo = lead?.lembrete_follow_up && new Date(lead.lembrete_follow_up) > new Date();
+    if (exigeAgendamento && !temProximoContatoFuturo) {
+      toast.error(`"${nomeColuna}" exige um Próximo Contato agendado. Preencha o campo "Próximo Contato" (Bloco 3) antes de mudar o status.`);
+      return;
+    }
+
     const retroStatus = getRetrocompatibleStatus(nomeColuna, posicao, colunas ? colunas.length : 10);
     updateMutation.mutate({
       updates: { coluna_kanban_id: colunaId, status: retroStatus },

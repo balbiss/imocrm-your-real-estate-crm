@@ -52,7 +52,20 @@ export function AprovacoesDescarteDialog({ open, onOpenChange, imobiliariaId }: 
   const aprovarMutation = useMutation({
     mutationFn: async (leadId: string) => {
       if (!user) throw new Error("Não autenticado");
-      
+
+      // Pedido do dono: aprovado (Descadastrar/Já Comprou) sai DE VEZ da
+      // roleta e do sistema de rebatidas — vai pra coluna dedicada
+      // LEAD DESCADASTRAR, não fica mais disponível pra ninguém puxar.
+      const { data: leadAtual } = await supabase.from("leads").select("imobiliaria_id").eq("id", leadId).single();
+      const colunaDescadastrar = leadAtual?.imobiliaria_id
+        ? (await supabase
+            .from("colunas_kanban")
+            .select("id")
+            .eq("imobiliaria_id", leadAtual.imobiliaria_id)
+            .ilike("nome", "%descadastrar%")
+            .maybeSingle()).data
+        : null;
+
       const { error } = await supabase
         .from("leads")
         .update({
@@ -60,8 +73,8 @@ export function AprovacoesDescarteDialog({ open, onOpenChange, imobiliariaId }: 
           descartado_em: new Date().toISOString(),
           descartado_por: user.id,
           corretor_id: null,
-          coluna_kanban_id: null,
-          status: 'novo'
+          coluna_kanban_id: colunaDescadastrar?.id || null,
+          status: 'desqualificado'
         })
         .eq("id", leadId);
 

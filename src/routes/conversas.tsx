@@ -1,8 +1,19 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow, isAfter, subDays, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+
+// Pedido do dono: a lista de conversas não mostrava NENHUMA data (só um
+// contador tipo "há 3 dias" ali antes). Dentro da última semana mostra o dia
+// da semana ("segunda-feira"); mais antigo que isso mostra "20 de julho".
+function formatarDataConversa(data: string): string {
+  const d = new Date(data);
+  if (isAfter(d, subDays(new Date(), 7))) {
+    return format(d, "EEEE", { locale: ptBR });
+  }
+  return format(d, "d 'de' MMMM", { locale: ptBR });
+}
 import { MessageCircle, Search, User, Pin, PinOff, MailOpen } from "lucide-react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Input } from "@/components/ui/input";
@@ -205,8 +216,8 @@ function ConversasPage() {
                           {c.fixada && <Pin className="h-3 w-3 text-amber-500 shrink-0 fill-amber-500" />}
                           {c.lead_nome || c.lead_telefone || "Sem nome"}
                         </span>
-                        <span className="text-[10px] text-slate-400 shrink-0 group-hover:opacity-0 transition-opacity">
-                          {formatDistanceToNow(new Date(c.ultima_mensagem_em), { locale: ptBR, addSuffix: false })}
+                        <span className="text-[10px] text-slate-400 shrink-0 group-hover:opacity-0 transition-opacity capitalize">
+                          {formatarDataConversa(c.ultima_mensagem_em)}
                         </span>
                       </div>
                       {canVerTodas && c.corretor_nome && (

@@ -25,7 +25,6 @@ import { toast } from "sonner";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { getColunaPorStatus } from "@/lib/utils";
 
 export const Route = createFileRoute("/leads")({
   head: () => ({ meta: [{ title: "Leads — CRM" }] }),
@@ -142,87 +141,6 @@ function LeadsPage() {
     },
     enabled: !!profile?.imobiliaria_id && !loadingPerms,
     staleTime: 1000 * 60,
-  });
-
-  const loteRebatidaMutation = useMutation({
-    mutationFn: async () => {
-      if (!user || !profile?.imobiliaria_id) throw new Error("Não autenticado ou sem imobiliária");
-
-      const { count: tarefasAtrasadasCount } = await supabase
-        .from("leads")
-        .select("*", { count: 'exact', head: true })
-        .eq("corretor_id", user.id)
-        .lte("lembrete_follow_up", new Date().toISOString())
-        .is("data_fechamento", null);
-
-      if (tarefasAtrasadasCount && tarefasAtrasadasCount > 0) throw new Error("Você possui tarefas atrasadas. Zere suas pendências primeiro!");
-
-      const hoje = new Date();
-      hoje.setHours(0, 0, 0, 0);
-      const { count: rebatidasHojeCount } = await supabase
-        .from("leads")
-        .select("*", { count: 'exact', head: true })
-        .eq("corretor_id", user.id)
-        .eq("status", "rebatida")
-        .gte("created_at", hoje.toISOString());
-
-      const atual = rebatidasHojeCount || 0;
-      if (atual >= 30) throw new Error("Limite diário de 30 rebatidas já foi atingido.");
-
-      const vagas = 30 - atual;
-      const quantidadePuxar = Math.min(10, vagas);
-
-      const { data: leadsBolsao, error } = await supabase
-        .from("leads")
-        .select("*")
-        .eq("imobiliaria_id", profile.imobiliaria_id)
-        .is("corretor_id", null)
-        .not("motivo_descarte", "in", '("Descadastrar", "Já Comprou (Outra Empresa)", "Aprovado/Desistiu")')
-        .limit(500);
-
-      if (error) throw error;
-
-      const now = new Date();
-      const leadsDisponiveis = leadsBolsao.filter(lead => {
-        if (!lead.descartado_em) return true;
-        const descartadoDate = new Date(lead.descartado_em);
-        const daysDiff = (now.getTime() - descartadoDate.getTime()) / (1000 * 60 * 60 * 24);
-        if (lead.motivo_descarte === "Sem Resposta" && daysDiff < 3) return false;
-        if (lead.motivo_descarte === "Parou de Responder" && daysDiff < 5) return false;
-        if (lead.motivo_descarte === "Sem Interesse" && daysDiff < 15) return false;
-        return true;
-      });
-
-      const filtrados = leadsDisponiveis.filter(l => !l.historico_corretores?.includes(user.id));
-      if (filtrados.length === 0) throw new Error("O Bolsão está vazio ou você já atendeu todos os leads disponíveis.");
-
-      const shuffled = filtrados.sort(() => 0.5 - Math.random());
-      const lote = shuffled.slice(0, quantidadePuxar);
-      const loteIds = lote.map(l => l.id);
-
-      // Move pra coluna "Rebatida" tambem — so mudar o status sem mudar a
-      // coluna deixa o card visualmente parado onde estava (ex: Lead Novo).
-      const colunaRebatida = getColunaPorStatus(colunas, "rebatida");
-
-      const { error: updateError } = await supabase
-        .from("leads")
-        .update({
-          corretor_id: user.id,
-          status: "rebatida",
-          ultima_acao_at: new Date().toISOString(),
-          ...(colunaRebatida ? { coluna_kanban_id: colunaRebatida.id } : {}),
-        })
-        .in("id", loteIds);
-
-      if (updateError) throw updateError;
-      
-      return lote.length;
-    },
-    onSuccess: (qtd) => {
-      toast.success(`💥 ${qtd} leads puxados do bolsão com sucesso!`);
-      queryClient.invalidateQueries({ queryKey: ["leads"] });
-    },
-    onError: (error: any) => toast.error(error.message)
   });
 
   if (isLoading || loadingPerms || loadingProfile) {
@@ -405,17 +323,8 @@ function LeadsPage() {
               </Button>
             )}
 
-            <Button 
-              className="h-9 px-4 font-black uppercase text-[10px] tracking-widest bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-600/20"
-              onClick={() => loteRebatidaMutation.mutate()}
-              disabled={loteRebatidaMutation.isPending}
-            >
-              {loteRebatidaMutation.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Flame className="mr-1.5 h-3.5 w-3.5" />}
-              MAIS REBATIDA
-            </Button>
-
             <Button variant="outline" size="sm" className="h-9 px-4 font-bold uppercase text-[10px] tracking-wider border-orange-200 text-orange-600 hover:bg-orange-50 bg-white" onClick={() => setIsBolsaoOpen(true)}>
-              <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Puxar Bolsão
+              <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> + Mais Rebatidas
             </Button>
 
             <Button variant="outline" size="sm" className="h-9 px-4 font-bold uppercase text-[10px] tracking-wider border-slate-200 text-slate-700 hover:bg-slate-50 bg-white" onClick={() => setIsManageColumnsOpen(true)}>

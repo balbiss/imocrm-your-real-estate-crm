@@ -355,15 +355,9 @@ function RedistributionPage() {
                 value="bolsao"
                 className="border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent rounded-none h-full text-xs font-black uppercase tracking-wider px-0 opacity-40 data-[state=active]:opacity-100 transition-all"
               >
-                Bolsão de Leads (sem corretor)
+                Rebatidas Geral
               </TabsTrigger>
               <TabsTrigger
-                value="redistribuicao"
-                className="border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent rounded-none h-full text-xs font-black uppercase tracking-wider px-0 opacity-40 data-[state=active]:opacity-100 transition-all"
-              >
-                Presos p/ Redistribuir (com corretor)
-              </TabsTrigger>
-              <TabsTrigger 
                 value="descartados"
                 className="border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent rounded-none h-full text-xs font-black uppercase tracking-wider px-0 opacity-40 data-[state=active]:opacity-100 transition-all"
               >

@@ -66,6 +66,16 @@ export function LeadsTable({ leads, isLoading, colunas, role }: LeadsTableProps)
   const [confirmBolsao, setConfirmBolsao] = useState(false);
   const podeSelecionar = role === "dono" || role === "gerente";
 
+  // Especificação do dono (04/08): mudar pra qualquer um desses status
+  // exige agendar o próximo contato — não dá pra fechar sem preencher.
+  const COLUNAS_AGENDAMENTO_OBRIGATORIO = [
+    "conversando", "visitou", "cobrar doc", "pendente",
+    "aprovado", "reprovado", "restricao", "restrição", "futuros",
+  ];
+  const agendamentoObrigatorio = pendingStatusChange
+    ? COLUNAS_AGENDAMENTO_OBRIGATORIO.some((n) => pendingStatusChange.coluna.nome.toLowerCase().includes(n))
+    : false;
+
   const handleLeadClick = (id: string) => {
     setSelectedLeadId(id);
     setModalInitialTab("detalhes");
@@ -395,7 +405,7 @@ export function LeadsTable({ leads, isLoading, colunas, role }: LeadsTableProps)
           </DialogHeader>
           <div className="space-y-1.5 py-2">
             <label className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">
-              Agendar próximo follow-up (opcional)
+              {agendamentoObrigatorio ? "Próximo contato (obrigatório nesse status)" : "Agendar próximo follow-up (opcional)"}
             </label>
             <Input
               type="datetime-local"
@@ -406,19 +416,21 @@ export function LeadsTable({ leads, isLoading, colunas, role }: LeadsTableProps)
             />
           </div>
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="text-saas-xs font-bold uppercase"
-              onClick={() => {
-                if (!pendingStatusChange) return;
-                changeStatusMutation.mutate({ lead: pendingStatusChange.lead, coluna: pendingStatusChange.coluna });
-                setPendingStatusChange(null);
-              }}
-            >
-              Salvar sem agendar
-            </Button>
+            {!agendamentoObrigatorio && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-saas-xs font-bold uppercase"
+                onClick={() => {
+                  if (!pendingStatusChange) return;
+                  changeStatusMutation.mutate({ lead: pendingStatusChange.lead, coluna: pendingStatusChange.coluna });
+                  setPendingStatusChange(null);
+                }}
+              >
+                Salvar sem agendar
+              </Button>
+            )}
             <Button
               type="button"
               size="sm"

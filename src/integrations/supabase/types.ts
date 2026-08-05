@@ -1165,6 +1165,15 @@ export type Database = {
       }
       get_my_role: { Args: never; Returns: string }
       get_next_broker_on_duty: { Args: never; Returns: string }
+      puxar_mais_rebatidas: {
+        Args: { p_corretor_id: string; p_cidade: string | null }
+        Returns: number
+      }
+      entrar_na_roleta: { Args: { p_corretor_id: string }; Returns: undefined }
+      registrar_embaralhamento: {
+        Args: { p_imobiliaria_id: string | null }
+        Returns: number
+      }
       get_next_corretor_rodizio: {
         Args: { p_imobiliaria_id: string }
         Returns: {
