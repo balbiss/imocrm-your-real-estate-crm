@@ -100,6 +100,9 @@ export function LeadsTable({ leads, isLoading, colunas, role }: LeadsTableProps)
       if (lead.status === "venda_concluida") {
         throw new Error("Negócio já fechado — não é possível mudar a coluna por aqui.");
       }
+      if (lead.venda_pendente_aprovacao) {
+        throw new Error("Venda aguardando aprovação — não é possível mudar a coluna agora.");
+      }
       const status = getRetrocompatibleStatus(coluna.nome, coluna.posicao, colunas?.length || 1);
       const payload: any = { coluna_kanban_id: coluna.id, status };
       // followUpDate vem de <input type="datetime-local"> (sem timezone) —
@@ -136,7 +139,7 @@ export function LeadsTable({ leads, isLoading, colunas, role }: LeadsTableProps)
         ultima_acao_at: now.toISOString(),
       };
 
-      if (lead.status !== "venda_concluida" && !lead.descartado_em) {
+      if (lead.status !== "venda_concluida" && !lead.descartado_em && !lead.venda_pendente_aprovacao) {
         payload.status = "tarefas";
         const colunaTarefas = getColunaPorStatus(colunas, "tarefas");
         if (colunaTarefas) payload.coluna_kanban_id = colunaTarefas.id;

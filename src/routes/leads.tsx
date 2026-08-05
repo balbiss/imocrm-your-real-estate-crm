@@ -5,6 +5,7 @@ import { NewLeadDialog } from "@/components/leads/NewLeadDialog";
 import { LeadsTable } from "@/components/leads/LeadsTable";
 import { BolsaoResgateDialog } from "@/components/leads/BolsaoResgateDialog";
 import { AprovacoesDescarteDialog } from "@/components/leads/AprovacoesDescarteDialog";
+import { AprovacoesVendaDialog } from "@/components/leads/AprovacoesVendaDialog";
 import { ManageColumnsDialog } from "@/components/leads/ManageColumnsDialog";
 
 import { Button } from "@/components/ui/button";
@@ -37,6 +38,7 @@ function LeadsPage() {
   const [isNewLeadOpen, setIsNewLeadOpen] = useState(false);
   const [isBolsaoOpen, setIsBolsaoOpen] = useState(false);
   const [isAprovacoesOpen, setIsAprovacoesOpen] = useState(false);
+  const [isAprovacoesVendaOpen, setIsAprovacoesVendaOpen] = useState(false);
   const [isManageColumnsOpen, setIsManageColumnsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [view, setView] = useState("kanban");
@@ -99,6 +101,22 @@ function LeadsPage() {
     refetchInterval: 60000,
   });
 
+  const { data: aprovacoesVendaPendentesCount } = useQuery({
+    queryKey: ["aprovacoes-venda-pendentes-count", profile?.imobiliaria_id],
+    queryFn: async () => {
+      if (!profile?.imobiliaria_id) return 0;
+      const { count, error } = await supabase
+        .from("leads")
+        .select("*", { count: "exact", head: true })
+        .eq("imobiliaria_id", profile.imobiliaria_id)
+        .eq("venda_pendente_aprovacao", true);
+      if (error) throw error;
+      return count || 0;
+    },
+    enabled: !!profile?.imobiliaria_id && canMonitor,
+    refetchInterval: 60000,
+  });
+
   const { data: leads, isLoading, error } = useQuery({
     queryKey: ["leads", profile?.imobiliaria_id, role],
     queryFn: async () => {
@@ -116,7 +134,11 @@ function LeadsPage() {
           // corretor -- a Rebatida geral (sem corretor, disponivel pra
           // qualquer um puxar em "+ Mais Rebatidas") nao entra aqui, senao
           // polui a tela de todo mundo com o pool inteiro.
-          .not("corretor_id", "is", null);
+          .not("corretor_id", "is", null)
+          // Venda pendente de aprovacao some da tela ate o dono/gerente
+          // decidir (ver AprovacoesVendaDialog) -- mesmo espirito do filtro
+          // de descarte_pendente_aprovacao ja aplicado dentro do Kanban.
+          .eq("venda_pendente_aprovacao", false);
 
         if (role === 'corretor') {
           query = query.eq("corretor_id", user?.id);
@@ -328,6 +350,21 @@ function LeadsPage() {
               </Button>
             )}
 
+            {canMonitor && (
+              <Button
+                variant="outline"
+                className="h-9 px-4 font-bold uppercase text-[10px] tracking-wider border-green-200 text-green-600 hover:bg-green-50 bg-white relative"
+                onClick={() => setIsAprovacoesVendaOpen(true)}
+              >
+                Aprovar Vendas
+                {!!aprovacoesVendaPendentesCount && (
+                  <span className="absolute -top-1.5 -right-1.5 h-4 min-w-4 px-1 rounded-full bg-green-600 text-white text-[9px] font-black flex items-center justify-center">
+                    {aprovacoesVendaPendentesCount}
+                  </span>
+                )}
+              </Button>
+            )}
+
             <Button variant="outline" size="sm" className="h-9 px-4 font-bold uppercase text-[10px] tracking-wider border-orange-200 text-orange-600 hover:bg-orange-50 bg-white" onClick={() => setIsBolsaoOpen(true)}>
               <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> + Mais Rebatidas
             </Button>
@@ -412,9 +449,15 @@ function LeadsPage() {
           imobiliariaId={profile?.imobiliaria_id || ""}
         />
 
-        <AprovacoesDescarteDialog 
+        <AprovacoesDescarteDialog
           open={isAprovacoesOpen}
           onOpenChange={setIsAprovacoesOpen}
+          imobiliariaId={profile?.imobiliaria_id || ""}
+        />
+
+        <AprovacoesVendaDialog
+          open={isAprovacoesVendaOpen}
+          onOpenChange={setIsAprovacoesVendaOpen}
           imobiliariaId={profile?.imobiliaria_id || ""}
         />
       </div>

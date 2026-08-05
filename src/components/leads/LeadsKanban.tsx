@@ -130,6 +130,7 @@ export function LeadsKanban({ leads: initialLeads, isLoading: initialLoading, im
     acc[stage.id] = leads?.filter((lead) => {
       if (lead.descarte_pendente_aprovacao) return false;
       if (lead.descartado_em) return false;
+      if (lead.venda_pendente_aprovacao) return false;
 
       // Se o lead tem a coluna_kanban_id explícita
       if (lead.coluna_kanban_id) {
@@ -204,7 +205,7 @@ export function LeadsKanban({ leads: initialLeads, isLoading: initialLoading, im
         ultima_acao_at: now.toISOString(),
       };
 
-      if (lead.status !== "venda_concluida" && !lead.descartado_em) {
+      if (lead.status !== "venda_concluida" && !lead.descartado_em && !lead.venda_pendente_aprovacao) {
         payload.status = "tarefas";
         const colunaTarefas = getColunaPorStatus(colunas, "tarefas");
         if (colunaTarefas) payload.coluna_kanban_id = colunaTarefas.id;

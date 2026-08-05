@@ -77,6 +77,9 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
   const [obsDescarte, setObsDescarte] = useState("");
   const [valorFechamento, setValorFechamento] = useState("");
   const [obsFechamento, setObsFechamento] = useState("");
+  const [empreendimentoFechamento, setEmpreendimentoFechamento] = useState("");
+  const [unidadeFechamento, setUnidadeFechamento] = useState("");
+  const [torreFechamento, setTorreFechamento] = useState("");
   const [followUpDate, setFollowUpDate] = useState("");
   const [followUpObs, setFollowUpObs] = useState("");
   const [mounted, setMounted] = useState(false);
@@ -183,6 +186,12 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
     // mesmo guard e o motivo: vendas sumindo dos relatórios).
     if (lead?.status === "venda_concluida") {
       toast.error("Negócio já fechado — não é possível mudar a coluna por aqui.");
+      return;
+    }
+    // Venda pendente de aprovação também é estado travado — evita mexer na
+    // coluna enquanto o dono/gerente ainda não decidiu (ver AprovacoesVendaDialog).
+    if (lead?.venda_pendente_aprovacao) {
+      toast.error("Venda aguardando aprovação — não é possível mudar a coluna agora.");
       return;
     }
 
@@ -433,6 +442,12 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
     }
   };
 
+  // Especificação do dono (05/08): VENDA nunca fecha na hora — fica
+  // pendente de aprovação do dono/gerente (ver AprovacoesVendaDialog).
+  // Igual ao descarte extremo, status e coluna_kanban_id NÃO são tocados
+  // aqui — só na aprovação, os dois mudam juntos pra coluna VENDA. Isso
+  // elimina o bug relatado (card "preso" em Tarefa mesmo com venda
+  // registrada): antes só o status mudava, agora nada muda até aprovar.
   const handleFechamento = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -441,9 +456,11 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
       const valorNum = parseFloat(valorFechamento.replace(/[^\d,]/g, '').replace(',', '.'));
 
       await supabase.from("leads").update({
-        status: 'venda_concluida',
+        venda_pendente_aprovacao: true,
         valor_venda: valorNum,
-        data_fechamento: new Date().toISOString(),
+        empreendimento: empreendimentoFechamento || null,
+        unidade: unidadeFechamento || null,
+        torre: torreFechamento || null,
         ultima_acao_at: new Date().toISOString()
       }).eq("id", leadId);
 
@@ -451,15 +468,21 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
         lead_id: leadId!,
         autor_id: user.id,
         tipo: 'fechamento',
-        conteudo: `Negócio fechado! Valor: R$ ${valorFechamento}${obsFechamento ? ' - ' + obsFechamento : ''}`,
+        conteudo: `Venda enviada para aprovação! Valor: R$ ${valorFechamento} · Empreendimento: ${empreendimentoFechamento || "-"} · Unidade: ${unidadeFechamento || "-"} · Torre: ${torreFechamento || "-"}${obsFechamento ? " · " + obsFechamento : ""}`,
       });
 
-      toast.success("Parabéns! Negócio fechado com sucesso!");
+      toast.success("Venda enviada para aprovação do gerente/dono!");
       setShowFechamentoModal(false);
+      setValorFechamento("");
+      setObsFechamento("");
+      setEmpreendimentoFechamento("");
+      setUnidadeFechamento("");
+      setTorreFechamento("");
       queryClient.invalidateQueries({ queryKey: ["lead", leadId] });
       queryClient.invalidateQueries({ queryKey: ["leads"] });
+      queryClient.invalidateQueries({ queryKey: ["aprovacoes-pendentes-count"] });
     } catch (error) {
-      toast.error("Erro ao registrar fechamento");
+      toast.error("Erro ao enviar venda para aprovação");
     }
   };
 
@@ -703,9 +726,15 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
                       <Button variant="outline" className="h-10 text-[10px] font-bold text-orange-600 border-orange-200 hover:bg-orange-50 gap-2" onClick={() => setShowDescarteModal(true)}>
                         <XCircle className="h-4 w-4" /> DEVOLVER
                       </Button>
-                      <Button className="h-10 text-[10px] font-bold bg-green-600 hover:bg-green-700 gap-2" onClick={() => setShowFechamentoModal(true)}>
-                        <Trophy className="h-4 w-4" /> VENDA
-                      </Button>
+                      {lead.venda_pendente_aprovacao ? (
+                        <Button disabled className="h-10 text-[10px] font-bold bg-amber-100 text-amber-700 gap-2 cursor-not-allowed">
+                          <Trophy className="h-4 w-4" /> AGUARDANDO APROVAÇÃO
+                        </Button>
+                      ) : (
+                        <Button className="h-10 text-[10px] font-bold bg-green-600 hover:bg-green-700 gap-2" onClick={() => setShowFechamentoModal(true)}>
+                          <Trophy className="h-4 w-4" /> VENDA
+                        </Button>
+                      )}
                     </div>
                   </div>
 
@@ -1185,12 +1214,13 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
           </DialogContent>
         </Dialog>
 
-        {/* MODAL DE FECHAMENTO */}
+        {/* MODAL DE FECHAMENTO — a venda vai pra aprovação do dono/gerente,
+            não fecha na hora (especificação do dono, 05/08). */}
         <Dialog open={showFechamentoModal} onOpenChange={setShowFechamentoModal}>
           <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle className="text-lg font-bold flex items-center gap-2">
-                <Trophy className="h-5 w-5 text-yellow-500" /> Fechar Negócio!
+                <Trophy className="h-5 w-5 text-yellow-500" /> Enviar Venda para Aprovação
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
@@ -1198,25 +1228,54 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
                 <Label className="text-xs font-bold uppercase">Valor da Venda</Label>
                 <div className="relative">
                   <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                  <Input 
-                    placeholder="0,00" 
+                  <Input
+                    placeholder="0,00"
                     className="pl-9"
                     value={valorFechamento}
                     onChange={(e) => setValorFechamento(e.target.value)}
                   />
                 </div>
               </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase">Empreendimento</Label>
+                  <Input
+                    placeholder="Nome do empreendimento"
+                    value={empreendimentoFechamento}
+                    onChange={(e) => setEmpreendimentoFechamento(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase">Unidade</Label>
+                  <Input
+                    placeholder="Ex: 302"
+                    value={unidadeFechamento}
+                    onChange={(e) => setUnidadeFechamento(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-bold uppercase">Torre</Label>
+                <Input
+                  placeholder="Ex: Torre A"
+                  value={torreFechamento}
+                  onChange={(e) => setTorreFechamento(e.target.value)}
+                />
+              </div>
               <div className="space-y-2">
                 <Label className="text-xs font-bold uppercase">Anotações do Fechamento</Label>
-                <Textarea 
-                  placeholder="Relate como foi a negociação..." 
+                <Textarea
+                  placeholder="Relate como foi a negociação..."
                   value={obsFechamento}
                   onChange={(e) => setObsFechamento(e.target.value)}
                 />
               </div>
+              <p className="text-[10px] text-slate-400 font-medium">
+                A venda só é confirmada depois que o dono/gerente aprovar.
+              </p>
               <div className="flex gap-3 pt-4">
                 <Button variant="outline" className="flex-1" onClick={() => setShowFechamentoModal(false)}>Voltar</Button>
-                <Button className="flex-1 bg-green-600 hover:bg-green-700 font-bold" onClick={handleFechamento} disabled={!valorFechamento}>CONFIRMAR VENDA</Button>
+                <Button className="flex-1 bg-green-600 hover:bg-green-700 font-bold" onClick={handleFechamento} disabled={!valorFechamento}>ENVIAR PARA APROVAÇÃO</Button>
               </div>
             </div>
           </DialogContent>
