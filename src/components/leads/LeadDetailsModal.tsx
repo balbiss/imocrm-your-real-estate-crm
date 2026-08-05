@@ -412,23 +412,17 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
 
         toast.success("Solicitação enviada para aprovação do Gerente!");
       } else {
-        // Fluxo Normal (Vai pro bolsão/quarentena)
-        await supabase.from("leads").update({
-          corretor_id: null,
-          coluna_kanban_id: null,
-          motivo_descarte: motivoDescarte,
-          descartado_por: user.id,
-          descartado_em: new Date().toISOString(),
-          status: 'novo',
-          ultima_acao_at: new Date().toISOString()
-        }).eq("id", leadId);
-
-        await supabase.from("leads_interacoes").insert({
-          lead_id: leadId!,
-          autor_id: user.id,
-          tipo: 'descarte',
-          conteudo: `Lead devolvido: ${motivoDescarte}${obsDescarte ? ' - ' + obsDescarte : ''}`,
+        // Fluxo Normal (Vai pro bolsão/quarentena) -- via RPC SECURITY DEFINER:
+        // um update direto tentando zerar corretor_id falha com RLS pro
+        // papel corretor (achado real, 05/08 -- corretor descartava, via
+        // "sucesso" mas o lead nunca saia de verdade). Ver
+        // descartar_lead_normal() na migration 20260805030000.
+        const { error: descarteError } = await supabase.rpc("descartar_lead_normal", {
+          p_lead_id: leadId,
+          p_motivo: motivoDescarte,
+          p_observacao: obsDescarte || null,
         });
+        if (descarteError) throw descarteError;
         toast.success("Lead devolvido ao bolsão");
       }
 

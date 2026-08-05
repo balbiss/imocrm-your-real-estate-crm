@@ -4,8 +4,20 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Send, Paperclip, Check, CheckCheck, Clock, X, Smile, User, Loader2, MessageSquare, FileText } from "lucide-react";
-import { format } from "date-fns";
+import { format, isSameDay, isToday, isYesterday } from "date-fns";
 import { ptBR } from "date-fns/locale";
+
+// Pedido do dono (05/08): o chat so mostrava a hora de cada mensagem, sem
+// nenhuma indicacao de QUAL DIA -- impossivel saber se uma conversa e de
+// hoje ou de semanas atras so olhando a bolha. Mesmo divisor que o
+// WhatsApp de verdade usa: "Hoje"/"Ontem" pros ultimos 2 dias, dia da
+// semana pro resto da ultima semana, e a data completa antes disso.
+function formatarDivisorData(data: string): string {
+  const d = new Date(data);
+  if (isToday(d)) return "Hoje";
+  if (isYesterday(d)) return "Ontem";
+  return format(d, "d 'de' MMMM 'de' yyyy", { locale: ptBR });
+}
 import { toast } from "sonner";
 import EmojiPicker, { EmojiClickData, Theme } from "emoji-picker-react";
 import { getWhatsappAvatar, getWhatsappStatus, sendWhatsappMessage } from "@/lib/baileys";
@@ -422,7 +434,10 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, leadName, ful
             </div>
           )}
           
-          {messages.map((msg) => {
+          {messages.map((msg, idx) => {
+            const mensagemAnterior = idx > 0 ? messages[idx - 1] : null;
+            const mudouDeDia = !mensagemAnterior || !isSameDay(new Date(mensagemAnterior.created_at), new Date(msg.created_at));
+
             // Parser simples para extrair link de anexo se houver
             const hasAnexo = msg.conteudo?.includes('[Anexo]:');
             let contentText = msg.conteudo;
@@ -448,10 +463,17 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, leadName, ful
             );
 
             return (
-              <div
-                key={msg.id}
-                className={`group flex items-center gap-1.5 ${msg.direcao === "outbound" ? "justify-end" : "justify-start"}`}
-              >
+              <React.Fragment key={msg.id}>
+                {mudouDeDia && (
+                  <div className="flex justify-center my-3">
+                    <span className="bg-[#E9EDEF] text-[#54656F] text-[11px] font-semibold uppercase tracking-wide px-3 py-1 rounded-lg shadow-sm">
+                      {formatarDivisorData(msg.created_at)}
+                    </span>
+                  </div>
+                )}
+                <div
+                  className={`group flex items-center gap-1.5 ${msg.direcao === "outbound" ? "justify-end" : "justify-start"}`}
+                >
                 {msg.direcao === "outbound" && botaoResponder}
                 <div className="relative max-w-[75%]">
                 {reacao && (
@@ -521,7 +543,8 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, leadName, ful
                 </div>
                 </div>
                 {msg.direcao === "inbound" && botaoResponder}
-              </div>
+                </div>
+              </React.Fragment>
             );
           })}
           <div ref={scrollRef} />
