@@ -58,11 +58,21 @@ function DashboardPage() {
       // Dashboard. Agora cada numero e um count=exact/head do PostgREST (o
       // Postgres conta sem devolver as linhas) rodando em paralelo, e so os
       // 6 leads recentes trazem colunas de verdade.
+      //
+      // Os filtros de corretor_id/descartado_em/descarte_pendente_aprovacao
+      // replicam exatamente o que a tela de Leads (Kanban) mostra -- sem
+      // eles, "Leads Novos" contava lead sem corretor e ate lead ja
+      // descartado (status='novo' que nunca foi limpo), dando um numero bem
+      // maior que os cards reais do Kanban (achado real: 144 no Dashboard
+      // vs 26 no Kanban, mesma base).
       const base = () => {
         let query = supabase
           .from("leads")
           .select("*", { count: "exact", head: true })
-          .eq("imobiliaria_id", profile.imobiliaria_id);
+          .eq("imobiliaria_id", profile.imobiliaria_id)
+          .not("corretor_id", "is", null)
+          .is("descartado_em", null)
+          .eq("descarte_pendente_aprovacao", false);
         if (role === 'corretor') {
           query = query.eq("corretor_id", user?.id);
         }
@@ -79,7 +89,10 @@ function DashboardPage() {
           let q = supabase
             .from("leads")
             .select("id, nome, status, origem, created_at")
-            .eq("imobiliaria_id", profile.imobiliaria_id);
+            .eq("imobiliaria_id", profile.imobiliaria_id)
+            .not("corretor_id", "is", null)
+            .is("descartado_em", null)
+            .eq("descarte_pendente_aprovacao", false);
           if (role === 'corretor') q = q.eq("corretor_id", user?.id);
           return q.order("created_at", { ascending: false }).limit(6);
         })(),
