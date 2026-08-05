@@ -32,9 +32,19 @@ interface LeadsKanbanProps {
   leads?: any[];
   isLoading?: boolean;
   imobiliariaId?: string;
+  role?: string;
 }
 
-export function LeadsKanban({ leads: initialLeads, isLoading: initialLoading, imobiliariaId }: LeadsKanbanProps) {
+// Compara nome de coluna ignorando acento (Postgres ILIKE não ignora acento
+// — "análise" != "analise" pro banco; achado real testando o alerta de
+// entrada em Análise de Crédito, que nunca disparava por causa disso).
+function ehColunaAnaliseCredito(nome?: string): boolean {
+  if (!nome) return false;
+  const n = nome.toLowerCase();
+  return (n.includes("analise") || n.includes("análise")) && (n.includes("credito") || n.includes("crédito"));
+}
+
+export function LeadsKanban({ leads: initialLeads, isLoading: initialLoading, imobiliariaId, role }: LeadsKanbanProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
@@ -211,6 +221,57 @@ export function LeadsKanban({ leads: initialLeads, isLoading: initialLoading, im
     onError: (error: any) => toast.error("Erro ao atualizar cadência: " + (error?.message || "erro desconhecido")),
   });
 
+  // Gestão dá "Visto" (aprova a documentação, card sai do alerta vermelho e
+  // segue o funil normal) ou "Retornar com Pendência" (volta pro corretor
+  // como PENDENTE, com uma nota do que falta).
+  const vistoMutation = useMutation({
+    mutationFn: async (leadId: string) => {
+      const { error } = await supabase
+        .from("leads")
+        .update({ ultima_acao_at: new Date().toISOString() })
+        .eq("id", leadId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["leads"] });
+      toast.success("Visto registrado — documentação auditada.");
+    },
+    onError: (error: any) => toast.error("Erro ao dar visto: " + (error?.message || "erro desconhecido")),
+  });
+
+  const retornarPendenciaMutation = useMutation({
+    mutationFn: async (lead: any) => {
+      const observacao = window.prompt("O que está faltando? (aparece pro corretor)");
+      if (observacao === null) throw new Error("__cancelado__");
+      const colunaPendente = getColunaPorStatus(colunas, "pendente");
+      const { error } = await supabase
+        .from("leads")
+        .update({
+          status: "pendente",
+          ...(colunaPendente ? { coluna_kanban_id: colunaPendente.id } : {}),
+          ultima_acao_at: new Date().toISOString(),
+        })
+        .eq("id", lead.id);
+      if (error) throw error;
+      if (user && observacao) {
+        await supabase.from("leads_interacoes").insert({
+          lead_id: lead.id,
+          autor_id: user.id,
+          tipo: "alerta",
+          conteudo: `Análise de Crédito retornada com pendência: ${observacao}`,
+        });
+      }
+    },
+    onSuccess: (_data, _lead) => {
+      queryClient.invalidateQueries({ queryKey: ["leads"] });
+      toast.info("Devolvido ao corretor como Pendente.");
+    },
+    onError: (error: any) => {
+      if (error?.message === "__cancelado__") return;
+      toast.error("Erro ao retornar pendência: " + (error?.message || "erro desconhecido"));
+    },
+  });
+
   // Coluna sem nenhum lead fica oculta pra não poluir a tela — ela volta a
   // aparecer sozinha assim que algum lead for movido pra ela (via dropdown de
   // status no card/modal; não tem drag-and-drop nesse Kanban).
@@ -237,11 +298,14 @@ export function LeadsKanban({ leads: initialLeads, isLoading: initialLoading, im
 
           <ScrollArea className="flex-1">
             <div className="flex flex-col gap-2 pr-3">
-              {leadsByStage[stage.id].map((lead) => (
-                <Card 
-                  key={lead.id} 
+              {leadsByStage[stage.id].map((lead) => {
+                const emAnaliseCredito = ehColunaAnaliseCredito(stage.title);
+                const podeAuditar = emAnaliseCredito && (role === "dono" || role === "gerente");
+                return (
+                <Card
+                  key={lead.id}
                   onClick={() => handleLeadClick(lead.id)}
-                  className="cursor-pointer hover:border-primary/50 hover:shadow-md transition-all group relative overflow-hidden border-slate-200 hover-lift animate-fade-in-up"
+                  className={`cursor-pointer hover:border-primary/50 hover:shadow-md transition-all group relative overflow-hidden hover-lift animate-fade-in-up ${podeAuditar ? "border-red-300 bg-red-50/60" : "border-slate-200"}`}
                 >
                   {/* Indicador de Lembrete */}
                   {lead.lembrete_follow_up && new Date(lead.lembrete_follow_up) <= new Date() && (
@@ -356,9 +420,32 @@ export function LeadsKanban({ leads: initialLeads, isLoading: initialLoading, im
                         )}
                       </div>
                     </div>
+
+                    {podeAuditar && (
+                      <div className="flex items-center gap-1.5 mt-2 pt-2 border-t border-red-100" onClick={(e) => e.stopPropagation()}>
+                        <Button
+                          size="sm"
+                          className="h-6 flex-1 text-[9px] font-black uppercase tracking-wider bg-emerald-600 hover:bg-emerald-700"
+                          onClick={() => vistoMutation.mutate(lead.id)}
+                          disabled={vistoMutation.isPending}
+                        >
+                          Visto
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 flex-1 text-[9px] font-black uppercase tracking-wider border-red-200 text-red-600 hover:bg-red-50"
+                          onClick={() => retornarPendenciaMutation.mutate(lead)}
+                          disabled={retornarPendenciaMutation.isPending}
+                        >
+                          Pendência
+                        </Button>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
-              ))}
+                );
+              })}
             </div>
           </ScrollArea>
         </div>

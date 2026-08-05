@@ -186,11 +186,24 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
       return;
     }
 
-    const exigeAgendamento = COLUNAS_AGENDAMENTO_OBRIGATORIO.some((n) => nomeColuna.toLowerCase().includes(n));
-    const temProximoContatoFuturo = lead?.lembrete_follow_up && new Date(lead.lembrete_follow_up) > new Date();
-    if (exigeAgendamento && !temProximoContatoFuturo) {
-      toast.error(`"${nomeColuna}" exige um Próximo Contato agendado. Preencha o campo "Próximo Contato" (Bloco 3) antes de mudar o status.`);
-      return;
+    const nomeColunaLower = nomeColuna.toLowerCase();
+    const ehAgendadoOuFid = nomeColunaLower.includes("agendado") || nomeColunaLower.includes("fid");
+    if (ehAgendadoOuFid) {
+      // Especificação do dono: mover pra Agendado/FID exige Data e Horário
+      // do compromisso já preenchidos — trava dedicada, diferente da de
+      // "Próximo Contato" dos outros status.
+      const temVisitaFutura = lead?.data_visita && new Date(lead.data_visita) > new Date();
+      if (!temVisitaFutura) {
+        toast.error(`"${nomeColuna}" exige Data e Horário do agendamento preenchidos. Use o campo "Agendar Compromisso" (Bloco 3) antes de mudar o status.`);
+        return;
+      }
+    } else {
+      const exigeAgendamento = COLUNAS_AGENDAMENTO_OBRIGATORIO.some((n) => nomeColunaLower.includes(n));
+      const temProximoContatoFuturo = lead?.lembrete_follow_up && new Date(lead.lembrete_follow_up) > new Date();
+      if (exigeAgendamento && !temProximoContatoFuturo) {
+        toast.error(`"${nomeColuna}" exige um Próximo Contato agendado. Preencha o campo "Próximo Contato" (Bloco 3) antes de mudar o status.`);
+        return;
+      }
     }
 
     const retroStatus = getRetrocompatibleStatus(nomeColuna, posicao, colunas ? colunas.length : 10);

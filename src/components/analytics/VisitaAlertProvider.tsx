@@ -4,10 +4,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/context/AuthContext";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, Clock, Calendar, MapPin, User, CheckCircle2, X } from "lucide-react";
+import { AlertTriangle, Clock, Calendar, MapPin, User, CheckCircle2, X, MessageCircle } from "lucide-react";
 import { format, differenceInHours, differenceInMinutes, isSameDay, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
+import { LeadDetailsModal } from "@/components/leads/LeadDetailsModal";
 
 export function VisitaAlertProvider() {
   const { user } = useAuth();
@@ -17,6 +18,7 @@ export function VisitaAlertProvider() {
     type: "17h" | "2h";
   } | null>(null);
   const [isConfirming, setIsConfirming] = useState(false);
+  const [chatAberto, setChatAberto] = useState(false);
   // Guarda quando cada alerta foi "fechado sem confirmar" — soneca de
   // 10min antes de voltar a interromper o corretor com o mesmo alerta.
   const [snoozedAte, setSnoozedAte] = useState<Record<string, number>>({});
@@ -84,12 +86,15 @@ export function VisitaAlertProvider() {
     setActiveAlert(null);
   };
 
-  const handleCiente = async () => {
+  // Pedido do dono: a janela só libera quando o corretor manda a mensagem
+  // de lembrete pro cliente (não um "ciente" genérico) -- abre o chat do
+  // WhatsApp direto do lead e já marca como confirmado.
+  const handleEnviarLembrete = async () => {
     if (!activeAlert) return;
     setIsConfirming(true);
 
     try {
-      const updateData = activeAlert.type === "17h" 
+      const updateData = activeAlert.type === "17h"
         ? { alerta_visita_17h_ciente: true }
         : { alerta_visita_2h_ciente: true };
 
@@ -100,18 +105,19 @@ export function VisitaAlertProvider() {
 
       if (error) throw error;
 
-      // Registrar no histórico de interações (Inviolável audit audit_log)
-      await supabase.from("interacoes").insert({
-        lead_id: activeAlert.lead.id,
-        tipo: 'status',
-        conteudo: `Corretor marcou ciente no Alerta Inviolável de Visita (${activeAlert.type === "17h" ? "17h do dia anterior" : "2 horas antes"}).`
-      });
+      if (user) {
+        await supabase.from("leads_interacoes").insert({
+          lead_id: activeAlert.lead.id,
+          autor_id: user.id,
+          tipo: "status",
+          conteudo: `Corretor confirmou o alerta de visita (${activeAlert.type === "17h" ? "lembrete de 17h do dia anterior" : "lembrete de 2 horas antes"}) e abriu o WhatsApp para enviar o lembrete.`,
+        });
+      }
 
-      toast.success("Confirmação registrada no sistema!");
-      setActiveAlert(null);
       queryClient.invalidateQueries({ queryKey: ["leads"] });
+      setChatAberto(true);
     } catch (error) {
-      toast.error("Erro ao confirmar alerta. O sistema continuará travado.");
+      toast.error("Erro ao confirmar alerta. Tente novamente.");
       console.error(error);
     } finally {
       setIsConfirming(false);
@@ -122,6 +128,22 @@ export function VisitaAlertProvider() {
 
   const lead = activeAlert.lead;
   const visitaDate = new Date(lead.data_visita);
+
+  // Enquanto o chat abre, esconde o alerta em vez de sobrepor dois Dialog
+  // ao mesmo tempo (Radix não gosta de dois modais abertos juntos).
+  if (chatAberto) {
+    return (
+      <LeadDetailsModal
+        leadId={lead.id}
+        open={chatAberto}
+        onOpenChange={(open) => {
+          setChatAberto(open);
+          if (!open) setActiveAlert(null);
+        }}
+        initialTab="chat"
+      />
+    );
+  }
 
   return (
     <Dialog open={true} onOpenChange={(open) => { if (!open) handleFechar(); }}>
@@ -175,12 +197,12 @@ export function VisitaAlertProvider() {
         <DialogFooter className="sm:justify-center pt-2 flex-col gap-2">
           <Button
             className="w-full h-12 text-sm font-black uppercase tracking-widest bg-red-600 hover:bg-red-700 hover:scale-[1.02] transition-all shadow-lg shadow-red-200"
-            onClick={handleCiente}
+            onClick={handleEnviarLembrete}
             disabled={isConfirming}
           >
             {isConfirming ? "Registrando..." : (
               <>
-                <CheckCircle2 className="mr-2 h-5 w-5" /> ESTOU CIENTE
+                <MessageCircle className="mr-2 h-5 w-5" /> Enviar Mensagem de Lembrete
               </>
             )}
           </Button>

@@ -384,7 +384,7 @@ function LeadsPage() {
 
         <div className="flex-1 min-h-0">
           {view === "kanban" ? (
-            <LeadsKanban leads={filteredLeads} isLoading={isLoading} imobiliariaId={profile?.imobiliaria_id || ""} />
+            <LeadsKanban leads={filteredLeads} isLoading={isLoading} imobiliariaId={profile?.imobiliaria_id || ""} role={role} />
           ) : (
             <LeadsTable leads={filteredLeads} isLoading={isLoading} colunas={colunas} role={role} />
           )}

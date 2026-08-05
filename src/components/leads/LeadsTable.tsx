@@ -290,7 +290,15 @@ export function LeadsTable({ leads, isLoading, colunas, role }: LeadsTableProps)
                         <DropdownMenuItem
                           key={coluna.id}
                           disabled={lead.coluna_kanban_id === coluna.id}
-                          onClick={() => { setFollowUpDateTemp(""); setPendingStatusChange({ lead, coluna }); }}
+                          onClick={() => {
+                            const nomeLower = coluna.nome.toLowerCase();
+                            if (nomeLower.includes("agendado") || nomeLower.includes("fid")) {
+                              toast.error(`"${coluna.nome}" exige Data e Horário do agendamento — abra o card e preencha "Agendar Compromisso".`);
+                              return;
+                            }
+                            setFollowUpDateTemp("");
+                            setPendingStatusChange({ lead, coluna });
+                          }}
                         >
                           {coluna.nome}
                         </DropdownMenuItem>
