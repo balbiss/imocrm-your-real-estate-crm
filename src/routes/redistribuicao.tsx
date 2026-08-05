@@ -96,21 +96,18 @@ function RedistributionPage() {
         return query.order("created_at", { ascending: true });
       };
 
-      // O Supabase/PostgREST limita cada resposta a 1000 linhas por padrao —
-      // com o Bolsao passando disso, a lista (e os cards de contagem que
-      // dependiam dela) ficava truncada silenciosamente. Busca em paginas de
-      // 1000 ate esgotar, pra sempre trazer a base inteira.
-      const PAGE_SIZE = 1000;
-      let allRows: any[] = [];
-      let from = 0;
-      while (true) {
-        const { data, error } = await buildQuery().range(from, from + PAGE_SIZE - 1);
-        if (error) throw error;
-        allRows = allRows.concat(data || []);
-        if (!data || data.length < PAGE_SIZE) break;
-        from += PAGE_SIZE;
-      }
-      return allRows;
+      // Os cards de contagem no topo usam a query separada `statCounts`
+      // (count exato via head:true, sempre bate com a base real) -- essa
+      // lista aqui e so pra exibir/selecionar em massa, entao nao precisa
+      // baixar o Bolsao inteiro (que hoje passa de 8 mil leads). Antes isso
+      // buscava tudo em paginas de 1000 -- com refetchInterval de 10s, isso
+      // virava ~9 requests sequenciais repetidos a cada 10 segundos so
+      // dessa tela. Agora traz so os 500 mais antigos (FIFO, os que mais
+      // esperam), que ja e mais do que da pra revisar/selecionar em massa
+      // de uma vez com conforto.
+      const { data, error } = await buildQuery().range(0, 499);
+      if (error) throw error;
+      return data || [];
     },
     enabled: !!profile?.imobiliaria_id,
     refetchInterval: 10000, // Atualizar a cada 10 segundos para o dono

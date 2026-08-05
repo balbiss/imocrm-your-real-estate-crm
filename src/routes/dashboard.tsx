@@ -52,41 +52,49 @@ function DashboardPage() {
     queryFn: async () => {
       if (!profile?.imobiliaria_id || loadingPerms) return null;
 
-      const buildQuery = () => {
+      // Antes isso baixava a tabela de leads INTEIRA pro navegador (paginando
+      // de 1000 em 1000) so pra contar status e pegar os 6 mais recentes --
+      // com a base na casa dos milhares isso ficava lento em toda visita ao
+      // Dashboard. Agora cada numero e um count=exact/head do PostgREST (o
+      // Postgres conta sem devolver as linhas) rodando em paralelo, e so os
+      // 6 leads recentes trazem colunas de verdade.
+      const base = () => {
         let query = supabase
           .from("leads")
-          .select("*, corretor:perfis!corretor_id(nome)")
+          .select("*", { count: "exact", head: true })
           .eq("imobiliaria_id", profile.imobiliaria_id);
-
-        // Se for corretor, filtrar apenas os dele
         if (role === 'corretor') {
           query = query.eq("corretor_id", user?.id);
         }
-
-        return query.order("created_at", { ascending: false });
+        return query;
       };
 
-      // O Supabase/PostgREST limita cada resposta a 1000 linhas por padrao —
-      // busca em paginas ate esgotar, pra nao subestimar as metricas do
-      // dashboard quando a base passar disso.
-      const PAGE_SIZE = 1000;
-      let leads: any[] = [];
-      let from = 0;
-      while (true) {
-        const { data, error: leadsError } = await buildQuery().range(from, from + PAGE_SIZE - 1);
-        if (leadsError) throw leadsError;
-        leads = leads.concat(data || []);
-        if (!data || data.length < PAGE_SIZE) break;
-        from += PAGE_SIZE;
-      }
+      const [totalRes, newRes, progressRes, concludedRes, overdueRes, recentRes] = await Promise.all([
+        base(),
+        base().eq("status", "novo"),
+        base().eq("status", "em_atendimento"),
+        base().eq("status", "venda_concluida"),
+        base().lte("lembrete_follow_up", new Date().toISOString()).is("data_fechamento", null),
+        (() => {
+          let q = supabase
+            .from("leads")
+            .select("id, nome, status, origem, created_at")
+            .eq("imobiliaria_id", profile.imobiliaria_id);
+          if (role === 'corretor') q = q.eq("corretor_id", user?.id);
+          return q.order("created_at", { ascending: false }).limit(6);
+        })(),
+      ]);
+
+      const firstError = totalRes.error || newRes.error || progressRes.error || concludedRes.error || overdueRes.error || recentRes.error;
+      if (firstError) throw firstError;
 
       const stats = {
-        totalLeads: leads.length,
-        newLeads: leads.filter(l => l.status === "novo").length,
-        inProgress: leads.filter(l => l.status === "em_atendimento").length,
-        concluded: leads.filter(l => l.status === "venda_concluida").length,
-        overdueFollowups: leads.filter(l => l.lembrete_follow_up && new Date(l.lembrete_follow_up) <= new Date() && !l.data_fechamento).length,
-        recentLeads: leads.slice(0, 6),
+        totalLeads: totalRes.count || 0,
+        newLeads: newRes.count || 0,
+        inProgress: progressRes.count || 0,
+        concluded: concludedRes.count || 0,
+        overdueFollowups: overdueRes.count || 0,
+        recentLeads: recentRes.data || [],
       };
 
       return stats;
