@@ -159,18 +159,23 @@ export function LeadsTable({ leads, isLoading, colunas, role }: LeadsTableProps)
   const bulkToBolsaoMutation = useMutation({
     mutationFn: async (ids: string[]) => {
       const colunaRebatida = getColunaPorStatus(colunas, "rebatida");
-      const { error } = await supabase
-        .from("leads")
-        .update({
-          corretor_id: null,
-          status: "rebatida",
-          ...(colunaRebatida ? { coluna_kanban_id: colunaRebatida.id } : {}),
-          tentativas_contato: 0,
-          lembrete_follow_up: null,
-          data_visita: null,
-        })
-        .in("id", ids);
-      if (error) throw error;
+      const payload: any = {
+        corretor_id: null,
+        status: "rebatida",
+        ...(colunaRebatida ? { coluna_kanban_id: colunaRebatida.id } : {}),
+        tentativas_contato: 0,
+        lembrete_follow_up: null,
+        data_visita: null,
+      };
+      // Selecionar tudo (ex: 1245 leads) num só .in() estoura o limite de
+      // tamanho da URL do PostgREST e dá 400 Bad Request — manda em lotes
+      // de 150 ids por vez.
+      const TAMANHO_LOTE = 150;
+      for (let i = 0; i < ids.length; i += TAMANHO_LOTE) {
+        const lote = ids.slice(i, i + TAMANHO_LOTE);
+        const { error } = await supabase.from("leads").update(payload).in("id", lote);
+        if (error) throw error;
+      }
     },
     onSuccess: (_data, ids) => {
       queryClient.invalidateQueries({ queryKey: ["leads"] });
