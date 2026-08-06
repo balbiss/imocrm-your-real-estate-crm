@@ -4,6 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 import { VisitaAlertProvider } from "@/components/analytics/VisitaAlertProvider";
+import { LeadNovoAlertProvider } from "@/components/leads/LeadNovoAlertProvider";
 import { NotificationPermissionPrompt } from "@/components/notifications/NotificationPermissionPrompt";
 
 const TITLES: Record<string, string> = {
@@ -45,6 +46,7 @@ export function MainLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex h-screen w-full overflow-hidden bg-[#f8fafc]">
       <VisitaAlertProvider />
+      <LeadNovoAlertProvider />
       {/* Desktop sidebar */}
       <div className="hidden md:block">
         <Sidebar collapsed={collapsed} />

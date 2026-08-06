@@ -82,7 +82,18 @@ function RedistributionPage() {
         if (activeTab === "bolsao") {
           query = query.is("corretor_id", null).is("descartado_em", null);
         } else if (activeTab === "descartados") {
-          query = query.not("descartado_em", "is", null);
+          // Descarte "normal" (Sem Resposta, Não Tem Interesse, etc) --
+          // volta pro bolsão com 1 clique. Os motivos extremos (Descadastrar
+          // / Já Comprou) já aprovados pelo dono ficam de fora daqui, numa
+          // aba própria (ver "descadastrados" abaixo) porque, ao contrário
+          // do descarte normal, esses já foram validados como definitivos.
+          query = query
+            .not("descartado_em", "is", null)
+            .not("motivo_descarte", "in", '("Descadastrar","Já Comprou (Outra Empresa)")');
+        } else if (activeTab === "descadastrados") {
+          query = query
+            .not("descartado_em", "is", null)
+            .in("motivo_descarte", ["Descadastrar", "Já Comprou (Outra Empresa)"]);
         } else {
           // Regra de redistribuição: tentativas >= 5 ou sem contato há > 24h
           const yesterday = new Date();
@@ -360,6 +371,12 @@ function RedistributionPage() {
               >
                 Leads Descartados
               </TabsTrigger>
+              <TabsTrigger
+                value="descadastrados"
+                className="border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent rounded-none h-full text-xs font-black uppercase tracking-wider px-0 opacity-40 data-[state=active]:opacity-100 transition-all"
+              >
+                Lead Descadastrar
+              </TabsTrigger>
             </TabsList>
 
             {selectedLeads.length > 0 && (
@@ -437,7 +454,7 @@ function RedistributionPage() {
                   <TableHead className="text-[10px] font-black uppercase tracking-widest py-4 text-slate-400">Lead</TableHead>
                   <TableHead className="text-[10px] font-black uppercase tracking-widest py-4 text-slate-400">Origem / Motivo</TableHead>
                   <TableHead className="text-[10px] font-black uppercase tracking-widest py-4 text-slate-400">
-                    {activeTab === 'bolsao' ? 'Tempo de Espera' : activeTab === 'descartados' ? 'Motivo do Descarte' : 'Responsável Atual'}
+                    {activeTab === 'bolsao' ? 'Tempo de Espera' : activeTab === 'descartados' || activeTab === 'descadastrados' ? 'Motivo do Descarte' : 'Responsável Atual'}
                   </TableHead>
                   <TableHead className="text-[10px] font-black uppercase tracking-widest py-4 text-slate-400 text-right pr-6">Ação</TableHead>
                 </TableRow>
@@ -494,10 +511,13 @@ function RedistributionPage() {
                             <Clock className="h-3.5 w-3.5 text-slate-400" />
                             {Math.floor((new Date().getTime() - new Date(lead.created_at).getTime()) / (1000 * 60 * 60))}h na fila
                           </div>
-                        ) : activeTab === 'descartados' ? (
+                        ) : activeTab === 'descartados' || activeTab === 'descadastrados' ? (
                           <div className="flex flex-col">
                             <span className="text-xs font-bold text-red-500 uppercase tracking-tight">{lead.motivo_descarte}</span>
-                            <span className="text-[10px] text-slate-400 font-medium">Descartado em {new Date(lead.descartado_em!).toLocaleDateString()}</span>
+                            <span className="text-[10px] text-slate-400 font-medium">
+                              {activeTab === 'descadastrados' ? 'Aprovado em ' : 'Descartado em '}
+                              {new Date(lead.descartado_em!).toLocaleDateString('pt-BR')}
+                            </span>
                           </div>
                         ) : (
                           <div className="flex items-center gap-2">
@@ -509,10 +529,10 @@ function RedistributionPage() {
                         )}
                       </TableCell>
                       <TableCell className="py-4 text-right pr-6">
-                        {activeTab === 'descartados' ? (
-                          <Button 
-                            size="sm" 
-                            variant="ghost" 
+                        {activeTab === 'descartados' || activeTab === 'descadastrados' ? (
+                          <Button
+                            size="sm"
+                            variant="ghost"
                             className="h-8 text-[10px] font-black text-primary hover:text-primary hover:bg-primary/5 uppercase tracking-widest gap-2"
                             onClick={() => reactivateMutation.mutate(lead.id)}
                             disabled={reactivateMutation.isPending}

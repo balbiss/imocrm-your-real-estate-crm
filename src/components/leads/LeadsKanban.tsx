@@ -229,7 +229,7 @@ export function LeadsKanban({ leads: initialLeads, isLoading: initialLoading, im
     mutationFn: async (leadId: string) => {
       const { error } = await supabase
         .from("leads")
-        .update({ ultima_acao_at: new Date().toISOString() })
+        .update({ credito_aprovado_em: new Date().toISOString(), ultima_acao_at: new Date().toISOString() })
         .eq("id", leadId);
       if (error) throw error;
     },
@@ -301,7 +301,8 @@ export function LeadsKanban({ leads: initialLeads, isLoading: initialLoading, im
             <div className="flex flex-col gap-2 pr-3">
               {leadsByStage[stage.id].map((lead) => {
                 const emAnaliseCredito = ehColunaAnaliseCredito(stage.title);
-                const podeAuditar = emAnaliseCredito && (role === "dono" || role === "gerente");
+                const aguardandoAuditoria = emAnaliseCredito && !lead.credito_aprovado_em;
+                const podeAuditar = aguardandoAuditoria && (role === "dono" || role === "gerente");
                 return (
                 <Card
                   key={lead.id}

@@ -51,9 +51,9 @@ export function NotificationPermissionPrompt() {
           </>
         ) : (
           <>
-            <p className="text-sm font-semibold text-slate-800">Ativar notificações de mensagens</p>
+            <p className="text-sm font-semibold text-slate-800">Ativar notificações</p>
             <p className="text-xs text-slate-500 mt-0.5">
-              Receba um alerta na hora que um lead te mandar mensagem no WhatsApp, mesmo com o CRM fechado.
+              Receba um alerta na hora que chegar um lead novo ou uma mensagem no WhatsApp, mesmo com o CRM em outra aba.
             </p>
             <Button size="sm" className="mt-2 h-7 text-xs" onClick={handleEnable} disabled={loading}>
               {loading ? "Ativando..." : "Ativar notificações"}

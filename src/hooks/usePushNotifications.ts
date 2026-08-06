@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { getVapidPublicKey, subscribePush, unsubscribePush } from "@/lib/push";
+import { playNotificationSound } from "@/lib/notificationSound";
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || process.env.BACKEND_URL || "";
 
@@ -21,36 +22,6 @@ function urlBase64ToUint8Array(base64String: string) {
   const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
   const rawData = atob(base64);
   return Uint8Array.from([...rawData].map((c) => c.charCodeAt(0)));
-}
-
-// Toca um "ding" de duas notas sintetizado (sem depender de arquivo de audio).
-// Service Worker nao tem acesso a Web Audio, entao isso so roda na pagina —
-// funciona com a aba aberta em segundo plano (igual WhatsApp Web), nao com
-// o navegador totalmente fechado.
-function playNotificationSound() {
-  try {
-    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-    const ctx = new AudioContextClass();
-    const now = ctx.currentTime;
-
-    [880, 1108.73].forEach((freq, i) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = "sine";
-      osc.frequency.value = freq;
-      const start = now + i * 0.1;
-      gain.gain.setValueAtTime(0, start);
-      gain.gain.linearRampToValueAtTime(0.2, start + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.35);
-      osc.connect(gain).connect(ctx.destination);
-      osc.start(start);
-      osc.stop(start + 0.4);
-    });
-
-    setTimeout(() => ctx.close().catch(() => {}), 800);
-  } catch (e) {
-    console.error("Erro ao tocar som de notificação:", e);
-  }
 }
 
 export function usePushNotifications() {

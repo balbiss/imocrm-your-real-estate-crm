@@ -17,6 +17,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useAuth } from "@/context/AuthContext";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -35,6 +36,7 @@ type CalendarEvent = {
   telefone: string;
   date: Date;
   type: EventType;
+  corretor_id?: string | null;
   corretor_nome?: string;
   local?: string;
   status_visita?: string;
@@ -50,6 +52,7 @@ function AgendaPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState<"atrasadas" | "aFazer" | "visitas" | "futuras" | "favoritos">("aFazer");
+  const [corretorFilter, setCorretorFilter] = useState<string>("todos");
 
   const { data: profile, isLoading: loadingProfile } = useQuery({
     queryKey: ["user-profile-agenda", user?.id],
@@ -87,6 +90,21 @@ function AgendaPage() {
     enabled: !!profile?.imobiliaria_id && !loadingPerms,
   });
 
+  const { data: corretores } = useQuery({
+    queryKey: ["corretores-agenda", profile?.imobiliaria_id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("perfis")
+        .select("id, nome")
+        .eq("imobiliaria_id", profile!.imobiliaria_id)
+        .eq("role", "corretor")
+        .order("nome");
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!profile?.imobiliaria_id && role !== "corretor",
+  });
+
   // Mapear os leads para eventos individuais (pode ter 1 follow-up e 1 visita no mesmo lead)
   const allEvents: CalendarEvent[] = React.useMemo(() => {
     if (!compromissosRaw) return [];
@@ -103,11 +121,12 @@ function AgendaPage() {
           telefone: lead.telefone,
           date: new Date(lead.lembrete_follow_up),
           type: "follow_up",
+          corretor_id: lead.corretor_id,
           corretor_nome: (lead as any).corretor?.nome || "Sem Corretor",
           favorito: isFavorito
         });
       }
-      
+
       if (lead.data_visita) {
         events.push({
           id: `${lead.id}-visita`,
@@ -117,6 +136,7 @@ function AgendaPage() {
           telefone: lead.telefone,
           date: new Date(lead.data_visita),
           type: lead.tipo_visita === 'FID' ? "fid" : "visita",
+          corretor_id: lead.corretor_id,
           corretor_nome: (lead as any).corretor?.nome || "Sem Corretor",
           local: lead.bairro_interesse || "A Definir",
           status_visita: lead.status_visita || "AGENDADA",
@@ -128,6 +148,13 @@ function AgendaPage() {
     return events.sort((a, b) => a.date.getTime() - b.date.getTime());
   }, [compromissosRaw]);
 
+  // Filtro por corretor (só visível pra dono/gerente — corretor já só ve as
+  // próprias tarefas, filtradas direto na query acima).
+  const filteredEvents: CalendarEvent[] = React.useMemo(() => {
+    if (corretorFilter === "todos") return allEvents;
+    return allEvents.filter((e) => e.corretor_id === corretorFilter);
+  }, [allEvents, corretorFilter]);
+
   // Lógica de categorização das tarefas
   const { atrasadas, aFazer, visitas, futuras, favoritos } = React.useMemo(() => {
     const todayStart = new Date();
@@ -137,7 +164,7 @@ function AgendaPage() {
     const tomorrowEnd = new Date(tomorrowStart);
     tomorrowEnd.setHours(23, 59, 59, 999);
 
-    const filterAtrasadas = allEvents.filter(e => {
+    const filterAtrasadas = filteredEvents.filter(e => {
       if (e.date >= todayStart) return false;
       if (e.type === 'visita' || e.type === 'fid') {
         return e.status_visita !== 'REALIZADA' && e.status_visita !== 'DESMARCADA';
@@ -145,7 +172,7 @@ function AgendaPage() {
       return true;
     });
 
-    const filterAFazer = allEvents.filter(e => {
+    const filterAFazer = filteredEvents.filter(e => {
       const isTodayTask = e.date >= todayStart && e.date < tomorrowStart;
       if (!isTodayTask) return false;
       if (e.type === 'visita' || e.type === 'fid') {
@@ -154,20 +181,20 @@ function AgendaPage() {
       return true;
     });
 
-    const filterVisitas = allEvents.filter(e => {
+    const filterVisitas = filteredEvents.filter(e => {
       const isVisita = e.type === 'visita' || e.type === 'fid';
       if (!isVisita) return false;
       return e.date >= todayStart && e.date <= tomorrowEnd;
     });
 
-    const filterFuturas = allEvents.filter(e => {
+    const filterFuturas = filteredEvents.filter(e => {
       if (e.type === 'visita' || e.type === 'fid') {
         return e.date > tomorrowEnd;
       }
       return e.date >= tomorrowStart;
     });
 
-    const filterFavoritos = allEvents.filter(e => e.favorito);
+    const filterFavoritos = filteredEvents.filter(e => e.favorito);
 
     return {
       atrasadas: filterAtrasadas,
@@ -176,7 +203,7 @@ function AgendaPage() {
       futuras: filterFuturas,
       favoritos: filterFavoritos,
     };
-  }, [allEvents]);
+  }, [filteredEvents]);
 
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(monthStart);
@@ -357,7 +384,7 @@ function AgendaPage() {
               {/* Lista de Cartões de Tarefas */}
               <div className="md:col-span-3 flex flex-col min-h-0 h-full">
                 <Card className="flex-1 border-slate-200 shadow-sm bg-white flex flex-col overflow-hidden rounded-2xl h-full min-h-0">
-                  <CardHeader className="p-4 border-b bg-slate-50/50 flex flex-row items-center justify-between flex-shrink-0">
+                  <CardHeader className="p-4 border-b bg-slate-50/50 flex flex-row items-center justify-between flex-shrink-0 gap-3">
                     <CardTitle className="text-xs font-bold text-slate-800 uppercase tracking-widest">
                       {activeCategory === "atrasadas" && "Tarefas Atrasadas"}
                       {activeCategory === "aFazer" && "Tarefas a Fazer Hoje"}
@@ -365,6 +392,19 @@ function AgendaPage() {
                       {activeCategory === "futuras" && "Tarefas Futuras"}
                       {activeCategory === "favoritos" && "Leads Favoritos"}
                     </CardTitle>
+                    {role !== 'corretor' && (
+                      <Select value={corretorFilter} onValueChange={setCorretorFilter}>
+                        <SelectTrigger className="h-8 w-[180px] text-[11px] font-bold uppercase tracking-wide bg-white">
+                          <SelectValue placeholder="Todos os corretores" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="todos">Todos os corretores</SelectItem>
+                          {corretores?.map((c) => (
+                            <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
                   </CardHeader>
                   <ScrollArea className="flex-1 p-4">
                     <div className="space-y-3">
