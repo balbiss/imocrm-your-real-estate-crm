@@ -3,7 +3,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { createFileRoute } from "@tanstack/react-router";
 import { MainLayout } from "@/components/layout/MainLayout";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/context/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -22,6 +22,7 @@ import {
   Area
 } from "recharts";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
 import { Users, Target, CheckCircle, Clock, Calendar, BarChart3, Loader2, Phone } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,7 @@ const COLORS = ["#1d4ed8", "#10b981", "#f59e0b", "#3b82f6", "#8b5cf6"];
 function ReportsPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { role, isLoading: loadingPerms } = usePermissions();
   const [statusSelecionado, setStatusSelecionado] = React.useState<string | null>(null);
   const [leadSelecionadoId, setLeadSelecionadoId] = React.useState<string | null>(null);
@@ -112,6 +114,47 @@ function ReportsPage() {
       return { leads, team: team || [], colunas: colunas || [] };
     },
     enabled: !!profile?.imobiliaria_id
+  });
+
+  // Fase 3 (passo 1): gasto por campanha, editável por dono/gerente, pra
+  // calcular CAC = gasto ÷ vendas da campanha no mês.
+  const { data: gastosCampanha } = useQuery({
+    queryKey: ["gastos-campanha", profile?.imobiliaria_id, mesFiltro],
+    queryFn: async () => {
+      if (!profile?.imobiliaria_id) return {};
+      const { data, error } = await supabase
+        .from("gastos_campanha")
+        .select("origem, valor")
+        .eq("imobiliaria_id", profile.imobiliaria_id)
+        .eq("mes", mesFiltro);
+      if (error) throw error;
+      const map: Record<string, number> = {};
+      (data || []).forEach((g: any) => { map[g.origem] = Number(g.valor); });
+      return map;
+    },
+    enabled: !!profile?.imobiliaria_id,
+  });
+
+  const [gastoEditando, setGastoEditando] = React.useState<Record<string, string>>({});
+
+  const salvarGastoMutation = useMutation({
+    mutationFn: async ({ origem, valor }: { origem: string; valor: number }) => {
+      if (!profile?.imobiliaria_id || !user) throw new Error("Sem imobiliária/usuário");
+      const { error } = await supabase.from("gastos_campanha").upsert(
+        {
+          imobiliaria_id: profile.imobiliaria_id,
+          origem,
+          mes: mesFiltro,
+          valor,
+          atualizado_por: user.id,
+        },
+        { onConflict: "imobiliaria_id,origem,mes" }
+      );
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["gastos-campanha"] });
+    },
   });
 
   const origensDisponiveis = React.useMemo(() => {
@@ -278,6 +321,14 @@ function ReportsPage() {
       const restricao = leadsOrigem.filter((l: any) => idsRestricao.includes(l.coluna_kanban_id)).length;
       const descadastrado = leadsOrigem.filter(ehDescadastrado).length;
 
+      // Fase 3 (passo 2): CAC = gasto informado pelo dono ÷ vendas da
+      // campanha no mês. Taxa de aprovação de crédito = do que passou por
+      // Análise de Crédito, quanto NÃO caiu em Restrição (base é quem
+      // passou pela análise, não o total de leads da campanha).
+      const gasto = gastosCampanha?.[origem] ?? 0;
+      const cac = vendasOrigem > 0 ? gasto / vendasOrigem : null;
+      const taxaAprovacaoCredito = analiseCredito > 0 ? ((analiseCredito - restricao) / analiseCredito) * 100 : null;
+
       return {
         origem,
         total,
@@ -288,6 +339,9 @@ function ReportsPage() {
         descadastradoPct: pct(descadastrado),
         vendas: vendasOrigem,
         vendasPct: pct(vendasOrigem),
+        gasto,
+        cac,
+        taxaAprovacaoCredito,
       };
     }).sort((a, b) => b.total - a.total);
 
@@ -305,7 +359,7 @@ function ReportsPage() {
       campanhaPerformance,
       leads,
     };
-  }, [raw, mesFiltro, corretorFiltroRel, origemFiltroRel]);
+  }, [raw, mesFiltro, corretorFiltroRel, origemFiltroRel, gastosCampanha]);
 
   if (isLoading || !profile) {
     return (
@@ -596,13 +650,16 @@ function ReportsPage() {
                     <th className="px-3 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-center">An. Crédito</th>
                     <th className="px-3 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-center">Restrição</th>
                     <th className="px-3 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-center">Descadastrar</th>
-                    <th className="px-5 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-center">Venda</th>
+                    <th className="px-3 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-center">Taxa Aprov. Créd.</th>
+                    <th className="px-3 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-center">Venda</th>
+                    <th className="px-3 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-center">Gasto (R$)</th>
+                    <th className="px-5 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-center">CAC</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
                   {stats?.campanhaPerformance.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="px-5 py-8 text-center text-saas-xs text-slate-400 font-medium">
+                      <td colSpan={10} className="px-5 py-8 text-center text-saas-xs text-slate-400 font-medium">
                         Nenhuma campanha no período filtrado.
                       </td>
                     </tr>
@@ -618,10 +675,39 @@ function ReportsPage() {
                         <td className="px-3 py-3 text-center text-saas-xs font-medium text-slate-600">{camp.analiseCreditoPct.toFixed(1)}%</td>
                         <td className="px-3 py-3 text-center text-saas-xs font-medium text-rose-600">{camp.restricaoPct.toFixed(1)}%</td>
                         <td className="px-3 py-3 text-center text-saas-xs font-medium text-slate-400">{camp.descadastradoPct.toFixed(1)}%</td>
-                        <td className="px-5 py-3 text-center">
+                        <td className="px-3 py-3 text-center text-saas-xs font-medium text-blue-600">
+                          {camp.taxaAprovacaoCredito === null ? "—" : `${camp.taxaAprovacaoCredito.toFixed(1)}%`}
+                        </td>
+                        <td className="px-3 py-3 text-center">
                           <Badge variant="outline" className="h-5 px-1.5 text-[9px] font-black border-none bg-emerald-50 text-emerald-600">
                             {camp.vendas} · {camp.vendasPct.toFixed(1)}%
                           </Badge>
+                        </td>
+                        <td className="px-3 py-3 text-center">
+                          {(role === "dono" || role === "gerente") ? (
+                            <Input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              placeholder="0,00"
+                              value={gastoEditando[camp.origem] ?? (camp.gasto || "")}
+                              onChange={(e) => setGastoEditando((prev) => ({ ...prev, [camp.origem]: e.target.value }))}
+                              onBlur={(e) => {
+                                const valor = parseFloat(e.target.value || "0");
+                                if (!isNaN(valor) && valor !== camp.gasto) {
+                                  salvarGastoMutation.mutate({ origem: camp.origem, valor });
+                                }
+                              }}
+                              className="h-8 w-24 text-xs text-center border-slate-200"
+                            />
+                          ) : (
+                            <span className="text-saas-xs font-medium text-slate-500">
+                              {camp.gasto > 0 ? camp.gasto.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : "—"}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-5 py-3 text-center text-saas-xs font-bold text-slate-700">
+                          {camp.cac === null ? "—" : camp.cac.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                         </td>
                       </tr>
                     ))
