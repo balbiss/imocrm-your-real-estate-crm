@@ -83,6 +83,13 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
   const [followUpDate, setFollowUpDate] = useState("");
   const [followUpObs, setFollowUpObs] = useState("");
   const [mounted, setMounted] = useState(false);
+  // Pedido do dono (09/08): mudar de coluna primeiro, pedir a data do
+  // próximo contato depois -- antes bloqueava com toast.error exigindo
+  // preencher o Bloco 3 ANTES de deixar mudar. Mesmo padrão de modal que
+  // já existe e funciona em LeadsTable.tsx, pra não ter duas UX diferentes
+  // pra mesma trava.
+  const [pendingColunaChange, setPendingColunaChange] = useState<{ colunaId: string; nomeColuna: string; posicao: number } | null>(null);
+  const [proximoContatoTemp, setProximoContatoTemp] = useState("");
 
   useEffect(() => {
     setMounted(true);
@@ -198,9 +205,9 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
     const nomeColunaLower = nomeColuna.toLowerCase();
     const ehAgendadoOuFid = nomeColunaLower.includes("agendado") || nomeColunaLower.includes("fid");
     if (ehAgendadoOuFid) {
-      // Especificação do dono: mover pra Agendado/FID exige Data e Horário
-      // do compromisso já preenchidos — trava dedicada, diferente da de
-      // "Próximo Contato" dos outros status.
+      // Agendado/FID continua exigindo Data e Horário do compromisso via
+      // campo dedicado (Bloco 3) -- diferente do "Próximo Contato" comum,
+      // porque aqui a data É o proprio motivo da coluna, não um lembrete.
       const temVisitaFutura = lead?.data_visita && new Date(lead.data_visita) > new Date();
       if (!temVisitaFutura) {
         toast.error(`"${nomeColuna}" exige Data e Horário do agendamento preenchidos. Use o campo "Agendar Compromisso" (Bloco 3) antes de mudar o status.`);
@@ -210,7 +217,11 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
       const exigeAgendamento = COLUNAS_AGENDAMENTO_OBRIGATORIO.some((n) => nomeColunaLower.includes(n));
       const temProximoContatoFuturo = lead?.lembrete_follow_up && new Date(lead.lembrete_follow_up) > new Date();
       if (exigeAgendamento && !temProximoContatoFuturo) {
-        toast.error(`"${nomeColuna}" exige um Próximo Contato agendado. Preencha o campo "Próximo Contato" (Bloco 3) antes de mudar o status.`);
+        // Pedido do dono (09/08): não bloquear mais -- abre um modal pra
+        // preencher a data JUNTO com a troca de coluna, mesmo padrão do
+        // Dialog de LeadsTable.tsx (que já pedia isso corretamente).
+        setProximoContatoTemp("");
+        setPendingColunaChange({ colunaId, nomeColuna, posicao });
         return;
       }
     }
@@ -220,6 +231,22 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
       updates: { coluna_kanban_id: colunaId, status: retroStatus },
       descricao: `Moveu o card para a coluna "${nomeColuna}"`,
     });
+  };
+
+  const confirmarMudancaColuna = (comData: boolean) => {
+    if (!pendingColunaChange) return;
+    const { colunaId, nomeColuna, posicao } = pendingColunaChange;
+    const retroStatus = getRetrocompatibleStatus(nomeColuna, posicao, colunas ? colunas.length : 10);
+    const updates: any = { coluna_kanban_id: colunaId, status: retroStatus };
+    if (comData && proximoContatoTemp) {
+      updates.lembrete_follow_up = new Date(proximoContatoTemp).toISOString();
+    }
+    updateMutation.mutate({
+      updates,
+      descricao: `Moveu o card para a coluna "${nomeColuna}"${comData && proximoContatoTemp ? " e agendou próximo contato" : ""}`,
+    });
+    setPendingColunaChange(null);
+    setProximoContatoTemp("");
   };
 
   // Lógica do SLA de 5 minutos
@@ -1272,6 +1299,42 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
                 <Button className="flex-1 bg-green-600 hover:bg-green-700 font-bold" onClick={handleFechamento} disabled={!valorFechamento}>ENVIAR PARA APROVAÇÃO</Button>
               </div>
             </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Pedido do dono (09/08): pede a data do proximo contato DEPOIS de
+            escolher a coluna nova, no mesmo fluxo -- nao bloqueia mais com
+            toast.error exigindo preencher antes. */}
+        <Dialog open={!!pendingColunaChange} onOpenChange={(open) => { if (!open) setPendingColunaChange(null); }}>
+          <DialogContent className="sm:max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="text-sm font-bold">
+                Mover para "{pendingColunaChange?.nomeColuna}"
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-1.5 py-2">
+              <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">
+                Próximo contato (obrigatório nesse status)
+              </Label>
+              <Input
+                type="datetime-local"
+                step={1800}
+                value={proximoContatoTemp}
+                onChange={(e) => setProximoContatoTemp(e.target.value)}
+                className="h-9 text-sm border-slate-200"
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                size="sm"
+                className="text-xs font-bold uppercase px-6"
+                disabled={!proximoContatoTemp}
+                onClick={() => confirmarMudancaColuna(true)}
+              >
+                Confirmar
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </DialogContent>

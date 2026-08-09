@@ -256,19 +256,13 @@ function RedistributionPage() {
 
   const reactivateMutation = useMutation({
     mutationFn: async (leadId: string) => {
-      const { error } = await supabase
-        .from("leads")
-        .update({
-          corretor_id: null,
-          descartado_em: null,
-          descartado_por: null,
-          motivo_descarte: null,
-          status: "novo",
-          tentativas_contato: 0,
-          lembrete_follow_up: null,
-          data_visita: null
-        })
-        .eq("id", leadId);
+      // RPC SECURITY DEFINER em vez de update direto -- achado real (09/08):
+      // um update direto "tinha sucesso" sem alterar nenhuma linha, mesmo
+      // padrão do bug já corrigido em descartar_lead_normal (05/08). A RPC
+      // confirma via ROW_COUNT e também reseta coluna_kanban_id, que o
+      // update antigo deixava passar (lead reativado ficava preso
+      // visualmente na coluna de origem, tipo LEAD DESCADASTRAR).
+      const { error } = await supabase.rpc("reativar_lead", { p_lead_id: leadId });
       if (error) throw error;
     },
     onSuccess: () => {
