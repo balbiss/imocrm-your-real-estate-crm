@@ -243,12 +243,18 @@ function ManualPage() {
 
             <Section id="leads" title="Leads e Kanban" roles={["todos"]} lede="O coração do sistema. Cada lead é um cartão que anda por colunas conforme avança no atendimento — da primeira mensagem até a venda ou descarte.">
               <p><strong>Fluxo das colunas:</strong> Lead Novo → Tarefas → Agendado → Visitou → Cobrar Doc → Pendente → Aprovado. As colunas de Rebatida (lead que voltou a responder) e Sem Resposta ficam paralelas ao fluxo principal. É possível renomear/reordenar colunas em <a href="#configuracoes">Configurações</a>.</p>
-              <p><strong>Temperatura</strong> indica quão quente está o interesse. <strong>SLA de 5 minutos</strong> marca um lead novo como atrasado se ninguém responder a tempo. <strong>Devolver</strong> manda o lead de volta ao Bolsão sem corretor. <strong>Descartar</strong> encerra o lead — descarte extremo (ex: "Já Comprou") exige aprovação, veja <a href="#aprovacoes">Aprovações</a>. <strong>Fechar venda</strong> marca como convertido.</p>
+              <p><strong>Temperatura</strong> indica quão quente está o interesse. <strong>SLA de 5 minutos</strong> marca um lead novo como atrasado se ninguém responder a tempo. <strong>Devolver</strong> manda o lead de volta ao Bolsão sem corretor. <strong>Descartar</strong> encerra o lead — descarte extremo (ex: "Já Comprou") exige aprovação, veja <a href="#aprovacoes">Aprovações</a>. <strong>Fechar venda</strong> não fecha na hora — o valor e os detalhes vão pra aprovação do dono/gerente antes de virar venda de verdade.</p>
               <div className="flex flex-wrap items-baseline gap-2">
                 <RoleBadge role="dono" />
                 <RoleBadge role="gerente" />
-                <p className="m-0"><strong>Transferir um lead:</strong> abra o card — logo abaixo dos botões de venda/devolução há um seletor "Transferir para" com a lista de corretores. Escolher um nome move o lead na hora.</p>
+                <p className="m-0"><strong>Análise de Crédito:</strong> todo lead que entra nessa coluna fica com um alerta vermelho até dono ou gerente clicar em "Visto" (documentação auditada) ou "Retornar com Pendência" (volta pro corretor com uma nota do que falta). O alerta some assim que "Visto" é dado, e só volta a acender se o lead sair e retornar pra essa coluna de novo.</p>
               </div>
+              <div className="flex flex-wrap items-baseline gap-2">
+                <RoleBadge role="dono" />
+                <RoleBadge role="gerente" />
+                <p className="m-0"><strong>Transferir um lead:</strong> abra o card — logo abaixo dos botões de venda/devolução há um seletor "Transferir para" com a lista de corretores. Escolher um nome move o lead na hora e avisa o corretor (som + pop-up), do mesmo jeito que um lead novo da roleta.</p>
+              </div>
+              <p><strong>Mudar de coluna e agendar o próximo contato:</strong> ao mover o card para uma coluna como Conversando, Visitou, Cobrar Doc, Pendente, Aprovado, Reprovado, Restrição ou Futuros, primeiro escolhe-se a coluna — depois abre uma janela pedindo a data e o horário do próximo contato, nessa ordem. Agendado/FID continua exigindo a data e horário do compromisso antes, porque ali a data é o próprio motivo da coluna.</p>
               <Callout title="Leads descartados não voltam a aparecer">
                 Um lead descartado sai de todas as colunas do Kanban e da Agenda, mesmo que tivesse tarefa ou visita pendente antes do descarte.
               </Callout>
@@ -258,8 +264,13 @@ function ManualPage() {
               <p><strong>Conectar:</strong> abra Integrações, escaneie o QR Code com o WhatsApp do celular (Aparelhos conectados). A conexão fica ativa enquanto o celular tiver internet.</p>
               <p><strong>Mensagens prontas:</strong> digite <strong>/</strong> sozinho no campo de mensagem para abrir a lista de <a href="#templates">mensagens prontas</a> sem sair da conversa.</p>
               <p><strong>Leads automáticos:</strong> quando um cliente ainda não cadastrado manda mensagem para o número conectado, o sistema cria o lead sozinho e distribui pela roleta — não é preciso cadastrar manualmente antes.</p>
+              <p><strong>Divisor de data no chat:</strong> entre mensagens de dias diferentes aparece "Hoje", "Ontem" ou a data completa, igual ao WhatsApp do celular.</p>
+              <p><strong>Todo o histórico fica salvo no sistema, não no celular</strong> — cada mensagem é gravada no CRM assim que chega ou é enviada. Se o WhatsApp desconectar (celular sem internet, precisa reescanear o QR Code), nada do que já foi trocado se perde; só as mensagens que chegarem <em>durante</em> o período desconectado não são capturadas em tempo real. Dono e gerente sempre têm acesso ao histórico completo de qualquer corretor.</p>
               <Callout title="Alerta de possível duplicidade">
                 Se uma mensagem chega em um número diferente do corretor responsável — ou de um lead marcado como rebatida — dono e gerente recebem uma notificação avisando, para decidirem se transferem o atendimento.
+              </Callout>
+              <Callout title="Um número que já é lead 'reaparece' sozinho no funil">
+                Quando o Facebook reenvia um cadastro antigo do mesmo anúncio (isso acontece, é do lado da Meta, não do CRM), o sistema não cria um lead duplicado — ele atualiza o lead que já existia. Se esse lead estava sem corretor, ele é redistribuído pela roleta na hora e o corretor sorteado recebe o mesmo aviso de lead novo (som + pop-up).
               </Callout>
             </Section>
 
@@ -271,9 +282,14 @@ function ManualPage() {
               <p>Corretores veem sua própria carteira; o dono vê a base inteira. O gerente não tem esta tela — sua visão de equipe é feita pelo Kanban e pelos Relatórios.</p>
             </Section>
 
-            <Section id="distribuicao" title="Distribuição de Leads" roles={["dono", "gerente"]} lede="Painel de gestão para leads que não estão sendo atendidos como deveriam.">
-              <p><strong>Bolsão de Leads (sem corretor):</strong> leads que chegaram e ainda não foram atribuídos a ninguém. <strong>Presos para Redistribuir (com corretor):</strong> leads com corretor, mas parados há tempo demais sem movimento.</p>
-              <p>Um campo de busca por nome, telefone ou corretor ajuda a localizar um lead rápido dentro dessas listas.</p>
+            <Section id="distribuicao" title="Distribuição de Leads" roles={["dono", "gerente"]} lede="Painel de gestão para leads que não estão sendo atendidos como deveriam. Tem seis abas.">
+              <p><strong>Leads Novos:</strong> só quem chegou agora e nunca teve nenhum corretor — separado de propósito do resto do Bolsão, que pode ter anos de leads antigos/importados misturados. Mostra data e hora exata de entrada, com filtro de período (de/até) e um card no topo com o total de "Hoje + Ontem", pra bater o olho rápido sem precisar vasculhar a lista inteira.</p>
+              <p><strong>Rebatidas Geral (Bolsão):</strong> todo lead sem corretor, incluindo os antigos — a lista completa, sem filtrar por "nunca teve dono".</p>
+              <p><strong>Presos para Redistribuir:</strong> leads com corretor, mas parados há tempo demais sem movimento (5 ou mais tentativas de contato, ou mais de 24h sem sair de "Novo").</p>
+              <p><strong>Leads Descartados:</strong> descartes normais (Sem Resposta, Não Tem Interesse, etc) — têm botão <strong>Reativar</strong>, que devolve o lead pro Bolsão do zero (sem corretor, sem histórico do descarte).</p>
+              <p><strong>Lead Descadastrar:</strong> só os descartes extremos (Descadastrar / Já Comprou em Outra Empresa) que já foram aprovados pelo dono em <a href="#aprovacoes">Aprovações</a> — ficam numa aba própria porque são definitivos, diferente de um descarte normal que qualquer corretor pode reverter puxando de novo.</p>
+              <p><strong>Histórico da Roleta:</strong> mostra, lead por lead, pra qual corretor a roleta automática mandou e em que data/hora — só o que a roleta decidiu sozinha, não o que foi transferido manualmente (isso fica registrado à parte, no próprio card do lead).</p>
+              <p>Um campo de busca por nome, telefone ou corretor ajuda a localizar um lead rápido dentro dessas listas. "Ações em Massa" distribui vários leads selecionados de uma vez (por rodízio ou direto pra um corretor) sem gerar um aviso de lead novo pra cada um — só a transferência individual ("Encaminhar para...") avisa o corretor.</p>
             </Section>
 
             <Section id="equipe" title="Equipe" roles={["dono", "gerente"]} lede="Cadastro e gestão de quem trabalha na imobiliária dentro do sistema.">
@@ -281,7 +297,13 @@ function ManualPage() {
             </Section>
 
             <Section id="roleta" title="Rodízio e Roleta" roles={["todos"]} lede="Define a ordem em que os corretores recebem os próximos leads novos.">
-              <p>Todo mundo pode consultar a ordem atual. Só dono e gerente podem reordenar a fila ou fazer o check-in que confirma quem está de plantão — essa trava evita que um corretor se coloque na frente da fila. A <strong>Escala Semanal</strong> mostra quem está escalado em cada dia.</p>
+              <p>Todo mundo pode consultar a ordem atual. Só dono e gerente podem reordenar a fila. A <strong>Escala Semanal</strong> mostra quem está escalado em cada dia.</p>
+              <p><strong>Como a roleta decide pra quem vai um lead:</strong> quando um lead chega, o sistema pega o próximo corretor da fila que esteja com o toggle "disponível na roleta" ligado, não esteja em horário de almoço, e não tenha advertências demais na semana. Depois de receber um lead, esse corretor vai pro final da fila — assim todo mundo recebe na mesma proporção com o tempo.</p>
+              <p><strong>O toggle "disponível na roleta" é manual</strong> — cada corretor (ou dono/gerente por ele) precisa ativar ao começar o expediente. Ele não liga sozinho.</p>
+              <Callout title="A roleta desliga todo mundo sozinha no fim do expediente">
+                Todo dia, no horário de fechamento (18:20 na maioria dos dias, 19:30 quinta-feira, 15:20 sábado — e aos domingos a roleta fica desligada o dia inteiro), o sistema desativa automaticamente o toggle de todos os corretores, pra ninguém receber lead fora do horário. <strong>Mas ele não reativa sozinho de manhã</strong> — se um corretor esquecer de ligar o toggle ao chegar, os leads que chegarem nesse meio tempo caem no Bolsão sem dono, esperando alguém puxar manualmente. Vale religar assim que começar o dia.
+              </Callout>
+              <p>Quando nenhum corretor está disponível no momento em que um lead chega, ele não se perde — vai parar na coluna "Rebatida" do Kanban, sem dono, visível em <a href="#distribuicao">Distribuição de Leads → Rebatidas Geral</a>.</p>
             </Section>
 
             <Section id="aprovacoes" title="Aprovações" roles={["dono", "gerente"]} lede='Fila de pedidos de descarte extremo — motivos como "Já Comprou" ou "Descadastrar" — que um corretor não pode encerrar sozinho.'>
@@ -289,7 +311,18 @@ function ManualPage() {
             </Section>
 
             <Section id="relatorios" title="Relatórios" roles={["todos"]} lede="Indicadores de performance por período: volume de leads, taxa de conversão, tempo médio de resposta e ranking de corretores.">
-              <p>Corretor vê seus próprios números; dono e gerente veem o comparativo de toda a equipe.</p>
+              <p>Corretor vê seus próprios números; dono e gerente veem o comparativo de toda a equipe. Os filtros no topo (mês, corretor, campanha) afetam a página inteira — <em>exceto</em> o Relatório de Campanhas, que sempre mostra todas as campanhas lado a lado (ver abaixo).</p>
+              <p><strong>Funil Completo</strong> mostra quantos leads passaram por cada coluna do Kanban no período — clique numa barra pra ver a lista de leads daquela etapa.</p>
+              <p><strong>Ranking de Consultores:</strong> tabela por corretor com todas as etapas do funil — Novos, Rebatidas, Agendado, Visitou, Cobrar Doc, Pendente, Análise de Crédito, Restrição, Aprovado, FID, Vendas, Descarte, Descadastrado, Taxa de Conversão (Novo → Venda) e SLA médio de resposta.</p>
+              <p><strong>Relatório de Campanhas:</strong> o mesmo funil, mas por campanha/anúncio (a "Origem" do lead) em vez de por corretor — em porcentagem sobre o total de leads daquela campanha, pra comparar quais anúncios convertem melhor.</p>
+              <div className="flex flex-wrap items-baseline gap-2">
+                <RoleBadge role="dono" />
+                <RoleBadge role="gerente" />
+                <p className="m-0"><strong>CAC (Custo por Venda):</strong> dentro do Relatório de Campanhas, um campo editável guarda quanto foi gasto em cada campanha naquele mês. O sistema calcula sozinho CAC = gasto ÷ número de vendas daquela campanha no mês. A coluna <strong>Taxa Aprov. Créd.</strong> mostra, de quem passou por Análise de Crédito, quantos não caíram em Restrição.</p>
+              </div>
+              <Callout title="Venda conta pelo mês em que fechou, não em que o lead chegou">
+                Um lead que entrou em junho e fechou em agosto aparece no relatório de agosto, não no de junho — senão a venda "sumiria" do mês em que ela realmente aconteceu.
+              </Callout>
             </Section>
 
             <Section id="imoveis" title="Imóveis" roles={["todos"]} lede="Cadastro do portfólio: fotos, características, valores e status (disponível, reservado, vendido).">
@@ -302,6 +335,10 @@ function ManualPage() {
 
             <Section id="notificacoes" title="Notificações" roles={["todos"]} lede="O sino no topo do sistema avisa em tempo real sobre lead novo, SLA vencido, follow-up do dia, pedido de descarte, redistribuição e possível duplicidade de atendimento.">
               <p>A busca ao lado do sino encontra leads e corretores pelo nome ou telefone, de qualquer tela do sistema.</p>
+              <p><strong>Aviso de lead novo:</strong> quando um lead cai pra um corretor — seja pela roleta automática, seja transferido manualmente por dono/gerente — abre uma janela com contagem regressiva de 20 segundos, toca um som, e se o corretor estiver numa aba diferente do navegador (mas com o sistema ainda aberto em alguma aba) também aparece uma notificação do próprio navegador. Pra isso funcionar é preciso ter aceitado a permissão de notificações quando o sistema pediu.</p>
+              <Callout title="O aviso não cobre navegador totalmente fechado">
+                O pop-up e o som funcionam com o CRM aberto em qualquer aba, mesmo sem estar em foco. Se o navegador estiver completamente fechado, o aviso não chega — só as notificações de mensagem de WhatsApp funcionam assim (com o navegador fechado), lead novo ainda não.
+              </Callout>
             </Section>
 
             <Section id="configuracoes" title="Configurações" roles={["dono", "gerente"]} lede="Ajustes gerais da imobiliária, incluindo as colunas do Kanban — dá pra renomear, reordenar ou criar novas colunas para adaptar o funil ao processo de vendas da empresa.">
@@ -319,6 +356,9 @@ function ManualPage() {
               <p><strong>Por que não consigo transferir um lead?</strong><br />Só dono e gerente transferem leads entre corretores. Confirme se seu cadastro está marcado como gerente em <a href="#equipe">Equipe</a>.</p>
               <p><strong>O corretor saiu de férias, o que fazer?</strong><br />Dono ou gerente desativam o plantão dele em <a href="#equipe">Equipe</a> — ele para de receber leads novos, mas o histórico e a carteira continuam intactos.</p>
               <p><strong>Dois corretores estão falando com o mesmo cliente. Por quê?</strong><br />É o cenário que o <a href="#conversas">alerta de possível duplicidade</a> existe para pegar. Use o alerta para decidir quem fica com o lead e transfira pelo card.</p>
+              <p><strong>Chegou lead novo, mas ele não aparece atribuído a ninguém. Por quê?</strong><br />Provavelmente nenhum corretor estava com o toggle "disponível na roleta" ligado no momento em que ele chegou — veja <a href="#roleta">Rodízio e Roleta</a>. O lead não se perde: ele fica esperando na coluna "Rebatida", visível em <a href="#distribuicao">Distribuição de Leads → Rebatidas Geral</a>, até alguém puxar manualmente.</p>
+              <p><strong>Um cliente que já era lead "voltou" do nada, sem ninguém cadastrar de novo. É bug?</strong><br />Não — o Facebook às vezes reenvia o mesmo formulário de um cadastro antigo. O sistema detecta que aquele telefone já é um lead e atualiza o registro existente em vez de duplicar. Veja o <a href="#conversas">Callout em Conversas</a>.</p>
+              <p><strong>Reativei um lead descartado e ele não apareceu em lugar nenhum. O que houve?</strong><br />Isso era um bug real, já corrigido (09/08) — o botão "Reativar" às vezes não confirmava a mudança de verdade. Hoje ele garante a reativação e devolve o lead pro Bolsão. Se acontecer de novo, avise.</p>
             </Section>
           </div>
         </div>
