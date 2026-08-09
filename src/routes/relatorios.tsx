@@ -187,6 +187,19 @@ function ReportsPage() {
     const idsAgendado = colunaIdsPorNome("agenda").concat(colunaIdsPorNome("reunião")).concat(colunaIdsPorNome("reuniao"));
     const idsVisitou = colunaIdsPorNome("visita");
     const idsAprovado = colunaIdsPorNome("aprovado").concat(colunaIdsPorNome("fechamento"));
+    // Pedido do dono (09/08, spec de relatórios): completar as etapas que
+    // faltavam na tabela por corretor -- mesmo padrão já usado acima
+    // (busca coluna real do kanban pelo nome, não um status fixo).
+    const idsCobrarDoc = colunaIdsPorNome("cobrar doc");
+    const idsPendente = colunaIdsPorNome("pendente");
+    const idsRestricao = colunaIdsPorNome("restricao").concat(colunaIdsPorNome("restrição"));
+    // Descarte/Descadastrado não são colunas do kanban -- são estados
+    // marcados por descartado_em/motivo_descarte (mesma regra já usada em
+    // redistribuicao.tsx pra separar as abas "Leads Descartados" vs
+    // "Lead Descadastrar": motivo extremo = precisou aprovação do dono).
+    const MOTIVOS_DESCADASTRO = ["Descadastrar", "Já Comprou (Outra Empresa)"];
+    const ehDescadastrado = (l: any) => !!l.descartado_em && MOTIVOS_DESCADASTRO.includes(l.motivo_descarte);
+    const ehDescarteComum = (l: any) => !!l.descartado_em && !MOTIVOS_DESCADASTRO.includes(l.motivo_descarte);
 
     const respondedLeads = leads.filter((l: any) => l.primeiro_contato_em);
     const avgResponseTime = respondedLeads.length > 0
@@ -219,9 +232,14 @@ function ReportsPage() {
         rebatidas: brokerLeads.filter((l: any) => l.status === "rebatida").length,
         agendados: brokerLeads.filter((l: any) => idsAgendado.includes(l.coluna_kanban_id)).length,
         visitou: brokerLeads.filter((l: any) => idsVisitou.includes(l.coluna_kanban_id)).length,
+        cobrarDoc: brokerLeads.filter((l: any) => idsCobrarDoc.includes(l.coluna_kanban_id)).length,
+        pendente: brokerLeads.filter((l: any) => idsPendente.includes(l.coluna_kanban_id)).length,
         analiseCredito: brokerLeads.filter((l: any) => idsAnaliseCredito.includes(l.coluna_kanban_id)).length,
+        restricao: brokerLeads.filter((l: any) => idsRestricao.includes(l.coluna_kanban_id)).length,
         aprovado: brokerLeads.filter((l: any) => idsAprovado.includes(l.coluna_kanban_id)).length,
         fid: brokerLeads.filter((l: any) => idsFid.includes(l.coluna_kanban_id)).length,
+        descarte: brokerLeads.filter(ehDescarteComum).length,
+        descadastrado: brokerLeads.filter(ehDescadastrado).length,
         vendas: brokerConverted,
         sla: Math.round(brokerAvgSLA),
         conversao: brokerLeads.length > 0 ? ((brokerConverted / brokerLeads.length) * 100).toFixed(1) : "0"
@@ -465,10 +483,15 @@ function ReportsPage() {
                         <th className="px-3 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-center">Rebat.</th>
                         <th className="px-3 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-center">Agend.</th>
                         <th className="px-3 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-center">Visitou</th>
+                        <th className="px-3 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-center">Cobrar Doc</th>
+                        <th className="px-3 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-center">Pendente</th>
                         <th className="px-3 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-center">An. Créd.</th>
+                        <th className="px-3 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-center">Restrição</th>
                         <th className="px-3 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-center">Aprov.</th>
                         <th className="px-3 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-center">FID</th>
                         <th className="px-3 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-center">Vendas</th>
+                        <th className="px-3 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-center">Descarte</th>
+                        <th className="px-3 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-center">Descad.</th>
                         <th className="px-3 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-center">Conv.</th>
                         <th className="px-5 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-center">SLA</th>
                       </tr>
@@ -488,10 +511,15 @@ function ReportsPage() {
                           <td className="px-3 py-3 text-center text-saas-xs font-medium text-slate-600">{broker.rebatidas}</td>
                           <td className="px-3 py-3 text-center text-saas-xs font-medium text-slate-600">{broker.agendados}</td>
                           <td className="px-3 py-3 text-center text-saas-xs font-medium text-slate-600">{broker.visitou}</td>
+                          <td className="px-3 py-3 text-center text-saas-xs font-medium text-slate-600">{broker.cobrarDoc}</td>
+                          <td className="px-3 py-3 text-center text-saas-xs font-medium text-slate-600">{broker.pendente}</td>
                           <td className="px-3 py-3 text-center text-saas-xs font-medium text-slate-600">{broker.analiseCredito}</td>
+                          <td className="px-3 py-3 text-center text-saas-xs font-medium text-rose-600">{broker.restricao}</td>
                           <td className="px-3 py-3 text-center text-saas-xs font-medium text-slate-600">{broker.aprovado}</td>
                           <td className="px-3 py-3 text-center text-saas-xs font-medium text-slate-600">{broker.fid}</td>
                           <td className="px-3 py-3 text-center text-saas-xs font-bold text-emerald-600">{broker.vendas}</td>
+                          <td className="px-3 py-3 text-center text-saas-xs font-medium text-slate-400">{broker.descarte}</td>
+                          <td className="px-3 py-3 text-center text-saas-xs font-medium text-slate-400">{broker.descadastrado}</td>
                           <td className="px-3 py-3 text-center">
                              <Badge variant="outline" className="h-5 px-1.5 text-[9px] font-black border-none bg-slate-100 text-slate-600">{broker.conversao}%</Badge>
                           </td>
