@@ -8,7 +8,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, RefreshCw, Users, Shuffle, CheckCircle2, History, UserPlus, AlertCircle, AlertTriangle, Clock, UserCheck, Search, MapPin } from "lucide-react";
+import { Loader2, RefreshCw, Users, Shuffle, CheckCircle2, History, UserPlus, AlertCircle, AlertTriangle, Clock, UserCheck, Search, MapPin, Sparkles, CalendarDays } from "lucide-react";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 import {
   Select,
@@ -40,10 +42,12 @@ function RedistributionPage() {
   const queryClient = useQueryClient();
   const { role, isLoading: loadingPerms } = usePermissions();
   const [selectedLeads, setSelectedLeads] = useState<string[]>([]);
-  const [activeTab, setActiveTab] = useState("bolsao");
+  const [activeTab, setActiveTab] = useState("novos");
   const [isDistributing, setIsDistributing] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [cidadeFilter, setCidadeFilter] = useState<string>("todas");
+  const [dataInicio, setDataInicio] = useState<string>("");
+  const [dataFim, setDataFim] = useState<string>("");
 
   // Proteção de rota
   React.useEffect(() => {
@@ -66,9 +70,46 @@ function RedistributionPage() {
   });
 
   const { data: leads, isLoading: loadingLeads } = useQuery({
-    queryKey: ["leads-redistribution", profile?.imobiliaria_id, activeTab],
+    queryKey: ["leads-redistribution", profile?.imobiliaria_id, activeTab, dataInicio, dataFim],
     queryFn: async () => {
       if (!profile?.imobiliaria_id) return [];
+
+      // Aba "Leads Novos" usa uma RPC dedicada: precisa distinguir "nunca
+      // teve corretor" de "ja foi de alguem e voltou" -- o status sozinho
+      // nao serve pra isso (todo lead sem dono vira 'rebatida', novo ou nao).
+      if (activeTab === "novos") {
+        const { data, error } = await supabase.rpc("listar_leads_novos_bolsao", {
+          p_imobiliaria_id: profile.imobiliaria_id,
+          p_data_inicio: dataInicio ? new Date(dataInicio + "T00:00:00").toISOString() : null,
+          p_data_fim: dataFim ? new Date(dataFim + "T23:59:59").toISOString() : null,
+          p_limit: 500,
+        });
+        if (error) throw error;
+        return data || [];
+      }
+
+      // Historico da roleta: quem foi atribuido automaticamente (sem
+      // passar por Encaminhar.../Ações em Massa), com data e hora. A RPC
+      // devolve campos proprios (lead_id/lead_nome/...) -- normaliza pro
+      // mesmo formato que o resto da tela ja espera (id/nome/corretor.nome).
+      if (activeTab === "historico_roleta") {
+        const { data, error } = await supabase.rpc("listar_historico_roleta", {
+          p_imobiliaria_id: profile.imobiliaria_id,
+          p_data_inicio: dataInicio ? new Date(dataInicio + "T00:00:00").toISOString() : null,
+          p_data_fim: dataFim ? new Date(dataFim + "T23:59:59").toISOString() : null,
+          p_limit: 500,
+        });
+        if (error) throw error;
+        return (data || []).map((r: any) => ({
+          id: r.lead_id,
+          nome: r.lead_nome,
+          telefone: r.lead_telefone,
+          origem: r.origem,
+          corretor_id: r.corretor_id,
+          corretor: { nome: r.corretor_nome },
+          created_at: r.atribuido_em,
+        }));
+      }
 
       const buildQuery = () => {
         let query = supabase
@@ -152,6 +193,29 @@ function RedistributionPage() {
         .or(`tentativas_contato.gte.5,and(status.eq.novo,created_at.lt.${yesterday.toISOString()})`);
 
       return { semContato: semContato || 0, abandonados: abandonados || 0 };
+    },
+    enabled: !!profile?.imobiliaria_id,
+    refetchInterval: 10000,
+    staleTime: 1000 * 30,
+  });
+
+  // Card "Leads Novos (Hoje + Ontem)" -- pedido do dono pra enxergar rapido
+  // quanta coisa genuinamente nova chegou nos ultimos 2 dias, sem precisar
+  // vasculhar o Bolsao inteiro (que mistura anos de importação parada).
+  const { data: leadsNovosHojeOntem } = useQuery({
+    queryKey: ["leads-novos-hoje-ontem", profile?.imobiliaria_id],
+    queryFn: async () => {
+      if (!profile?.imobiliaria_id) return 0;
+      const ontemInicio = new Date();
+      ontemInicio.setDate(ontemInicio.getDate() - 1);
+      ontemInicio.setHours(0, 0, 0, 0);
+      const { data, error } = await supabase.rpc("contar_leads_novos_bolsao", {
+        p_imobiliaria_id: profile.imobiliaria_id,
+        p_data_inicio: ontemInicio.toISOString(),
+        p_data_fim: null,
+      });
+      if (error) throw error;
+      return data || 0;
     },
     enabled: !!profile?.imobiliaria_id,
     refetchInterval: 10000,
@@ -314,7 +378,21 @@ function RedistributionPage() {
           </Button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <Card className="border-none shadow-sm bg-emerald-50">
+            <CardContent className="p-4 flex items-center gap-4">
+               <div className="h-10 w-10 rounded-full bg-emerald-500 flex items-center justify-center text-white shadow-lg shadow-emerald-200">
+                  <Sparkles className="h-5 w-5" />
+               </div>
+               <div>
+                  <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest leading-none mb-1">Leads Novos (Hoje + Ontem)</p>
+                  <p className="text-xl font-black text-slate-800">
+                    {(leadsNovosHojeOntem ?? 0).toString().padStart(2, '0')}
+                  </p>
+               </div>
+            </CardContent>
+          </Card>
+
           <Card className="border-none shadow-sm bg-amber-50">
             <CardContent className="p-4 flex items-center gap-4">
                <div className="h-10 w-10 rounded-full bg-amber-500 flex items-center justify-center text-white shadow-lg shadow-amber-200">
@@ -360,6 +438,12 @@ function RedistributionPage() {
           <div className="flex items-center justify-between mb-4 border-b border-slate-100">
             <TabsList className="bg-transparent border-none h-12 p-0 gap-8">
               <TabsTrigger
+                value="novos"
+                className="border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent rounded-none h-full text-xs font-black uppercase tracking-wider px-0 opacity-40 data-[state=active]:opacity-100 transition-all"
+              >
+                Leads Novos
+              </TabsTrigger>
+              <TabsTrigger
                 value="bolsao"
                 className="border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent rounded-none h-full text-xs font-black uppercase tracking-wider px-0 opacity-40 data-[state=active]:opacity-100 transition-all"
               >
@@ -376,6 +460,12 @@ function RedistributionPage() {
                 className="border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent rounded-none h-full text-xs font-black uppercase tracking-wider px-0 opacity-40 data-[state=active]:opacity-100 transition-all"
               >
                 Lead Descadastrar
+              </TabsTrigger>
+              <TabsTrigger
+                value="historico_roleta"
+                className="border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent rounded-none h-full text-xs font-black uppercase tracking-wider px-0 opacity-40 data-[state=active]:opacity-100 transition-all"
+              >
+                Histórico da Roleta
               </TabsTrigger>
             </TabsList>
 
@@ -439,6 +529,33 @@ function RedistributionPage() {
                 </SelectContent>
               </Select>
             )}
+
+            {(activeTab === "novos" || activeTab === "historico_roleta") && (
+              <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-md h-9 px-3">
+                <CalendarDays className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                <input
+                  type="date"
+                  value={dataInicio}
+                  onChange={(e) => setDataInicio(e.target.value)}
+                  className="text-xs border-none outline-none bg-transparent text-slate-600"
+                />
+                <span className="text-xs text-slate-400">até</span>
+                <input
+                  type="date"
+                  value={dataFim}
+                  onChange={(e) => setDataFim(e.target.value)}
+                  className="text-xs border-none outline-none bg-transparent text-slate-600"
+                />
+                {(dataInicio || dataFim) && (
+                  <button
+                    onClick={() => { setDataInicio(""); setDataFim(""); }}
+                    className="text-[10px] font-bold text-slate-400 hover:text-slate-600 uppercase ml-1"
+                  >
+                    Limpar
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
@@ -446,17 +563,21 @@ function RedistributionPage() {
               <TableHeader>
                 <TableRow className="bg-slate-50/50 hover:bg-slate-50/50 border-none">
                   <TableHead className="w-10 py-4 pl-6">
-                    <Checkbox
-                      checked={selectedLeads.length === (filteredLeads?.length || 0) && (filteredLeads?.length || 0) !== 0}
-                      onCheckedChange={handleToggleSelectAll}
-                    />
+                    {activeTab !== 'historico_roleta' && (
+                      <Checkbox
+                        checked={selectedLeads.length === (filteredLeads?.length || 0) && (filteredLeads?.length || 0) !== 0}
+                        onCheckedChange={handleToggleSelectAll}
+                      />
+                    )}
                   </TableHead>
                   <TableHead className="text-[10px] font-black uppercase tracking-widest py-4 text-slate-400">Lead</TableHead>
                   <TableHead className="text-[10px] font-black uppercase tracking-widest py-4 text-slate-400">Origem / Motivo</TableHead>
                   <TableHead className="text-[10px] font-black uppercase tracking-widest py-4 text-slate-400">
-                    {activeTab === 'bolsao' ? 'Tempo de Espera' : activeTab === 'descartados' || activeTab === 'descadastrados' ? 'Motivo do Descarte' : 'Responsável Atual'}
+                    {activeTab === 'bolsao' || activeTab === 'novos' ? 'Data de Entrada' : activeTab === 'descartados' || activeTab === 'descadastrados' ? 'Motivo do Descarte' : activeTab === 'historico_roleta' ? 'Corretor Sorteado / Quando' : 'Responsável Atual'}
                   </TableHead>
-                  <TableHead className="text-[10px] font-black uppercase tracking-widest py-4 text-slate-400 text-right pr-6">Ação</TableHead>
+                  <TableHead className="text-[10px] font-black uppercase tracking-widest py-4 text-slate-400 text-right pr-6">
+                    {activeTab === 'historico_roleta' ? '' : 'Ação'}
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -482,10 +603,12 @@ function RedistributionPage() {
                   filteredLeads?.map((lead) => (
                     <TableRow key={lead.id} className="group hover:bg-slate-50/50 transition-colors border-slate-50">
                       <TableCell className="py-4 pl-6">
-                        <Checkbox 
-                          checked={selectedLeads.includes(lead.id)}
-                          onCheckedChange={() => handleSelectLead(lead.id)}
-                        />
+                        {activeTab !== 'historico_roleta' && (
+                          <Checkbox
+                            checked={selectedLeads.includes(lead.id)}
+                            onCheckedChange={() => handleSelectLead(lead.id)}
+                          />
+                        )}
                       </TableCell>
                       <TableCell className="py-4">
                         <div className="flex flex-col">
@@ -506,10 +629,15 @@ function RedistributionPage() {
                         </div>
                       </TableCell>
                       <TableCell className="py-4">
-                        {activeTab === 'bolsao' ? (
-                          <div className="flex items-center gap-2 text-[11px] font-bold text-slate-500 bg-slate-100 w-fit px-2 py-1 rounded-md">
-                            <Clock className="h-3.5 w-3.5 text-slate-400" />
-                            {Math.floor((new Date().getTime() - new Date(lead.created_at).getTime()) / (1000 * 60 * 60))}h na fila
+                        {activeTab === 'bolsao' || activeTab === 'novos' ? (
+                          <div className="flex flex-col gap-1">
+                            <span className="text-[11px] font-bold text-slate-600">
+                              {format(new Date(lead.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                            </span>
+                            <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 bg-slate-100 w-fit px-2 py-0.5 rounded-md">
+                              <Clock className="h-3 w-3 text-slate-400" />
+                              {Math.floor((new Date().getTime() - new Date(lead.created_at).getTime()) / (1000 * 60 * 60))}h na fila
+                            </div>
                           </div>
                         ) : activeTab === 'descartados' || activeTab === 'descadastrados' ? (
                           <div className="flex flex-col">
@@ -518,6 +646,18 @@ function RedistributionPage() {
                               {activeTab === 'descadastrados' ? 'Aprovado em ' : 'Descartado em '}
                               {new Date(lead.descartado_em!).toLocaleDateString('pt-BR')}
                             </span>
+                          </div>
+                        ) : activeTab === 'historico_roleta' ? (
+                          <div className="flex items-center gap-2">
+                             <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary uppercase shrink-0">
+                                {lead.corretor?.nome?.charAt(0) || "?"}
+                             </div>
+                             <div className="flex flex-col">
+                               <span className="text-sm font-bold text-slate-600">{lead.corretor?.nome || "—"}</span>
+                               <span className="text-[10px] text-slate-400 font-medium">
+                                 {format(new Date(lead.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                               </span>
+                             </div>
                           </div>
                         ) : (
                           <div className="flex items-center gap-2">
@@ -529,7 +669,7 @@ function RedistributionPage() {
                         )}
                       </TableCell>
                       <TableCell className="py-4 text-right pr-6">
-                        {activeTab === 'descartados' || activeTab === 'descadastrados' ? (
+                        {activeTab === 'historico_roleta' ? null : activeTab === 'descartados' || activeTab === 'descadastrados' ? (
                           <Button
                             size="sm"
                             variant="ghost"
