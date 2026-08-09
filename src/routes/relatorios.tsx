@@ -129,6 +129,14 @@ function ReportsPage() {
       if (origemFiltroRel !== "todas" && (l.origem || "Outros") !== origemFiltroRel) return false;
       return true;
     });
+    // Mesmo filtro de mês/corretor, mas SEM o de campanha -- o Relatório de
+    // Campanhas existe pra comparar campanhas lado a lado, então aplicar o
+    // filtro de campanha nele faria a tabela sempre mostrar 1 linha só.
+    const leadsPorCampanha = raw.leads.filter((l: any) => {
+      if (mesFiltro && !l.created_at?.startsWith(mesFiltro)) return false;
+      if (corretorFiltroRel !== "todos" && l.corretor_id !== corretorFiltroRel) return false;
+      return true;
+    });
     const team = raw.team;
 
     // Agrupar por Origem
@@ -179,6 +187,14 @@ function ReportsPage() {
       return true;
     });
     const vendasDoMes = leadsFechadosNoMes.length;
+    // Mesmo raciocínio de leadsPorCampanha acima: vendas por campanha sem
+    // aplicar o filtro de campanha, senão o Relatório de Campanhas nunca
+    // mostraria vendas de nenhuma campanha diferente da selecionada.
+    const leadsFechadosNoMesPorCampanha = raw.leads.filter((l: any) => {
+      if (!l.data_fechamento || !l.data_fechamento.startsWith(mesFiltro)) return false;
+      if (corretorFiltroRel !== "todos" && l.corretor_id !== corretorFiltroRel) return false;
+      return true;
+    });
 
     const colunaIdsPorNome = (padrao: string) =>
       raw.colunas.filter((c: any) => c.nome.toLowerCase().includes(padrao)).map((c: any) => c.id);
@@ -251,9 +267,9 @@ function ReportsPage() {
     // resolvidas acima, só agrupando por origem em vez de por corretor.
     // % é sobre o total de leads daquela campanha no período filtrado.
     const campanhaPerformance = origensDisponiveis.map((origem) => {
-      const leadsOrigem = leads.filter((l: any) => (l.origem || "Outros") === origem);
+      const leadsOrigem = leadsPorCampanha.filter((l: any) => (l.origem || "Outros") === origem);
       const total = leadsOrigem.length;
-      const vendasOrigem = leadsFechadosNoMes.filter((l: any) => (l.origem || "Outros") === origem).length;
+      const vendasOrigem = leadsFechadosNoMesPorCampanha.filter((l: any) => (l.origem || "Outros") === origem).length;
       const pct = (n: number) => (total > 0 ? ((n / total) * 100) : 0);
 
       const agendado = leadsOrigem.filter((l: any) => idsAgendado.includes(l.coluna_kanban_id)).length;
@@ -566,7 +582,7 @@ function ReportsPage() {
         <Card className="border-none shadow-soft bg-white overflow-hidden">
           <CardHeader className="py-4 px-5 border-b border-slate-50">
             <CardTitle className="text-sm font-bold">Relatório de Campanhas</CardTitle>
-            <CardDescription className="text-saas-xs">Funil de conversão por campanha/anúncio — % sobre o total de leads daquela campanha no período filtrado</CardDescription>
+            <CardDescription className="text-saas-xs">Funil de conversão por campanha/anúncio — % sobre o total de leads daquela campanha no mês/corretor filtrados (o filtro de Campanha não afeta esta tabela, ela sempre compara todas)</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
