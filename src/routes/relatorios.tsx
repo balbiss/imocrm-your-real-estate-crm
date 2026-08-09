@@ -246,6 +246,35 @@ function ReportsPage() {
       };
     }) || [];
 
+    // Relatório de Campanhas (Fase 2, pedido do dono 09/08): funil de
+    // conversão em % por origem/anúncio -- mesmas colunas do kanban já
+    // resolvidas acima, só agrupando por origem em vez de por corretor.
+    // % é sobre o total de leads daquela campanha no período filtrado.
+    const campanhaPerformance = origensDisponiveis.map((origem) => {
+      const leadsOrigem = leads.filter((l: any) => (l.origem || "Outros") === origem);
+      const total = leadsOrigem.length;
+      const vendasOrigem = leadsFechadosNoMes.filter((l: any) => (l.origem || "Outros") === origem).length;
+      const pct = (n: number) => (total > 0 ? ((n / total) * 100) : 0);
+
+      const agendado = leadsOrigem.filter((l: any) => idsAgendado.includes(l.coluna_kanban_id)).length;
+      const visitou = leadsOrigem.filter((l: any) => idsVisitou.includes(l.coluna_kanban_id)).length;
+      const analiseCredito = leadsOrigem.filter((l: any) => idsAnaliseCredito.includes(l.coluna_kanban_id)).length;
+      const restricao = leadsOrigem.filter((l: any) => idsRestricao.includes(l.coluna_kanban_id)).length;
+      const descadastrado = leadsOrigem.filter(ehDescadastrado).length;
+
+      return {
+        origem,
+        total,
+        agendadoPct: pct(agendado),
+        visitouPct: pct(visitou),
+        analiseCreditoPct: pct(analiseCredito),
+        restricaoPct: pct(restricao),
+        descadastradoPct: pct(descadastrado),
+        vendas: vendasOrigem,
+        vendasPct: pct(vendasOrigem),
+      };
+    }).sort((a, b) => b.total - a.total);
+
     return {
       totalLeads: leads.length,
       converted: vendasDoMes,
@@ -257,6 +286,7 @@ function ReportsPage() {
       vendasDoMes,
       leadsFechadosNoMes,
       brokerPerformance: brokerPerformance.sort((a: any, b: any) => b.vendas - a.vendas),
+      campanhaPerformance,
       leads,
     };
   }, [raw, mesFiltro, corretorFiltroRel, origemFiltroRel]);
@@ -532,6 +562,59 @@ function ReportsPage() {
             </CardContent>
           </Card>
         </div>
+
+        <Card className="border-none shadow-soft bg-white overflow-hidden">
+          <CardHeader className="py-4 px-5 border-b border-slate-50">
+            <CardTitle className="text-sm font-bold">Relatório de Campanhas</CardTitle>
+            <CardDescription className="text-saas-xs">Funil de conversão por campanha/anúncio — % sobre o total de leads daquela campanha no período filtrado</CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="border-b border-slate-50 bg-slate-50/50">
+                    <th className="px-5 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider">Campanha</th>
+                    <th className="px-3 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-center">Leads</th>
+                    <th className="px-3 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-center">Agendamento</th>
+                    <th className="px-3 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-center">Visita</th>
+                    <th className="px-3 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-center">An. Crédito</th>
+                    <th className="px-3 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-center">Restrição</th>
+                    <th className="px-3 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-center">Descadastrar</th>
+                    <th className="px-5 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-center">Venda</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {stats?.campanhaPerformance.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="px-5 py-8 text-center text-saas-xs text-slate-400 font-medium">
+                        Nenhuma campanha no período filtrado.
+                      </td>
+                    </tr>
+                  ) : (
+                    stats?.campanhaPerformance.map((camp: any) => (
+                      <tr key={camp.origem} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="px-5 py-3">
+                          <span className="text-saas-xs font-bold text-slate-700 truncate block max-w-[220px]" title={camp.origem}>{camp.origem}</span>
+                        </td>
+                        <td className="px-3 py-3 text-center text-saas-xs font-bold text-slate-700">{camp.total}</td>
+                        <td className="px-3 py-3 text-center text-saas-xs font-medium text-slate-600">{camp.agendadoPct.toFixed(1)}%</td>
+                        <td className="px-3 py-3 text-center text-saas-xs font-medium text-slate-600">{camp.visitouPct.toFixed(1)}%</td>
+                        <td className="px-3 py-3 text-center text-saas-xs font-medium text-slate-600">{camp.analiseCreditoPct.toFixed(1)}%</td>
+                        <td className="px-3 py-3 text-center text-saas-xs font-medium text-rose-600">{camp.restricaoPct.toFixed(1)}%</td>
+                        <td className="px-3 py-3 text-center text-saas-xs font-medium text-slate-400">{camp.descadastradoPct.toFixed(1)}%</td>
+                        <td className="px-5 py-3 text-center">
+                          <Badge variant="outline" className="h-5 px-1.5 text-[9px] font-black border-none bg-emerald-50 text-emerald-600">
+                            {camp.vendas} · {camp.vendasPct.toFixed(1)}%
+                          </Badge>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <Dialog open={!!statusSelecionado} onOpenChange={(open) => { if (!open) setStatusSelecionado(null); }}>
