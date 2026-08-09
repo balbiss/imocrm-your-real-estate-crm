@@ -19,38 +19,44 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Loader2, UserCog } from "lucide-react";
+import { Loader2, UserCog, Eye, EyeOff } from "lucide-react";
 
 interface EditMemberDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   member: any;
+  canChangeRole?: boolean;
 }
 
-export function EditMemberDialog({ open, onOpenChange, member }: EditMemberDialogProps) {
+export function EditMemberDialog({ open, onOpenChange, member, canChangeRole = true }: EditMemberDialogProps) {
   const queryClient = useQueryClient();
   const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm();
+  const [showPassword, setShowPassword] = React.useState(false);
 
   useEffect(() => {
     if (member && open) {
       setValue("nome", member.nome);
       setValue("telefone", member.telefone);
       setValue("role", member.role);
+      setValue("email", member.email && member.email !== "Email não encontrado" ? member.email : "");
+      setValue("senha", "");
     }
   }, [member, open, setValue]);
 
   const mutation = useMutation({
     mutationFn: async (data: any) => {
-      const { error } = await supabase
-        .from("perfis")
-        .update({
+      const { data: result, error } = await supabase.functions.invoke("update-member", {
+        body: {
+          id: member.id,
           nome: data.nome,
           telefone: data.telefone,
           role: data.role,
-        })
-        .eq("id", member.id);
-
+          email: data.email?.trim() || undefined,
+          senha: data.senha?.trim() || undefined,
+        },
+      });
       if (error) throw error;
+      if (result?.error) throw new Error(result.error);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["team-list"] });
@@ -91,15 +97,19 @@ export function EditMemberDialog({ open, onOpenChange, member }: EditMemberDialo
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label className="text-[11px] font-bold uppercase text-slate-400">Telefone/WhatsApp</Label>
-              <Input 
-                placeholder="(00) 00000-0000" 
+              <Input
+                placeholder="(00) 00000-0000"
                 {...register("telefone")}
                 className="h-10 text-sm border-slate-200"
               />
             </div>
             <div className="space-y-1.5">
               <Label className="text-[11px] font-bold uppercase text-slate-400">Cargo / Nível</Label>
-              <Select onValueChange={(v) => setValue("role", v)} defaultValue={member?.role}>
+              <Select
+                onValueChange={(v) => setValue("role", v)}
+                defaultValue={member?.role}
+                disabled={!canChangeRole}
+              >
                 <SelectTrigger className="h-10 text-sm border-slate-200">
                   <SelectValue placeholder="Selecione..." />
                 </SelectTrigger>
@@ -110,6 +120,36 @@ export function EditMemberDialog({ open, onOpenChange, member }: EditMemberDialo
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-[11px] font-bold uppercase text-slate-400">E-mail de Acesso</Label>
+            <Input
+              type="email"
+              placeholder="email@exemplo.com"
+              {...register("email")}
+              className="h-10 text-sm border-slate-200"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-[11px] font-bold uppercase text-slate-400">Nova Senha</Label>
+            <div className="relative">
+              <Input
+                type={showPassword ? "text" : "password"}
+                placeholder="Deixe em branco para manter a senha atual"
+                {...register("senha", { minLength: 6 })}
+                className="h-10 text-sm border-slate-200 pr-10"
+              />
+              <button
+                type="button"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                onClick={() => setShowPassword(!showPassword)}
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+            <p className="text-[10px] text-slate-400">Mínimo 6 caracteres. Deixe em branco para não alterar.</p>
           </div>
 
           <div className="pt-4 flex flex-col gap-2">

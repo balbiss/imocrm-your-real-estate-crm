@@ -30,6 +30,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { LeadDetailsModal } from "@/components/leads/LeadDetailsModal";
 
 export const Route = createFileRoute("/redistribuicao")({
   head: () => ({ meta: [{ title: "Redistribuição — CRM" }] }),
@@ -48,6 +49,8 @@ function RedistributionPage() {
   const [cidadeFilter, setCidadeFilter] = useState<string>("todas");
   const [dataInicio, setDataInicio] = useState<string>("");
   const [dataFim, setDataFim] = useState<string>("");
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
+  const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
 
   // Proteção de rota
   React.useEffect(() => {
@@ -226,11 +229,17 @@ function RedistributionPage() {
     queryKey: ["corretores-plantao", profile?.imobiliaria_id],
     queryFn: async () => {
       if (!profile?.imobiliaria_id) return [];
+      // status_roleta (nao em_plantao) e a fonte da verdade de "online pra
+      // roleta" -- e o mesmo campo usado por get_next_corretor_rodizio e
+      // isCorretorOnlineNaRoleta. em_plantao pode ficar desatualizado (o cron
+      // de fim de expediente so zera status_roleta), entao usar em_plantao
+      // aqui fazia o card "Corretores ON" e o dropdown "Encaminhar para..."
+      // mostrarem corretor que ja saiu da roleta ha dias.
       const { data, error } = await supabase
         .from("perfis")
         .select("id, nome")
         .eq("imobiliaria_id", profile.imobiliaria_id)
-        .eq("em_plantao", true);
+        .eq("status_roleta", true);
       if (error) throw error;
       return data;
     },
@@ -595,8 +604,15 @@ function RedistributionPage() {
                   </TableRow>
                 ) : (
                   filteredLeads?.map((lead) => (
-                    <TableRow key={lead.id} className="group hover:bg-slate-50/50 transition-colors border-slate-50">
-                      <TableCell className="py-4 pl-6">
+                    <TableRow
+                      key={lead.id}
+                      className="group hover:bg-slate-50/50 transition-colors border-slate-50 cursor-pointer"
+                      onClick={() => {
+                        setSelectedLeadId(lead.id);
+                        setIsLeadModalOpen(true);
+                      }}
+                    >
+                      <TableCell className="py-4 pl-6" onClick={(e) => e.stopPropagation()}>
                         {activeTab !== 'historico_roleta' && (
                           <Checkbox
                             checked={selectedLeads.includes(lead.id)}
@@ -662,7 +678,7 @@ function RedistributionPage() {
                           </div>
                         )}
                       </TableCell>
-                      <TableCell className="py-4 text-right pr-6">
+                      <TableCell className="py-4 text-right pr-6" onClick={(e) => e.stopPropagation()}>
                         {activeTab === 'historico_roleta' ? null : activeTab === 'descartados' || activeTab === 'descadastrados' ? (
                           <Button
                             size="sm"
@@ -674,7 +690,7 @@ function RedistributionPage() {
                             <RefreshCw className={`h-3 w-3 ${reactivateMutation.isPending ? 'animate-spin' : ''}`} /> Reativar
                           </Button>
                         ) : (
-                          <Select 
+                          <Select
                             onValueChange={(val) => reassignMutation.mutate({ leadId: lead.id, corretorId: val })}
                           >
                             <SelectTrigger className="w-[180px] h-9 text-[11px] font-bold ml-auto bg-slate-50 border-none shadow-none hover:bg-slate-100 transition-colors">
@@ -699,6 +715,12 @@ function RedistributionPage() {
           </div>
         </Tabs>
       </div>
+
+      <LeadDetailsModal
+        leadId={selectedLeadId}
+        open={isLeadModalOpen}
+        onOpenChange={setIsLeadModalOpen}
+      />
     </MainLayout>
   );
 }

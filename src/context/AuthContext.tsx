@@ -48,8 +48,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = async (email: string, senha: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password: senha });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password: senha });
     if (error) throw error;
+
+    // Corretor bloqueado (ferias/afastamento) pelo dono/gerente em /equipe --
+    // barrado aqui pra dar uma mensagem clara, alem da barreira real que ja
+    // existe via get_auth_imobiliaria_id() (RLS) retornando null pra quem
+    // esta bloqueado.
+    const { data: perfil } = await supabase
+      .from("perfis")
+      .select("bloqueado")
+      .eq("id", data.user.id)
+      .single();
+
+    if (perfil?.bloqueado) {
+      await supabase.auth.signOut();
+      throw new Error("Seu acesso foi bloqueado. Fale com seu gerente ou com o dono da imobiliária.");
+    }
   };
 
   const cadastrar = async (data: CadastroPayload) => {

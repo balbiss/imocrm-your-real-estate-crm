@@ -1,11 +1,15 @@
+import { useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 export type Action = 'view_reports' | 'manage_team' | 'manage_properties' | 'delete_records' | 'configure_system' | 'view_roleta' | 'manage_roleta' | 'view_base_leads';
 
 export function usePermissions() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
 
   const { data: profile, isLoading } = useQuery({
     queryKey: ["profile", user?.id],
@@ -13,13 +17,25 @@ export function usePermissions() {
       if (!user) return null;
       const { data } = await supabase
         .from("perfis")
-        .select("role")
+        .select("role, bloqueado")
         .eq("id", user.id)
         .single();
       return data;
     },
     enabled: !!user,
+    // Verifica bloqueio periodicamente -- pega mesmo quem ja estava logado
+    // numa aba aberta quando o dono/gerente bloqueou o acesso em /equipe.
+    refetchInterval: 60000,
   });
+
+  useEffect(() => {
+    if (profile?.bloqueado) {
+      logout().then(() => {
+        toast.error("Seu acesso foi bloqueado. Fale com seu gerente ou com o dono da imobiliária.");
+        navigate({ to: "/login" });
+      });
+    }
+  }, [profile?.bloqueado, logout, navigate]);
 
   const can = (action: Action): boolean => {
     if (!profile) return false;

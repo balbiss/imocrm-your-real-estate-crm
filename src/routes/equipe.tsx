@@ -55,14 +55,14 @@ function TeamPage() {
     queryFn: async () => {
       if (!profile?.imobiliaria_id) return [];
       
-      // Busca membros
-      const { data: members, error: membersError } = await supabase
-        .from("perfis")
-        .select("*")
-        .eq("imobiliaria_id", profile.imobiliaria_id)
-        .order("nome");
-      
+      // Busca membros + e-mail de acesso (e-mail vive em auth.users, não em
+      // perfis -- a edge function get-team mescla os dois usando a service
+      // role, já que o client não tem acesso admin ao Auth).
+      const { data: membersData, error: membersError } = await supabase.functions.invoke("get-team", {
+        body: { imobiliaria_id: profile.imobiliaria_id },
+      });
       if (membersError) throw membersError;
+      const members = (membersData || []) as any[];
 
       // Busca TODOS os leads da imobiliária de uma vez para calcular métricas em memória (mais rápido e sem bugs de RLS)
       // O Supabase/PostgREST limita cada resposta a 1000 linhas por padrao —
@@ -140,6 +140,32 @@ function TeamPage() {
     },
     onError: (error: any) => {
       toast.error("Erro ao atualizar status: " + error.message);
+    }
+  });
+
+  const toggleBloqueioMutation = useMutation({
+    mutationFn: async ({ id, bloqueado }: { id: string, bloqueado: boolean }) => {
+      const novoValor = !bloqueado;
+      const { error } = await supabase
+        .from("perfis")
+        .update(
+          // Bloquear tambem tira da roleta na hora (senao continuaria
+          // recebendo lead mesmo sem conseguir entrar no CRM). Desbloquear
+          // nao reativa a roleta sozinho -- a pessoa volta e liga de novo.
+          novoValor
+            ? { bloqueado: true, status_roleta: false, em_plantao: false }
+            : { bloqueado: false }
+        )
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["team-list"] });
+      queryClient.invalidateQueries({ queryKey: ["fila-atendimento"] });
+      toast.success(variables.bloqueado ? "Acesso liberado com sucesso!" : "Acesso bloqueado com sucesso!");
+    },
+    onError: (error: any) => {
+      toast.error("Erro ao atualizar bloqueio: " + error.message);
     }
   });
 
@@ -241,6 +267,10 @@ function TeamPage() {
               ) : (
                 filteredTeam?.map((member) => {
                   const online = isCorretorOnlineNaRoleta(member.status_roleta, member.ultimo_checkin_roleta);
+                  // Gerente só gerencia consultor -- dono/outro gerente ficam
+                  // fora do alcance dele (mesma regra aplicada de verdade no
+                  // servidor pela edge function update-member).
+                  const canManageThisMember = profile?.role === "dono" || (profile?.role === "gerente" && member.role === "corretor");
                   return (
                   <TableRow key={member.id} className="group hover:bg-slate-50/50">
                     <TableCell>
@@ -279,35 +309,41 @@ function TeamPage() {
                       <span className="text-xs font-bold text-slate-700">{member.sla_media}</span>
                     </TableCell>
                     <TableCell>
-                      <div
-                        className={`flex items-center gap-1.5 w-fit transition-opacity ${
-                          can('manage_team') ? "cursor-pointer hover:opacity-80" : "cursor-default opacity-90"
-                        }`}
-                        onClick={() => {
-                          if (!can('manage_team')) return;
-                          togglePlantaoMutation.mutate({ id: member.id, em_plantao: online });
-                        }}
-                      >
-                        {togglePlantaoMutation.isPending && togglePlantaoMutation.variables?.id === member.id ? (
-                          <Loader2 className="h-3 w-3 animate-spin text-slate-400" />
-                        ) : (
-                          <div className={`h-1.5 w-1.5 rounded-full ${online ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" : "bg-slate-300"}`} />
-                        )}
-                        <span className="text-[10px] font-bold text-slate-500 tracking-tight">
-                          {online ? "Disponível" : "Offline"}
-                        </span>
-                      </div>
+                      {member.bloqueado ? (
+                        <Badge className="text-[9px] font-bold h-5 px-2 uppercase border-none bg-red-50 text-red-600">
+                          Bloqueado
+                        </Badge>
+                      ) : (
+                        <div
+                          className={`flex items-center gap-1.5 w-fit transition-opacity ${
+                            can('manage_team') ? "cursor-pointer hover:opacity-80" : "cursor-default opacity-90"
+                          }`}
+                          onClick={() => {
+                            if (!can('manage_team')) return;
+                            togglePlantaoMutation.mutate({ id: member.id, em_plantao: online });
+                          }}
+                        >
+                          {togglePlantaoMutation.isPending && togglePlantaoMutation.variables?.id === member.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin text-slate-400" />
+                          ) : (
+                            <div className={`h-1.5 w-1.5 rounded-full ${online ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" : "bg-slate-300"}`} />
+                          )}
+                          <span className="text-[10px] font-bold text-slate-500 tracking-tight">
+                            {online ? "Disponível" : "Offline"}
+                          </span>
+                        </div>
+                      )}
                     </TableCell>
                     <TableCell className="text-right">
-                      {profile?.role === "dono" && (
+                      {canManageThisMember && (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-700">
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-40">
-                            <DropdownMenuItem 
+                          <DropdownMenuContent align="end" className="w-48">
+                            <DropdownMenuItem
                               className="text-xs cursor-pointer"
                               onClick={() => {
                                 setMemberToEdit(member);
@@ -316,8 +352,17 @@ function TeamPage() {
                             >
                               Editar
                             </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem 
+                            <DropdownMenuItem
+                              className={`text-xs cursor-pointer font-bold ${member.bloqueado ? "text-emerald-600 focus:bg-emerald-50 focus:text-emerald-700" : "text-amber-600 focus:bg-amber-50 focus:text-amber-700"}`}
+                              onClick={() => {
+                                toggleBloqueioMutation.mutate({ id: member.id, bloqueado: !!member.bloqueado });
+                              }}
+                            >
+                              {member.bloqueado ? "Desbloquear Acesso" : "Bloquear Acesso (Férias/Afastado)"}
+                            </DropdownMenuItem>
+                            {profile?.role === "dono" && <DropdownMenuSeparator />}
+                            {profile?.role === "dono" && (
+                            <DropdownMenuItem
                               className="text-xs text-orange-600 focus:bg-orange-50 focus:text-orange-700 cursor-pointer font-bold"
                               onClick={() => {
                                 setTimeout(() => {
@@ -329,7 +374,9 @@ function TeamPage() {
                             >
                               Remover Acesso (Seguro)
                             </DropdownMenuItem>
-                            <DropdownMenuItem 
+                            )}
+                            {profile?.role === "dono" && (
+                            <DropdownMenuItem
                               className="text-xs text-red-600 focus:bg-red-50 focus:text-red-700 cursor-pointer font-bold"
                               onClick={() => {
                                 setTimeout(() => {
@@ -341,6 +388,7 @@ function TeamPage() {
                             >
                               Excluir Definitivamente
                             </DropdownMenuItem>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       )}
@@ -359,10 +407,11 @@ function TeamPage() {
         onOpenChange={setIsInviteOpen} 
       />
 
-      <EditMemberDialog 
-        open={isEditOpen} 
-        onOpenChange={setIsEditOpen} 
+      <EditMemberDialog
+        open={isEditOpen}
+        onOpenChange={setIsEditOpen}
         member={memberToEdit}
+        canChangeRole={profile?.role === "dono"}
       />
     </MainLayout>
   );
