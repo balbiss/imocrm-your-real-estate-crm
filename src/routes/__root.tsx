@@ -4,6 +4,8 @@ import { Toaster } from "sonner";
 import { AuthProvider } from "@/context/AuthContext";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useFollowUpAlerts } from "@/hooks/useFollowUpAlerts";
+import { VisitaAlertProvider } from "@/components/analytics/VisitaAlertProvider";
+import { LeadNovoAlertProvider } from "@/components/leads/LeadNovoAlertProvider";
 
 import appCss from "../styles.css?url";
 
@@ -92,6 +94,12 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <AppHooks />
+        {/* Ficam aqui (não em MainLayout) porque MainLayout é instanciado de
+        novo em cada rota-folha — mantê-los lá fazia o canal Realtime cair e
+        reabrir a cada navegação, perdendo notificação de lead novo/alerta de
+        visita bem na janela entre o unsubscribe e o subscribe novo. */}
+        <VisitaAlertProvider />
+        <LeadNovoAlertProvider />
         <Outlet />
         <Toaster richColors position="top-right" />
       </AuthProvider>

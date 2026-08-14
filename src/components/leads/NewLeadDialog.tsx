@@ -37,6 +37,7 @@ const formSchema = z.object({
   telefone: z.string().min(10, "Telefone inválido"),
   origem: z.string().min(1, "Selecione a origem"),
   referencia: z.string().optional().or(z.literal("")),
+  bairro_interesse: z.string().optional().or(z.literal("")),
   status: z.string().default("novo"),
 });
 
@@ -55,6 +56,7 @@ export function NewLeadDialog({ open, onOpenChange }: NewLeadDialogProps) {
       telefone: "",
       origem: "Manual",
       referencia: "",
+      bairro_interesse: "",
       status: "novo",
     },
   });
@@ -180,6 +182,19 @@ export function NewLeadDialog({ open, onOpenChange }: NewLeadDialogProps) {
                   <FormLabel>Referência (ID do Anúncio)</FormLabel>
                   <FormControl>
                     <Input placeholder="Ex: FB-ADS-01" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="bairro_interesse"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Cidade/Bairro de Interesse (Opcional)</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Ex: Centro" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
