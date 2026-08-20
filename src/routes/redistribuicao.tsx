@@ -31,7 +31,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { LeadDetailsModal } from "@/components/leads/LeadDetailsModal";
-import { normalizarCidade, dedupCidades } from "@/lib/utils";
+import { normalizarCidade } from "@/lib/utils";
 
 export const Route = createFileRoute("/redistribuicao")({
   head: () => ({ meta: [{ title: "Redistribuição — CRM" }] }),
@@ -74,9 +74,27 @@ function RedistributionPage() {
   });
 
   const { data: leads, isLoading: loadingLeads } = useQuery({
-    queryKey: ["leads-redistribution", profile?.imobiliaria_id, activeTab, dataInicio, dataFim],
+    queryKey: ["leads-redistribution", profile?.imobiliaria_id, activeTab, dataInicio, dataFim, cidadeFilter],
     queryFn: async () => {
       if (!profile?.imobiliaria_id) return [];
+
+      // Aba "Rebatidas Geral" (bolsao): a base sem corretor passa de 8 mil
+      // leads, e a tela só precisa mostrar os 500 mais antigos (FIFO) pra
+      // revisar/selecionar em massa -- só que filtrar cidade DEPOIS de já
+      // ter baixado só os 500 mais antigos escondia cidades inteiras cujo
+      // lote é mais recente (bug real reportado: "só aparece Taubaté, São
+      // José sumiu" -- confirmado no banco que os 500 leads mais antigos
+      // são 100% Taubaté). Fix: filtro de cidade agora vai pro banco ANTES
+      // do corte de 500, via RPC dedicada.
+      if (activeTab === "bolsao") {
+        const { data, error } = await supabase.rpc("listar_bolsao", {
+          p_imobiliaria_id: profile.imobiliaria_id,
+          p_cidade: cidadeFilter === "todas" ? null : cidadeFilter,
+          p_limit: 500,
+        });
+        if (error) throw error;
+        return data || [];
+      }
 
       // Aba "Leads Novos" usa uma RPC dedicada: precisa distinguir "nunca
       // teve corretor" de "ja foi de alguem e voltou" -- o status sozinho
@@ -349,7 +367,23 @@ function RedistributionPage() {
     );
   };
 
-  const cidadesDisponiveis = dedupCidades((leads || []).map(l => l.bairro_interesse));
+  // Lista de cidades vem de uma RPC dedicada (mesma usada em "+ Mais
+  // Rebatidas"), não do array `leads` já carregado -- esse array é
+  // recortado (500 mais antigos) e, pior, muda de acordo com o próprio
+  // cidadeFilter selecionado, então nunca poderia servir de fonte pras
+  // OPÇÕES do filtro (bug do mesmo tipo do "só aparece Taubaté" acima).
+  const { data: cidadesDisponiveisData } = useQuery({
+    queryKey: ["rebatidas-cidades", profile?.imobiliaria_id],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("get_cidades_rebatidas", {
+        p_imobiliaria_id: profile!.imobiliaria_id,
+      });
+      if (error) throw error;
+      return (data || []).map((r: any) => r.cidade as string);
+    },
+    enabled: !!profile?.imobiliaria_id,
+  });
+  const cidadesDisponiveis = cidadesDisponiveisData || [];
 
   const filteredLeads = leads?.filter((lead) => {
     if (cidadeFilter !== "todas" && normalizarCidade(lead.bairro_interesse) !== normalizarCidade(cidadeFilter)) return false;
