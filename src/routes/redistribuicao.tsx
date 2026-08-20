@@ -300,6 +300,28 @@ function RedistributionPage() {
     },
   });
 
+  // Lista de cidades vem de uma RPC dedicada (mesma usada em "+ Mais
+  // Rebatidas"), não do array `leads` já carregado -- esse array é
+  // recortado (500 mais antigos) e, pior, muda de acordo com o próprio
+  // cidadeFilter selecionado, então nunca poderia servir de fonte pras
+  // OPÇÕES do filtro (bug do mesmo tipo do "só aparece Taubaté" acima).
+  // Precisa ficar ANTES do early-return de loadingPerms logo abaixo --
+  // um hook declarado depois de um `return` condicional muda a contagem de
+  // hooks entre renders e quebra a página inteira (React error #300, mesmo
+  // bug já corrigido antes nesse arquivo em outra rodada).
+  const { data: cidadesDisponiveisData } = useQuery({
+    queryKey: ["rebatidas-cidades", profile?.imobiliaria_id],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("get_cidades_rebatidas", {
+        p_imobiliaria_id: profile!.imobiliaria_id,
+      });
+      if (error) throw error;
+      return (data || []).map((r: any) => r.cidade as string);
+    },
+    enabled: !!profile?.imobiliaria_id,
+  });
+  const cidadesDisponiveis = cidadesDisponiveisData || [];
+
   if (loadingPerms || role === 'corretor') {
     return (
       <MainLayout>
@@ -366,24 +388,6 @@ function RedistributionPage() {
       prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
     );
   };
-
-  // Lista de cidades vem de uma RPC dedicada (mesma usada em "+ Mais
-  // Rebatidas"), não do array `leads` já carregado -- esse array é
-  // recortado (500 mais antigos) e, pior, muda de acordo com o próprio
-  // cidadeFilter selecionado, então nunca poderia servir de fonte pras
-  // OPÇÕES do filtro (bug do mesmo tipo do "só aparece Taubaté" acima).
-  const { data: cidadesDisponiveisData } = useQuery({
-    queryKey: ["rebatidas-cidades", profile?.imobiliaria_id],
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc("get_cidades_rebatidas", {
-        p_imobiliaria_id: profile!.imobiliaria_id,
-      });
-      if (error) throw error;
-      return (data || []).map((r: any) => r.cidade as string);
-    },
-    enabled: !!profile?.imobiliaria_id,
-  });
-  const cidadesDisponiveis = cidadesDisponiveisData || [];
 
   const filteredLeads = leads?.filter((lead) => {
     if (cidadeFilter !== "todas" && normalizarCidade(lead.bairro_interesse) !== normalizarCidade(cidadeFilter)) return false;

@@ -108,89 +108,6 @@ export function LeadsKanban({ leads: initialLeads, isLoading: initialLoading, im
   const leads = initialLeads || leadsData;
   const isLoading = (initialLoading !== undefined ? initialLoading : queryLoading) || (!!resolvedImobiliariaId && loadingColunas);
 
-  if (isLoading) {
-    return (
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 h-full">
-        {[1, 2, 3, 4, 5].map((i) => (
-          <div key={i} className="flex flex-col gap-4">
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-32 w-full" />
-            <Skeleton className="h-32 w-full" />
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  const stages = colunas && colunas.length > 0
-    ? colunas.map((c) => ({ id: c.id, title: c.nome.toUpperCase(), color: c.cor }))
-    : STAGES;
-
-  const leadsByStage = stages.reduce((acc, stage) => {
-    acc[stage.id] = leads?.filter((lead) => {
-      if (lead.descarte_pendente_aprovacao) return false;
-      if (lead.descartado_em) return false;
-      if (lead.venda_pendente_aprovacao) return false;
-
-      // Se o lead tem a coluna_kanban_id explícita
-      if (lead.coluna_kanban_id) {
-        return lead.coluna_kanban_id === stage.id;
-      }
-      
-      // Caso contrário, usamos o status antigo como fallback (para consistência imediata antes das triggers)
-      let statusText = String(lead.status || "").toLowerCase();
-      
-      // Se o stage for uma coluna padrão de fallback (não-dinâmica, ex: STAGES original)
-      if (!colunas || colunas.length === 0) {
-        if (!STAGES.some(s => s.id === statusText) && statusText !== "venda_concluida") {
-          statusText = "novo";
-        }
-        return statusText === stage.id.toLowerCase();
-      }
-      
-      // Se temos colunas dinâmicas, mas o lead não tem coluna_kanban_id ainda,
-      // mapeamos o status antigo para a coluna com nome equivalente
-      const matchingColumn = colunas.find(col => {
-        const colNameNormalized = col.nome.toLowerCase();
-        const statusNameMap: Record<string, string> = {
-          novo: "lead novo",
-          rebatida: "rebatida",
-          tarefas: "tarefas",
-          agendado: "agendado",
-          visitou: "visitou",
-          cobrar_doc: "cobrar doc",
-          pendente: "pendente",
-          aprovado: "aprovado",
-          reprovado: "reprovado",
-          futuros: "futuros",
-        };
-        const expectedName = statusNameMap[statusText] || statusText;
-        return colNameNormalized === expectedName;
-      });
-
-      if (matchingColumn) {
-        return matchingColumn.id === stage.id;
-      }
-
-      // Se não bateu com nenhuma coluna, colocamos na primeira coluna ativa do funil
-      const firstColumn = colunas[0];
-      return firstColumn?.id === stage.id;
-    }) || [];
-    return acc;
-  }, {} as Record<string, any[]>);
-
-  const handleLeadClick = (id: string) => {
-    setSelectedLeadId(id);
-    setModalInitialTab("detalhes");
-    setIsModalOpen(true);
-  };
-
-  const handleOpenChat = (id: string) => {
-    setSelectedLeadId(id);
-    setModalInitialTab("chat");
-    setIsModalOpen(true);
-  };
-
   // Mesma lógica da LeadsTable: agenda follow-up no horário fixo da
   // cadência e move status+coluna pra "tarefas".
   const changeCadenciaMutation = useMutation({
@@ -286,6 +203,94 @@ export function LeadsKanban({ leads: initialLeads, isLoading: initialLoading, im
       toast.error("Erro ao retornar pendência: " + (error?.message || "erro desconhecido"));
     },
   });
+
+  // Hooks (useState/useQuery/useMutation) SEMPRE precisam vir antes de
+  // qualquer return condicional -- um hook chamado só depois desse "if"
+  // muda a contagem de hooks entre o render de loading e o de dados
+  // carregados, e quebra a página inteira (React error #300). Esse early
+  // return por isso fica DEPOIS de todos os hooks do componente.
+  if (isLoading) {
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 h-full">
+        {[1, 2, 3, 4, 5].map((i) => (
+          <div key={i} className="flex flex-col gap-4">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-32 w-full" />
+            <Skeleton className="h-32 w-full" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  const stages = colunas && colunas.length > 0
+    ? colunas.map((c) => ({ id: c.id, title: c.nome.toUpperCase(), color: c.cor }))
+    : STAGES;
+
+  const leadsByStage = stages.reduce((acc, stage) => {
+    acc[stage.id] = leads?.filter((lead) => {
+      if (lead.descarte_pendente_aprovacao) return false;
+      if (lead.descartado_em) return false;
+      if (lead.venda_pendente_aprovacao) return false;
+
+      // Se o lead tem a coluna_kanban_id explícita
+      if (lead.coluna_kanban_id) {
+        return lead.coluna_kanban_id === stage.id;
+      }
+      
+      // Caso contrário, usamos o status antigo como fallback (para consistência imediata antes das triggers)
+      let statusText = String(lead.status || "").toLowerCase();
+      
+      // Se o stage for uma coluna padrão de fallback (não-dinâmica, ex: STAGES original)
+      if (!colunas || colunas.length === 0) {
+        if (!STAGES.some(s => s.id === statusText) && statusText !== "venda_concluida") {
+          statusText = "novo";
+        }
+        return statusText === stage.id.toLowerCase();
+      }
+      
+      // Se temos colunas dinâmicas, mas o lead não tem coluna_kanban_id ainda,
+      // mapeamos o status antigo para a coluna com nome equivalente
+      const matchingColumn = colunas.find(col => {
+        const colNameNormalized = col.nome.toLowerCase();
+        const statusNameMap: Record<string, string> = {
+          novo: "lead novo",
+          rebatida: "rebatida",
+          tarefas: "tarefas",
+          agendado: "agendado",
+          visitou: "visitou",
+          cobrar_doc: "cobrar doc",
+          pendente: "pendente",
+          aprovado: "aprovado",
+          reprovado: "reprovado",
+          futuros: "futuros",
+        };
+        const expectedName = statusNameMap[statusText] || statusText;
+        return colNameNormalized === expectedName;
+      });
+
+      if (matchingColumn) {
+        return matchingColumn.id === stage.id;
+      }
+
+      // Se não bateu com nenhuma coluna, colocamos na primeira coluna ativa do funil
+      const firstColumn = colunas[0];
+      return firstColumn?.id === stage.id;
+    }) || [];
+    return acc;
+  }, {} as Record<string, any[]>);
+
+  const handleLeadClick = (id: string) => {
+    setSelectedLeadId(id);
+    setModalInitialTab("detalhes");
+    setIsModalOpen(true);
+  };
+
+  const handleOpenChat = (id: string) => {
+    setSelectedLeadId(id);
+    setModalInitialTab("chat");
+    setIsModalOpen(true);
+  };
 
   // Coluna sem nenhum lead fica oculta pra não poluir a tela — ela volta a
   // aparecer sozinha assim que algum lead for movido pra ela (via dropdown de
