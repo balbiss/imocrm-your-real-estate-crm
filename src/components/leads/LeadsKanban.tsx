@@ -262,6 +262,20 @@ export function LeadsKanban({ leads: initialLeads, isLoading: initialLoading, im
           conteudo: `Análise de Crédito retornada com pendência: ${observacao}`,
         });
       }
+      // Spec do dono (20/08): devolução de pendência precisa abrir um modal
+      // bloqueante na tela do corretor (ver AnaliseCreditoAlertProvider),
+      // não só o histórico do card -- antes disso nada avisava o corretor.
+      if (lead.corretor_id) {
+        await supabase.from("notificacoes").insert({
+          usuario_id: lead.corretor_id,
+          imobiliaria_id: lead.imobiliaria_id,
+          lead_id: lead.id,
+          tipo: "analise_credito_pendencia",
+          titulo: `Análise de Crédito retornada com pendência: ${lead.nome || lead.telefone}`,
+          mensagem: observacao || null,
+          lida: false,
+        });
+      }
     },
     onSuccess: (_data, _lead) => {
       queryClient.invalidateQueries({ queryKey: ["leads"] });

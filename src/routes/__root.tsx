@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useFollowUpAlerts } from "@/hooks/useFollowUpAlerts";
 import { VisitaAlertProvider } from "@/components/analytics/VisitaAlertProvider";
 import { LeadNovoAlertProvider } from "@/components/leads/LeadNovoAlertProvider";
+import { AnaliseCreditoAlertProvider } from "@/components/leads/AnaliseCreditoAlertProvider";
 
 import appCss from "../styles.css?url";
 
@@ -100,6 +101,7 @@ function RootComponent() {
         visita bem na janela entre o unsubscribe e o subscribe novo. */}
         <VisitaAlertProvider />
         <LeadNovoAlertProvider />
+        <AnaliseCreditoAlertProvider />
         <Outlet />
         <Toaster richColors position="top-right" />
       </AuthProvider>

@@ -248,7 +248,7 @@ function ManualPage() {
               <div className="flex flex-wrap items-baseline gap-2">
                 <RoleBadge role="dono" />
                 <RoleBadge role="gerente" />
-                <p className="m-0"><strong>Análise de Crédito:</strong> todo lead que entra nessa coluna fica com um alerta vermelho até dono ou gerente clicar em "Visto" (documentação auditada) ou "Retornar com Pendência" (volta pro corretor com uma nota do que falta). O alerta some assim que "Visto" é dado, e só volta a acender se o lead sair e retornar pra essa coluna de novo.</p>
+                <p className="m-0"><strong>Análise de Crédito:</strong> todo lead que entra nessa coluna fica com um alerta vermelho até dono ou gerente clicar em "Visto" (documentação auditada) ou "Retornar com Pendência" (volta pro corretor com uma nota do que falta). O alerta some assim que "Visto" é dado, e só volta a acender se o lead sair e retornar pra essa coluna de novo. Três avisos abrem um <strong>modal bloqueante</strong> no meio da tela (não só o sino): quando a pasta entra na coluna (avisa dono/gerente), quando a gestão retorna com pendência (avisa o corretor) e, enquanto o lead ficar parado nessa coluna, um lembrete a cada hora pra corretor, gerente e dono conferirem se já houve retorno do banco.</p>
               </div>
               <div className="flex flex-wrap items-baseline gap-2">
                 <RoleBadge role="dono" />
