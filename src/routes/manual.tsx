@@ -255,8 +255,11 @@ function ManualPage() {
                 <p className="m-0"><strong>Transferir um lead:</strong> abra o card — logo abaixo dos botões de venda/devolução há um seletor "Transferir para" com a lista de corretores. Escolher um nome move o lead na hora e avisa o corretor (som + pop-up), do mesmo jeito que um lead novo da roleta.</p>
               </div>
               <p><strong>Mudar de coluna e agendar o próximo contato:</strong> ao mover o card para uma coluna como Conversando, Visitou, Cobrar Doc, Pendente, Aprovado, Reprovado, Restrição ou Futuros, primeiro escolhe-se a coluna — depois abre uma janela pedindo a data e o horário do próximo contato, nessa ordem. Agendado/FID continua exigindo a data e horário do compromisso antes, porque ali a data é o próprio motivo da coluna.</p>
+              <p><strong>Cadência de chamada:</strong> vai de "Início" até "Chamada 5". Cada vez que se registra uma chamada, o sistema já agenda a próxima automaticamente: ligou antes das 13h, o próximo contato cai pra 17h do mesmo dia; ligou a partir das 13h (ou em qualquer horário de sábado, já que a equipe sai às 15h), cai pra 11h do próximo dia útil — pulando pra segunda-feira se cair domingo.</p>
+              <p><strong>Devolver ao Bolsão:</strong> tira o lead do corretor e some com qualquer follow-up/visita que estivesse agendado — o card não fica preso em Tarefas depois de devolvido.</p>
+              <p><strong>Data de Nascimento e lembretes automáticos:</strong> o card tem um campo opcional de Data de Nascimento, no bloco de Informações de Contato — preencha quando souber. No dia do aniversário, o corretor responsável recebe uma notificação lembrando de mandar um áudio parabenizando o cliente. Da mesma forma, 30 dias depois de uma venda aprovada, o corretor recebe uma notificação com uma mensagem de pós-venda já pronta (pedindo avaliação e indicação) pra copiar e enviar no chat — nenhuma dessas duas mensagens é enviada sozinha pelo sistema, é sempre o corretor que manda.</p>
               <Callout title="Leads descartados não voltam a aparecer">
-                Um lead descartado sai de todas as colunas do Kanban e da Agenda, mesmo que tivesse tarefa ou visita pendente antes do descarte.
+                Um lead descartado sai de todas as colunas do Kanban e da Agenda, mesmo que tivesse tarefa ou visita pendente antes do descarte. O mesmo vale pra um lead com venda aprovada: ele não fica mais preso em "tarefa atrasada".
               </Callout>
             </Section>
 
@@ -289,7 +292,8 @@ function ManualPage() {
               <p><strong>Leads Descartados:</strong> descartes normais (Sem Resposta, Não Tem Interesse, etc) — têm botão <strong>Reativar</strong>, que devolve o lead pro Bolsão do zero (sem corretor, sem histórico do descarte).</p>
               <p><strong>Lead Descadastrar:</strong> só os descartes extremos (Descadastrar / Já Comprou em Outra Empresa) que já foram aprovados pelo dono em <a href="#aprovacoes">Aprovações</a> — ficam numa aba própria porque são definitivos, diferente de um descarte normal que qualquer corretor pode reverter puxando de novo.</p>
               <p><strong>Histórico da Roleta:</strong> mostra, lead por lead, pra qual corretor a roleta automática mandou e em que data/hora — só o que a roleta decidiu sozinha, não o que foi transferido manualmente (isso fica registrado à parte, no próprio card do lead).</p>
-              <p>Um campo de busca por nome, telefone ou corretor ajuda a localizar um lead rápido dentro dessas listas. "Ações em Massa" distribui vários leads selecionados de uma vez (por rodízio ou direto pra um corretor) sem gerar um aviso de lead novo pra cada um — só a transferência individual ("Encaminhar para...") avisa o corretor.</p>
+              <p>Um campo de busca por nome, telefone ou corretor ajuda a localizar um lead rápido dentro dessas listas. Quando o lead distribuído (individualmente ou em massa) é um Lead Novo genuíno — nunca teve corretor antes — ele sempre avisa o corretor (som + pop-up + contagem de SLA), mesmo em "Ações em Massa"; distribuição de rebatida em massa continua silenciosa, só a transferência individual ("Encaminhar para...") avisa nesse caso, pra não virar spam de notificação.</p>
+              <p><strong>Filtro de cidade/bairro:</strong> tanto em "+ Mais Rebatidas" quanto nos filtros de cidade em Leads e Rebatidas Geral, cidades com grafia parecida (acento, maiúscula) são agrupadas como uma só opção.</p>
             </Section>
 
             <Section id="equipe" title="Equipe" roles={["dono", "gerente"]} lede="Cadastro e gestão de quem trabalha na imobiliária dentro do sistema.">
@@ -306,14 +310,15 @@ function ManualPage() {
               <p>Quando nenhum corretor está disponível no momento em que um lead chega, ele não se perde — vai parar na coluna "Rebatida" do Kanban, sem dono, visível em <a href="#distribuicao">Distribuição de Leads → Rebatidas Geral</a>.</p>
             </Section>
 
-            <Section id="aprovacoes" title="Aprovações" roles={["dono", "gerente"]} lede='Fila de pedidos de descarte extremo — motivos como "Já Comprou" ou "Descadastrar" — que um corretor não pode encerrar sozinho.'>
-              <p>O corretor pede o descarte, o card fica pendente de aprovação, e dono ou gerente aprovam ou recusam aqui.</p>
+            <Section id="aprovacoes" title="Aprovações" roles={["dono", "gerente"]} lede='Fila de pedidos de descarte extremo — motivos como "Já Comprou" ou "Descadastrar" — e de vendas fechadas, que um corretor não pode encerrar sozinho.'>
+              <p>O corretor pede o descarte (ou fecha uma venda), o card fica pendente de aprovação, e dono ou gerente aprovam ou recusam aqui. Cada pedido mostra a campanha de origem do lead, e clicar no nome do cliente abre o card completo sem precisar sair da tela.</p>
             </Section>
 
             <Section id="relatorios" title="Relatórios" roles={["todos"]} lede="Indicadores de performance por período: volume de leads, taxa de conversão, tempo médio de resposta e ranking de corretores.">
-              <p>Corretor vê seus próprios números; dono e gerente veem o comparativo de toda a equipe. Os filtros no topo (mês, corretor, campanha) afetam a página inteira — <em>exceto</em> o Relatório de Campanhas, que sempre mostra todas as campanhas lado a lado (ver abaixo).</p>
+              <p>Corretor vê seus próprios números; dono e gerente veem o comparativo de toda a equipe. Os filtros no topo (mês, corretor, campanha, cidade) afetam a página inteira — <em>exceto</em> o Relatório de Campanhas, que sempre mostra todas as campanhas lado a lado (ver abaixo).</p>
+              <p><strong>Período personalizado:</strong> por padrão a tela mostra o mês atual (seletor de mês), mas dá pra escolher uma data de início e/ou fim específica ao lado — quando preenchidas, elas mandam mais que o seletor de mês. "Limpar período" volta a usar o mês selecionado.</p>
               <p><strong>Funil Completo</strong> mostra quantos leads passaram por cada coluna do Kanban no período — clique numa barra pra ver a lista de leads daquela etapa.</p>
-              <p><strong>Ranking de Consultores:</strong> tabela por corretor com todas as etapas do funil — Novos, Rebatidas, Agendado, Visitou, Cobrar Doc, Pendente, Análise de Crédito, Restrição, Aprovado, FID, Vendas, Descarte, Descadastrado, Taxa de Conversão (Novo → Venda) e SLA médio de resposta.</p>
+              <p><strong>Ranking de Consultores:</strong> tabela por corretor com todas as etapas do funil — Novos, Rebatidas, Agendado, Visitou, Cobrar Doc, Pendente, Análise de Crédito, Restrição, Aprovado, FID, Vendas, Descarte, Descadastrado, Taxa de Conversão (Novo → Venda) e SLA médio de resposta. O seletor "Ranking" no topo da tabela reordena por Vendas, Agendamento, Visita, Análise ou total de Leads.</p>
               <p><strong>Relatório de Campanhas:</strong> o mesmo funil, mas por campanha/anúncio (a "Origem" do lead) em vez de por corretor — em porcentagem sobre o total de leads daquela campanha, pra comparar quais anúncios convertem melhor.</p>
               <div className="flex flex-wrap items-baseline gap-2">
                 <RoleBadge role="dono" />
