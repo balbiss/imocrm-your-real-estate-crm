@@ -77,6 +77,7 @@ function AgendaPage() {
         .is("descartado_em", null)
         .eq("descarte_pendente_aprovacao", false)
         .eq("venda_pendente_aprovacao", false)
+        .is("data_fechamento", null)
         .or("lembrete_follow_up.not.is.null,data_visita.not.is.null");
 
       if (role === 'corretor') {

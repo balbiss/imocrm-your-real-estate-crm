@@ -322,7 +322,7 @@ export function Sidebar({ collapsed, onClose }: { collapsed: boolean; onClose?: 
               ) : (
                 <span
                   className={`absolute top-0.5 h-3 w-3 rounded-full bg-white transition-transform ${
-                    emPlantao ? "translate-x-3.5" : "translate-x-0.5"
+                    emPlantao ? "translate-x-3" : "translate-x-0.5"
                   }`}
                 />
               )}

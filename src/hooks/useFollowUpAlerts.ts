@@ -21,6 +21,7 @@ export function useFollowUpAlerts() {
         .select("id, nome, lembrete_follow_up")
         .eq("corretor_id", user.id)
         .lte("lembrete_follow_up", now)
+        .is("data_fechamento", null)
         .order("lembrete_follow_up", { ascending: true });
 
       if (error) throw error;

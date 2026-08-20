@@ -64,51 +64,25 @@ function TeamPage() {
       if (membersError) throw membersError;
       const members = (membersData || []) as any[];
 
-      // Busca TODOS os leads da imobiliária de uma vez para calcular métricas em memória (mais rápido e sem bugs de RLS)
-      // O Supabase/PostgREST limita cada resposta a 1000 linhas por padrao —
-      // busca em paginas ate esgotar, pra nao subestimar as metricas de
-      // equipe quando a base passar disso.
-      const PAGE_SIZE = 1000;
-      let allLeads: any[] = [];
-      {
-        let from = 0;
-        while (true) {
-          const { data, error: leadsError } = await supabase
-            .from("leads")
-            .select("id, corretor_id, status, created_at, primeiro_contato_em")
-            .eq("imobiliaria_id", profile.imobiliaria_id)
-            .range(from, from + PAGE_SIZE - 1);
-          if (leadsError) throw leadsError;
-          allLeads = allLeads.concat(data || []);
-          if (!data || data.length < PAGE_SIZE) break;
-          from += PAGE_SIZE;
-        }
-      }
+      // Métricas por corretor calculadas no Postgres (GROUP BY), não mais
+      // baixando a tabela leads inteira pro navegador — com a base na casa
+      // dos milhares isso deixava a tela lenta em toda visita (bug real
+      // reportado pelo dono, 17/08). Ver get_equipe_metricas() na migration
+      // 20260820.
+      const { data: metricas, error: metricasError } = await supabase.rpc("get_equipe_metricas", {
+        p_imobiliaria_id: profile.imobiliaria_id,
+      });
+      if (metricasError) throw metricasError;
+      const metricasPorCorretor = new Map((metricas || []).map((m: any) => [m.corretor_id, m]));
 
-      // Busca métricas de leads para cada membro
       const teamWithMetrics = members.map((member) => {
-        const memberLeads = allLeads?.filter(l => l.corretor_id === member.id) || [];
-        
-        const totalLeads = memberLeads.length;
-        const sales = memberLeads.filter(l => l.status === "venda_concluida").length;
-
-        // Calcular SLA real para o consultor
-        const respondedLeads = memberLeads.filter(l => l.primeiro_contato_em != null);
-        
-        let avgSLA = "N/A";
-        if (respondedLeads && respondedLeads.length > 0) {
-          const totalDiff = respondedLeads.reduce((acc, lead) => {
-            const diff = new Date(lead.primeiro_contato_em!).getTime() - new Date(lead.created_at).getTime();
-            return acc + diff;
-          }, 0);
-          const avgMinutes = Math.round(totalDiff / respondedLeads.length / (1000 * 60));
-          avgSLA = `${avgMinutes}m`;
-        }
+        const m = metricasPorCorretor.get(member.id) as any;
+        const avgSLA = m?.avg_sla_minutos != null ? `${Math.round(m.avg_sla_minutos)}m` : "N/A";
 
         return {
           ...member,
-          leads_count: totalLeads,
-          sales_count: sales,
+          leads_count: m?.leads_count ?? 0,
+          sales_count: m?.sales_count ?? 0,
           sla_media: avgSLA
         };
       });

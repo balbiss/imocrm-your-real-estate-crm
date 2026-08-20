@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Loader2, Trophy, CheckCircle, XCircle } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAuth } from "@/context/AuthContext";
+import { LeadDetailsModal } from "@/components/leads/LeadDetailsModal";
 
 interface AprovacoesVendaDialogProps {
   open: boolean;
@@ -21,6 +22,7 @@ interface AprovacoesVendaDialogProps {
 export function AprovacoesVendaDialog({ open, onOpenChange, imobiliariaId }: AprovacoesVendaDialogProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const [leadDetalheId, setLeadDetalheId] = useState<string | null>(null);
 
   const { data: pendentes, isLoading } = useQuery({
     queryKey: ["aprovacoes-venda", imobiliariaId],
@@ -31,6 +33,7 @@ export function AprovacoesVendaDialog({ open, onOpenChange, imobiliariaId }: Apr
           id,
           nome,
           telefone,
+          origem,
           valor_venda,
           empreendimento,
           unidade,
@@ -75,6 +78,11 @@ export function AprovacoesVendaDialog({ open, onOpenChange, imobiliariaId }: Apr
           status: 'venda_concluida',
           coluna_kanban_id: colunaVenda?.id || null,
           data_fechamento: new Date().toISOString(),
+          // Venda aprovada não pode deixar rastro de follow-up/visita pendente
+          // — senão o lead continua aparecendo como tarefa atrasada mesmo
+          // já tendo comprado (bug real reportado pelo dono, 17/08).
+          lembrete_follow_up: null,
+          data_visita: null,
         })
         .eq("id", leadId);
 
@@ -158,9 +166,15 @@ export function AprovacoesVendaDialog({ open, onOpenChange, imobiliariaId }: Apr
 
                     <div className="flex justify-between items-start mb-3">
                       <div>
-                        <h4 className="text-sm font-bold text-slate-800">{lead.nome}</h4>
+                        <h4
+                          className="text-sm font-bold text-slate-800 hover:text-primary hover:underline cursor-pointer w-fit"
+                          onClick={() => setLeadDetalheId(lead.id)}
+                        >
+                          {lead.nome}
+                        </h4>
                         <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">
                           Corretor: <span className="text-slate-600">{lead.corretor?.nome || "Desconhecido"}</span>
+                          {lead.origem && <> · Campanha: <span className="text-slate-600">{lead.origem}</span></>}
                         </p>
                         <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">
                           Tel: <span className="text-slate-600 normal-case">{lead.telefone || "-"}</span>
@@ -216,6 +230,12 @@ export function AprovacoesVendaDialog({ open, onOpenChange, imobiliariaId }: Apr
           </ScrollArea>
         </div>
       </DialogContent>
+
+      <LeadDetailsModal
+        leadId={leadDetalheId}
+        open={!!leadDetalheId}
+        onOpenChange={(o) => { if (!o) setLeadDetalheId(null); }}
+      />
     </Dialog>
   );
 }

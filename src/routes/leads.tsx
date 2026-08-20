@@ -26,6 +26,7 @@ import { toast } from "sonner";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { normalizarCidade, dedupCidades } from "@/lib/utils";
 
 export const Route = createFileRoute("/leads")({
   head: () => ({ meta: [{ title: "Leads — CRM" }] }),
@@ -213,7 +214,7 @@ function LeadsPage() {
       : corretorFilter !== 'todos' ? lead.corretor_id === corretorFilter
       : true;
 
-    const matchesCidade = cidadeFilter === 'todas' ? true : lead.bairro_interesse === cidadeFilter;
+    const matchesCidade = cidadeFilter === 'todas' ? true : normalizarCidade(lead.bairro_interesse) === normalizarCidade(cidadeFilter);
 
     const isOverdue = lead.lembrete_follow_up && new Date(lead.lembrete_follow_up) <= new Date() && !lead.data_fechamento;
     const matchesOverdue = showOverdueOnly ? isOverdue : true;
@@ -221,9 +222,7 @@ function LeadsPage() {
     return matchesSearch && matchesTemp && matchesStatusColuna && matchesCorretor && matchesCidade && matchesOverdue;
   });
 
-  const cidadesDisponiveis = Array.from(
-    new Set((leads || []).map(l => l.bairro_interesse).filter((c): c is string => !!c))
-  ).sort();
+  const cidadesDisponiveis = dedupCidades((leads || []).map(l => l.bairro_interesse));
 
   const leadsVencidosCount = leads?.filter(l => 
     l.lembrete_follow_up && new Date(l.lembrete_follow_up) <= new Date() && !l.data_fechamento

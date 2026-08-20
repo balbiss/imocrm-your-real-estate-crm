@@ -30,6 +30,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { LeadDetailsModal } from "@/components/leads/LeadDetailsModal";
+import { normalizarCidade, dedupCidades } from "@/lib/utils";
 
 import { useNavigate } from "@tanstack/react-router";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -53,6 +54,27 @@ function ReportsPage() {
   const [mesFiltro, setMesFiltro] = React.useState<string>(mesAtual);
   const [corretorFiltroRel, setCorretorFiltroRel] = React.useState<string>("todos");
   const [origemFiltroRel, setOrigemFiltroRel] = React.useState<string>("todas");
+  const [cidadeFiltroRel, setCidadeFiltroRel] = React.useState<string>("todas");
+  // Filtro de período personalizado (17/08, pedido do dono): por padrão o
+  // relatório mostra o mês corrente (mesFiltro, também usado pelo gasto de
+  // campanha/CAC, que é lançado por mês). Quando o dono preenche início
+  // e/ou fim aqui, o período personalizado passa a mandar na filtragem de
+  // leads/vendas -- o gasto de campanha continua seguindo mesFiltro, já
+  // que é um valor lançado mensalmente, não dá pra fatiar por dia.
+  const [dataInicioCustom, setDataInicioCustom] = React.useState<string>("");
+  const [dataFimCustom, setDataFimCustom] = React.useState<string>("");
+  const periodoPersonalizadoAtivo = !!(dataInicioCustom || dataFimCustom);
+  const dentroDoPeriodo = React.useCallback((dataIso: string | null | undefined) => {
+    if (!dataIso) return false;
+    if (periodoPersonalizadoAtivo) {
+      const d = dataIso.slice(0, 10);
+      if (dataInicioCustom && d < dataInicioCustom) return false;
+      if (dataFimCustom && d > dataFimCustom) return false;
+      return true;
+    }
+    return dataIso.startsWith(mesFiltro);
+  }, [periodoPersonalizadoAtivo, dataInicioCustom, dataFimCustom, mesFiltro]);
+  const [ordenarRankingPor, setOrdenarRankingPor] = React.useState<"vendas" | "agendados" | "visitou" | "analiseCredito" | "leads">("vendas");
 
   // Proteção de rota
   React.useEffect(() => {
@@ -163,21 +185,29 @@ function ReportsPage() {
     return Array.from(set).sort();
   }, [raw]);
 
+  const cidadesDisponiveisRel = React.useMemo(
+    () => dedupCidades((raw?.leads || []).map((l: any) => l.bairro_interesse)),
+    [raw]
+  );
+
   const stats = React.useMemo(() => {
     if (!raw) return null;
 
     const leads = raw.leads.filter((l: any) => {
-      if (mesFiltro && !l.created_at?.startsWith(mesFiltro)) return false;
+      if (!dentroDoPeriodo(l.created_at)) return false;
       if (corretorFiltroRel !== "todos" && l.corretor_id !== corretorFiltroRel) return false;
       if (origemFiltroRel !== "todas" && (l.origem || "Outros") !== origemFiltroRel) return false;
+      if (cidadeFiltroRel !== "todas" && normalizarCidade(l.bairro_interesse) !== normalizarCidade(cidadeFiltroRel)) return false;
       return true;
     });
-    // Mesmo filtro de mês/corretor, mas SEM o de campanha -- o Relatório de
-    // Campanhas existe pra comparar campanhas lado a lado, então aplicar o
-    // filtro de campanha nele faria a tabela sempre mostrar 1 linha só.
+    // Mesmo filtro de mês/corretor/cidade, mas SEM o de campanha -- o
+    // Relatório de Campanhas existe pra comparar campanhas lado a lado,
+    // então aplicar o filtro de campanha nele faria a tabela sempre
+    // mostrar 1 linha só.
     const leadsPorCampanha = raw.leads.filter((l: any) => {
-      if (mesFiltro && !l.created_at?.startsWith(mesFiltro)) return false;
+      if (!dentroDoPeriodo(l.created_at)) return false;
       if (corretorFiltroRel !== "todos" && l.corretor_id !== corretorFiltroRel) return false;
+      if (cidadeFiltroRel !== "todas" && normalizarCidade(l.bairro_interesse) !== normalizarCidade(cidadeFiltroRel)) return false;
       return true;
     });
     const team = raw.team;
@@ -224,9 +254,10 @@ function ReportsPage() {
     // em relatórios"). Aplica os mesmos filtros de corretor/campanha, só
     // troca o filtro de data.
     const leadsFechadosNoMes = raw.leads.filter((l: any) => {
-      if (!l.data_fechamento || !l.data_fechamento.startsWith(mesFiltro)) return false;
+      if (!dentroDoPeriodo(l.data_fechamento)) return false;
       if (corretorFiltroRel !== "todos" && l.corretor_id !== corretorFiltroRel) return false;
       if (origemFiltroRel !== "todas" && (l.origem || "Outros") !== origemFiltroRel) return false;
+      if (cidadeFiltroRel !== "todas" && normalizarCidade(l.bairro_interesse) !== normalizarCidade(cidadeFiltroRel)) return false;
       return true;
     });
     const vendasDoMes = leadsFechadosNoMes.length;
@@ -234,8 +265,9 @@ function ReportsPage() {
     // aplicar o filtro de campanha, senão o Relatório de Campanhas nunca
     // mostraria vendas de nenhuma campanha diferente da selecionada.
     const leadsFechadosNoMesPorCampanha = raw.leads.filter((l: any) => {
-      if (!l.data_fechamento || !l.data_fechamento.startsWith(mesFiltro)) return false;
+      if (!dentroDoPeriodo(l.data_fechamento)) return false;
       if (corretorFiltroRel !== "todos" && l.corretor_id !== corretorFiltroRel) return false;
+      if (cidadeFiltroRel !== "todas" && normalizarCidade(l.bairro_interesse) !== normalizarCidade(cidadeFiltroRel)) return false;
       return true;
     });
 
@@ -355,11 +387,11 @@ function ReportsPage() {
       funil,
       vendasDoMes,
       leadsFechadosNoMes,
-      brokerPerformance: brokerPerformance.sort((a: any, b: any) => b.vendas - a.vendas),
+      brokerPerformance: brokerPerformance.sort((a: any, b: any) => b[ordenarRankingPor] - a[ordenarRankingPor]),
       campanhaPerformance,
       leads,
     };
-  }, [raw, mesFiltro, corretorFiltroRel, origemFiltroRel, gastosCampanha]);
+  }, [raw, mesFiltro, corretorFiltroRel, origemFiltroRel, cidadeFiltroRel, dentroDoPeriodo, gastosCampanha, ordenarRankingPor]);
 
   if (isLoading || !profile) {
     return (
@@ -380,16 +412,56 @@ function ReportsPage() {
             <h1 className="text-xl font-bold tracking-tight text-slate-900">Analytics & Performance</h1>
             <p className="text-saas-sm text-muted-foreground">Visão geral da saúde comercial e conversão.</p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <div className="relative">
               <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none z-10" />
               <input
                 type="month"
                 value={mesFiltro}
                 onChange={(e) => setMesFiltro(e.target.value)}
-                className="h-8 pl-8 pr-2 text-[11px] font-bold border border-slate-200 rounded-md text-slate-700 bg-white"
+                disabled={periodoPersonalizadoAtivo}
+                className="h-8 pl-8 pr-2 text-[11px] font-bold border border-slate-200 rounded-md text-slate-700 bg-white disabled:opacity-40"
               />
             </div>
+            <span className="text-[10px] font-bold text-slate-300 uppercase">ou</span>
+            <input
+              type="date"
+              value={dataInicioCustom}
+              onChange={(e) => setDataInicioCustom(e.target.value)}
+              placeholder="Início"
+              className="h-8 px-2 text-[11px] font-bold border border-slate-200 rounded-md text-slate-700 bg-white"
+            />
+            <span className="text-[10px] font-bold text-slate-300">até</span>
+            <input
+              type="date"
+              value={dataFimCustom}
+              onChange={(e) => setDataFimCustom(e.target.value)}
+              placeholder="Fim"
+              className="h-8 px-2 text-[11px] font-bold border border-slate-200 rounded-md text-slate-700 bg-white"
+            />
+            {periodoPersonalizadoAtivo && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2 text-[10px] font-bold text-slate-400"
+                onClick={() => { setDataInicioCustom(""); setDataFimCustom(""); }}
+              >
+                Limpar período
+              </Button>
+            )}
+            {cidadesDisponiveisRel.length > 0 && (
+              <Select value={cidadeFiltroRel} onValueChange={setCidadeFiltroRel}>
+                <SelectTrigger className="h-8 w-[160px] text-[11px] font-bold">
+                  <SelectValue placeholder="Cidade" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todas">Todas as cidades</SelectItem>
+                  {cidadesDisponiveisRel.map((c) => (
+                    <SelectItem key={c} value={c} className="truncate">{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             {(role === "dono" || role === "gerente") && (
               <Select value={corretorFiltroRel} onValueChange={setCorretorFiltroRel}>
                 <SelectTrigger className="h-8 w-[160px] text-[11px] font-bold">
@@ -418,7 +490,15 @@ function ReportsPage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <StatCard title="Leads no Mês" value={stats?.totalLeads} trend={format(new Date(`${mesFiltro}-02`), "MMMM 'de' yyyy", { locale: ptBR })} icon={<Users />} color="text-primary" />
+          <StatCard
+            title="Leads no Período"
+            value={stats?.totalLeads}
+            trend={periodoPersonalizadoAtivo
+              ? `${dataInicioCustom ? format(new Date(`${dataInicioCustom}T00:00:00`), "dd/MM/yy") : "..."} a ${dataFimCustom ? format(new Date(`${dataFimCustom}T00:00:00`), "dd/MM/yy") : "..."}`
+              : format(new Date(`${mesFiltro}-02`), "MMMM 'de' yyyy", { locale: ptBR })}
+            icon={<Users />}
+            color="text-primary"
+          />
           <StatCard title="SLA de Atendimento" value={`${stats?.avgResponseTime} min`} trend="Meta: 5min" icon={<Clock />} color="text-amber-500" />
           <StatCard title="Taxa de Conversão" value={`${((stats?.converted || 0) / (stats?.totalLeads || 1) * 100).toFixed(1)}%`} trend="No período filtrado" icon={<Target />} color="text-blue-500" />
           <StatCard title="Vendas no Mês" value={stats?.vendasDoMes} trend="Fechamentos" icon={<CheckCircle />} color="text-emerald-500" />
@@ -569,9 +649,23 @@ function ReportsPage() {
           </Card>
 
           <Card className="border-none shadow-soft bg-white overflow-hidden">
-            <CardHeader className="py-4 px-5 border-b border-slate-50">
-              <CardTitle className="text-sm font-bold">Ranking de Consultores</CardTitle>
-              <CardDescription className="text-saas-xs">Performance individual e conversão</CardDescription>
+            <CardHeader className="py-4 px-5 border-b border-slate-50 flex flex-row items-center justify-between gap-2">
+              <div>
+                <CardTitle className="text-sm font-bold">Ranking de Consultores</CardTitle>
+                <CardDescription className="text-saas-xs">Performance individual e conversão</CardDescription>
+              </div>
+              <Select value={ordenarRankingPor} onValueChange={(v: any) => setOrdenarRankingPor(v)}>
+                <SelectTrigger className="h-8 w-[150px] text-[10px] font-bold shrink-0">
+                  <SelectValue placeholder="Ordenar por" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="vendas">Ranking: Vendas</SelectItem>
+                  <SelectItem value="agendados">Ranking: Agendamento</SelectItem>
+                  <SelectItem value="visitou">Ranking: Visita</SelectItem>
+                  <SelectItem value="analiseCredito">Ranking: Análise</SelectItem>
+                  <SelectItem value="leads">Ranking: Leads</SelectItem>
+                </SelectContent>
+              </Select>
             </CardHeader>
             <CardContent className="p-0">
                <div className="overflow-x-auto">

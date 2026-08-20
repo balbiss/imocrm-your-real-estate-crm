@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Loader2, ShieldAlert, CheckCircle, XCircle } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAuth } from "@/context/AuthContext";
+import { LeadDetailsModal } from "@/components/leads/LeadDetailsModal";
 
 interface AprovacoesDescarteDialogProps {
   open: boolean;
@@ -17,6 +18,7 @@ interface AprovacoesDescarteDialogProps {
 export function AprovacoesDescarteDialog({ open, onOpenChange, imobiliariaId }: AprovacoesDescarteDialogProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const [leadDetalheId, setLeadDetalheId] = useState<string | null>(null);
 
   const { data: pendentes, isLoading } = useQuery({
     queryKey: ["aprovacoes-descarte", imobiliariaId],
@@ -28,6 +30,7 @@ export function AprovacoesDescarteDialog({ open, onOpenChange, imobiliariaId }: 
           nome,
           telefone,
           email,
+          origem,
           motivo_descarte,
           corretor:perfis!leads_corretor_id_fkey(nome),
           interacoes:leads_interacoes(conteudo, created_at, tipo)
@@ -155,9 +158,15 @@ export function AprovacoesDescarteDialog({ open, onOpenChange, imobiliariaId }: 
                     
                     <div className="flex justify-between items-start mb-3">
                       <div>
-                        <h4 className="text-sm font-bold text-slate-800">{lead.nome}</h4>
+                        <h4
+                          className="text-sm font-bold text-slate-800 hover:text-primary hover:underline cursor-pointer w-fit"
+                          onClick={() => setLeadDetalheId(lead.id)}
+                        >
+                          {lead.nome}
+                        </h4>
                         <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">
                           Corretor: <span className="text-slate-600">{lead.corretor?.nome || "Desconhecido"}</span>
+                          {lead.origem && <> · Campanha: <span className="text-slate-600">{lead.origem}</span></>}
                         </p>
                         <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">
                           Tel: <span className="text-slate-600 normal-case">{lead.telefone || "-"}</span>
@@ -199,6 +208,12 @@ export function AprovacoesDescarteDialog({ open, onOpenChange, imobiliariaId }: 
           </ScrollArea>
         </div>
       </DialogContent>
+
+      <LeadDetailsModal
+        leadId={leadDetalheId}
+        open={!!leadDetalheId}
+        onOpenChange={(o) => { if (!o) setLeadDetalheId(null); }}
+      />
     </Dialog>
   );
 }

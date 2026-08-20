@@ -329,7 +329,7 @@ export function LeadsTable({ leads, isLoading, colunas, role }: LeadsTableProps)
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" onClick={(e) => e.stopPropagation()}>
-                    {[0, 1, 2, 3, 4, 5, 6, 7].map((n) => (
+                    {[0, 1, 2, 3, 4, 5].map((n) => (
                       <DropdownMenuItem
                         key={n}
                         disabled={(lead.cadencia_chamada || 0) === n}

@@ -116,7 +116,7 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
       if (!leadId) return null;
       const { data, error } = await supabase
         .from("leads")
-        .select("*, interacoes:leads_interacoes(*)")
+        .select("*, interacoes:leads_interacoes(*, autor:perfis(nome))")
         .eq("id", leadId)
         .maybeSingle();
       
@@ -454,7 +454,6 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
         toast.success("Lead devolvido ao bolsão");
       }
 
-      toast.success("Lead devolvido ao bolsão");
       setShowDescarteModal(false);
       onOpenChange(false);
       queryClient.invalidateQueries({ queryKey: ["leads"] });
@@ -704,6 +703,15 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
                       <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">E-mail</Label>
                       <Input value={editEmail} onChange={(e) => setEditEmail(e.target.value)} placeholder="Adicionar e-mail..." className="h-9 text-sm border-slate-200" onBlur={() => handleUpdateField("email", editEmail)} />
                     </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Data de Nascimento (p/ lembrete de aniversário)</Label>
+                      <Input
+                        type="date"
+                        defaultValue={lead.data_nascimento ? lead.data_nascimento.slice(0, 10) : ""}
+                        className="h-9 text-sm border-slate-200"
+                        onBlur={(e) => handleUpdateField("data_nascimento", e.target.value || null)}
+                      />
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -787,107 +795,12 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
                 </CardContent>
               </Card>
 
-              {/* BLOCO 2.5: STATUS DO KANBAN */}
+              {/* BLOCO 2.5: FOLLOW-UP E VISITA (movido pra cima do Status do
+                  Kanban a pedido do dono, 17/08 -- é o bloco que os
+                  corretores mais usam no dia a dia) */}
               <Card className="border-none shadow-sm bg-white overflow-hidden">
                 <CardHeader className="p-4 pb-2 bg-slate-50/50">
-                  <CardTitle className="text-[11px] font-bold uppercase tracking-widest text-slate-400 flex items-center gap-2">
-                    <LayoutGrid className="h-3.5 w-3.5" /> Mover Coluna do Kanban
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-4 pt-3">
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                    {loadingColunas ? (
-                      <div className="col-span-full flex justify-center py-4">
-                        <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                      </div>
-                    ) : colunas && colunas.length > 0 ? (
-                      colunas.map((coluna) => {
-                        const retroStatus = getRetrocompatibleStatus(coluna.nome, coluna.posicao, colunas.length);
-                        const isAtiva = lead.coluna_kanban_id 
-                          ? lead.coluna_kanban_id === coluna.id 
-                          : lead.status === retroStatus;
-
-                        // Determinar cores dinâmicas baseadas na classe da cor da coluna
-                        let colorClass = "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100";
-                        if (coluna.cor === "bg-orange-500") colorClass = "bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100";
-                        else if (coluna.cor === "bg-red-500") colorClass = "bg-red-50 text-red-700 border-red-200 hover:bg-red-100";
-                        else if (coluna.cor === "bg-purple-500") colorClass = "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100";
-                        else if (coluna.cor === "bg-amber-500") colorClass = "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100";
-                        else if (coluna.cor === "bg-cyan-500") colorClass = "bg-cyan-50 text-cyan-700 border-cyan-200 hover:bg-cyan-100";
-                        else if (coluna.cor === "bg-slate-500") colorClass = "bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200";
-                        else if (coluna.cor === "bg-emerald-500") colorClass = "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100";
-                        else if (coluna.cor === "bg-rose-600") colorClass = "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100";
-                        else if (coluna.cor === "bg-indigo-500") colorClass = "bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100";
-
-                        return (
-                          <button
-                            key={coluna.id}
-                            onClick={() => {
-                              if (!isAtiva) {
-                                handleMoveColuna(coluna.id, coluna.nome, coluna.posicao);
-                              }
-                            }}
-                            className={`relative h-10 rounded-lg border text-[10px] font-bold uppercase tracking-wider transition-all ${
-                              isAtiva
-                                ? "ring-2 ring-offset-1 ring-primary shadow-sm scale-[1.03] " + colorClass
-                                : colorClass + " opacity-70"
-                            }`}
-                          >
-                            {isAtiva && (
-                              <CheckCircle2 className="absolute top-1 right-1 h-3 w-3 text-primary opacity-80" />
-                            )}
-                            {coluna.nome}
-                          </button>
-                        );
-                      })
-                    ) : (
-                      ([
-                        { value: "novo",            label: "Novo",         color: "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100" },
-                        { value: "rebatida",        label: "Rebatida",     color: "bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100" },
-                        { value: "tarefas",         label: "Tarefas",      color: "bg-red-50 text-red-700 border-red-200 hover:bg-red-100" },
-                        { value: "agendado",        label: "Agendado",     color: "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100" },
-                        { value: "visitou",         label: "Visitou",      color: "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100" },
-                        { value: "cobrar_doc",      label: "Cobrar Doc",   color: "bg-cyan-50 text-cyan-700 border-cyan-200 hover:bg-cyan-100" },
-                        { value: "pendente",        label: "Pendente",     color: "bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200" },
-                        { value: "aprovado",        label: "Aprovado",     color: "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100" },
-                        { value: "reprovado",       label: "Reprovado",    color: "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100" },
-                        { value: "futuros",         label: "Futuros",      color: "bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100" },
-                      ] as const).map((s) => (
-                        <button
-                          key={s.value}
-                          onClick={() => {
-                            if (lead.status !== s.value) {
-                              handleUpdateField("status", s.value);
-                            }
-                          }}
-                          className={`relative h-10 rounded-lg border text-[10px] font-bold uppercase tracking-wider transition-all ${
-                            lead.status === s.value
-                              ? "ring-2 ring-offset-1 ring-primary shadow-sm scale-[1.03] " + s.color
-                              : s.color + " opacity-70"
-                          }`}
-                        >
-                          {lead.status === s.value && (
-                            <CheckCircle2 className="absolute top-1 right-1 h-3 w-3 text-primary opacity-80" />
-                          )}
-                          {s.label}
-                        </button>
-                      ))
-                    )}
-                  </div>
-                  <p className="text-[10px] text-slate-400 mt-2 font-medium">
-                    Coluna atual: <span className="font-bold text-slate-600">
-                      {colunas && lead.coluna_kanban_id 
-                        ? colunas.find(c => c.id === lead.coluna_kanban_id)?.nome 
-                        : lead.status.replace("_", " ").toUpperCase()}
-                    </span>
-                  </p>
-                </CardContent>
-              </Card>
-
-              {/* BLOCO 3: FOLLOW-UP E VISITA */}
-              <Card className="border-none shadow-sm bg-white overflow-hidden">
-                <CardHeader className="p-4 pb-2 bg-slate-50/50">
-                  <CardTitle className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Bloco 3: Follow-up e Visita</CardTitle>
+                  <CardTitle className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Bloco 2.5: Follow-up e Visita</CardTitle>
                 </CardHeader>
                 <CardContent className="p-4 pt-4 space-y-6">
                   <div className="flex flex-col md:flex-row gap-4">
@@ -983,7 +896,7 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
                           <SelectValue placeholder="Selecione a chamada..." />
                         </SelectTrigger>
                         <SelectContent>
-                          {[0, 1, 2, 3, 4, 5, 6, 7].map(n => (
+                          {[0, 1, 2, 3, 4, 5].map(n => (
                             <SelectItem key={n} value={String(n)}>{n === 0 ? "Início" : `Chamada ${n}`}</SelectItem>
                           ))}
                         </SelectContent>
@@ -994,6 +907,103 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
                       <Input value={lead.data_ultima_chamada ? format(new Date(lead.data_ultima_chamada), "dd/MM/yy HH:mm", { locale: ptBR }) : "Nenhuma"} disabled className="h-10 text-sm bg-slate-50" />
                     </div>
                   </div>
+                </CardContent>
+              </Card>
+
+              {/* BLOCO 3: STATUS DO KANBAN */}
+              <Card className="border-none shadow-sm bg-white overflow-hidden">
+                <CardHeader className="p-4 pb-2 bg-slate-50/50">
+                  <CardTitle className="text-[11px] font-bold uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                    <LayoutGrid className="h-3.5 w-3.5" /> Mover Coluna do Kanban
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 pt-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                    {loadingColunas ? (
+                      <div className="col-span-full flex justify-center py-4">
+                        <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                      </div>
+                    ) : colunas && colunas.length > 0 ? (
+                      colunas.map((coluna) => {
+                        const retroStatus = getRetrocompatibleStatus(coluna.nome, coluna.posicao, colunas.length);
+                        const isAtiva = lead.coluna_kanban_id
+                          ? lead.coluna_kanban_id === coluna.id
+                          : lead.status === retroStatus;
+
+                        // Determinar cores dinâmicas baseadas na classe da cor da coluna
+                        let colorClass = "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100";
+                        if (coluna.cor === "bg-orange-500") colorClass = "bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100";
+                        else if (coluna.cor === "bg-red-500") colorClass = "bg-red-50 text-red-700 border-red-200 hover:bg-red-100";
+                        else if (coluna.cor === "bg-purple-500") colorClass = "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100";
+                        else if (coluna.cor === "bg-amber-500") colorClass = "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100";
+                        else if (coluna.cor === "bg-cyan-500") colorClass = "bg-cyan-50 text-cyan-700 border-cyan-200 hover:bg-cyan-100";
+                        else if (coluna.cor === "bg-slate-500") colorClass = "bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200";
+                        else if (coluna.cor === "bg-emerald-500") colorClass = "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100";
+                        else if (coluna.cor === "bg-rose-600") colorClass = "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100";
+                        else if (coluna.cor === "bg-indigo-500") colorClass = "bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100";
+
+                        return (
+                          <button
+                            key={coluna.id}
+                            onClick={() => {
+                              if (!isAtiva) {
+                                handleMoveColuna(coluna.id, coluna.nome, coluna.posicao);
+                              }
+                            }}
+                            className={`relative h-10 rounded-lg border text-[10px] font-bold uppercase tracking-wider transition-all ${
+                              isAtiva
+                                ? "ring-2 ring-offset-1 ring-primary shadow-sm scale-[1.03] " + colorClass
+                                : colorClass + " opacity-70"
+                            }`}
+                          >
+                            {isAtiva && (
+                              <CheckCircle2 className="absolute top-1 right-1 h-3 w-3 text-primary opacity-80" />
+                            )}
+                            {coluna.nome}
+                          </button>
+                        );
+                      })
+                    ) : (
+                      ([
+                        { value: "novo",            label: "Novo",         color: "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100" },
+                        { value: "rebatida",        label: "Rebatida",     color: "bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100" },
+                        { value: "tarefas",         label: "Tarefas",      color: "bg-red-50 text-red-700 border-red-200 hover:bg-red-100" },
+                        { value: "agendado",        label: "Agendado",     color: "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100" },
+                        { value: "visitou",         label: "Visitou",      color: "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100" },
+                        { value: "cobrar_doc",      label: "Cobrar Doc",   color: "bg-cyan-50 text-cyan-700 border-cyan-200 hover:bg-cyan-100" },
+                        { value: "pendente",        label: "Pendente",     color: "bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200" },
+                        { value: "aprovado",        label: "Aprovado",     color: "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100" },
+                        { value: "reprovado",       label: "Reprovado",    color: "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100" },
+                        { value: "futuros",         label: "Futuros",      color: "bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100" },
+                      ] as const).map((s) => (
+                        <button
+                          key={s.value}
+                          onClick={() => {
+                            if (lead.status !== s.value) {
+                              handleUpdateField("status", s.value);
+                            }
+                          }}
+                          className={`relative h-10 rounded-lg border text-[10px] font-bold uppercase tracking-wider transition-all ${
+                            lead.status === s.value
+                              ? "ring-2 ring-offset-1 ring-primary shadow-sm scale-[1.03] " + s.color
+                              : s.color + " opacity-70"
+                          }`}
+                        >
+                          {lead.status === s.value && (
+                            <CheckCircle2 className="absolute top-1 right-1 h-3 w-3 text-primary opacity-80" />
+                          )}
+                          {s.label}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-2 font-medium">
+                    Coluna atual: <span className="font-bold text-slate-600">
+                      {colunas && lead.coluna_kanban_id
+                        ? colunas.find(c => c.id === lead.coluna_kanban_id)?.nome
+                        : lead.status.replace("_", " ").toUpperCase()}
+                    </span>
+                  </p>
                 </CardContent>
               </Card>
 
@@ -1085,7 +1095,12 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
                           </div>
                           <div className="bg-white rounded-lg border border-slate-100 p-2.5 shadow-sm">
                             <div className="flex items-center justify-between mb-1">
-                              <span className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">{interacao.tipo}</span>
+                              <span className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">
+                                {interacao.tipo}
+                                {(role === "dono" || role === "gerente") && interacao.autor?.nome && (
+                                  <span className="text-primary normal-case"> · {interacao.autor.nome}</span>
+                                )}
+                              </span>
                               <div className="flex items-center gap-2">
                                 <span className="text-[9px] text-slate-400 font-medium">
                                   {format(new Date(interacao.created_at), "dd/MM HH:mm", { locale: ptBR })}

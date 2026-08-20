@@ -31,6 +31,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { LeadDetailsModal } from "@/components/leads/LeadDetailsModal";
+import { normalizarCidade, dedupCidades } from "@/lib/utils";
 
 export const Route = createFileRoute("/redistribuicao")({
   head: () => ({ meta: [{ title: "Redistribuição — CRM" }] }),
@@ -348,12 +349,10 @@ function RedistributionPage() {
     );
   };
 
-  const cidadesDisponiveis = Array.from(
-    new Set((leads || []).map(l => l.bairro_interesse).filter((c): c is string => !!c))
-  ).sort();
+  const cidadesDisponiveis = dedupCidades((leads || []).map(l => l.bairro_interesse));
 
   const filteredLeads = leads?.filter((lead) => {
-    if (cidadeFilter !== "todas" && lead.bairro_interesse !== cidadeFilter) return false;
+    if (cidadeFilter !== "todas" && normalizarCidade(lead.bairro_interesse) !== normalizarCidade(cidadeFilter)) return false;
 
     if (!searchTerm.trim()) return true;
     const term = searchTerm.toLowerCase();

@@ -65,18 +65,19 @@ export function BolsaoResgateDialog({ open, onOpenChange, imobiliariaId }: Bolsa
     enabled: open && !!user,
   });
 
+  // RPC dedicada (não select cru + .limit(500)): a Rebatida acumula
+  // milhares de leads sem corretor, então um recorte cru de 500 linhas sem
+  // ORDER BY podia nunca incluir cidades menos comuns (bug real reportado:
+  // "não consigo selecionar São José dos Campos"). A RPC também dedupe por
+  // grafia (Taubate/Taubaté viravam duas opções na lista antes do fix).
   const { data: cidadesDisponiveis } = useQuery({
     queryKey: ["rebatidas-cidades", imobiliariaId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("leads")
-        .select("bairro_interesse")
-        .eq("imobiliaria_id", imobiliariaId)
-        .is("corretor_id", null)
-        .not("bairro_interesse", "is", null)
-        .limit(500);
+      const { data, error } = await supabase.rpc("get_cidades_rebatidas", {
+        p_imobiliaria_id: imobiliariaId,
+      });
       if (error) throw error;
-      return Array.from(new Set((data || []).map((l) => l.bairro_interesse).filter(Boolean))).sort();
+      return (data || []).map((r: any) => r.cidade as string);
     },
     enabled: open && !!imobiliariaId,
   });
