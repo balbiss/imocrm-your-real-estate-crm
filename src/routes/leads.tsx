@@ -48,6 +48,11 @@ function LeadsPage() {
   const [cidadeFilter, setCidadeFilter] = useState<string>('todas');
   const [statusFilter, setStatusFilter] = useState<string>('todos');
   const [showOverdueOnly, setShowOverdueOnly] = useState(false);
+  // Filtro de data (pedido do dono, 20/08): pra saber quantos leads novos,
+  // rebatidas etc entraram/mudaram num dia específico — filtra por
+  // created_at (quando o lead entrou no CRM), não por status atual.
+  const [dataInicioFiltro, setDataInicioFiltro] = useState<string>("");
+  const [dataFimFiltro, setDataFimFiltro] = useState<string>("");
   
   const queryClient = useQueryClient();
   const canMonitor = role === 'gerente' || role === 'dono';
@@ -219,7 +224,11 @@ function LeadsPage() {
     const isOverdue = lead.lembrete_follow_up && new Date(lead.lembrete_follow_up) <= new Date() && !lead.data_fechamento;
     const matchesOverdue = showOverdueOnly ? isOverdue : true;
 
-    return matchesSearch && matchesTemp && matchesStatusColuna && matchesCorretor && matchesCidade && matchesOverdue;
+    const dataLead = lead.created_at?.slice(0, 10);
+    const matchesData = (!dataInicioFiltro || (dataLead && dataLead >= dataInicioFiltro)) &&
+      (!dataFimFiltro || (dataLead && dataLead <= dataFimFiltro));
+
+    return matchesSearch && matchesTemp && matchesStatusColuna && matchesCorretor && matchesCidade && matchesOverdue && matchesData;
   });
 
   const cidadesDisponiveis = dedupCidades((leads || []).map(l => l.bairro_interesse));
@@ -308,6 +317,34 @@ function LeadsPage() {
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
+
+            <div className="flex items-center gap-1.5">
+              <Input
+                type="date"
+                value={dataInicioFiltro}
+                onChange={(e) => setDataInicioFiltro(e.target.value)}
+                className="h-9 w-[136px] text-[11px] font-bold border-slate-200"
+                title="Data de início (quando o lead entrou)"
+              />
+              <span className="text-[10px] font-bold text-slate-300">até</span>
+              <Input
+                type="date"
+                value={dataFimFiltro}
+                onChange={(e) => setDataFimFiltro(e.target.value)}
+                className="h-9 w-[136px] text-[11px] font-bold border-slate-200"
+                title="Data de fim"
+              />
+              {(dataInicioFiltro || dataFimFiltro) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-9 px-2 text-[10px] font-bold text-slate-400"
+                  onClick={() => { setDataInicioFiltro(""); setDataFimFiltro(""); }}
+                >
+                  Limpar
+                </Button>
+              )}
+            </div>
 
             {canMonitor && (
               <DropdownMenu>
