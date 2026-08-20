@@ -35,8 +35,15 @@ function TeamPage() {
   const [memberToEdit, setMemberToEdit] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState("");
 
+  // Chave de cache compartilhada com todas as outras páginas -- ver
+  // agenda.tsx pro motivo (evita refazer essa consulta a cada navegação).
+  // Antes essa chave ("user-profile") também colidia com filas.tsx e
+  // redistribuicao.tsx, que buscavam só "imobiliaria_id" (sem role) sob a
+  // MESMA chave -- quem montasse primeiro "vencia" o cache pros outros
+  // dois, inofensivo hoje só porque nenhum deles lê profile.role, mas
+  // frágil. Selecionar sempre os dois campos resolve de vez.
   const { data: profile } = useQuery({
-    queryKey: ["user-profile", user?.id],
+    queryKey: ["perfil-imobiliaria", user?.id],
     queryFn: async () => {
       if (!user) return null;
       const { data, error } = await supabase
@@ -48,6 +55,7 @@ function TeamPage() {
       return data;
     },
     enabled: !!user,
+    staleTime: 1000 * 60 * 5,
   });
 
   const { data: team, isLoading } = useQuery({

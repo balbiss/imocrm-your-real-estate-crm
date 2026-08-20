@@ -54,15 +54,21 @@ function AgendaPage() {
   const [activeCategory, setActiveCategory] = useState<"atrasadas" | "aFazer" | "visitas" | "futuras" | "favoritos">("aFazer");
   const [corretorFilter, setCorretorFilter] = useState<string>("todos");
 
+  // Chave de cache compartilhada com todas as outras páginas (ver
+  // [[project_crm_oka]]) -- antes cada página tinha sua própria chave
+  // (user-profile-agenda, -leads, -reports...), então toda navegação
+  // refazia essa consulta do zero antes de sequer começar a carregar os
+  // dados da própria página, mesmo o perfil quase nunca mudando.
   const { data: profile, isLoading: loadingProfile } = useQuery({
-    queryKey: ["user-profile-agenda", user?.id],
+    queryKey: ["perfil-imobiliaria", user?.id],
     queryFn: async () => {
       if (!user) return null;
-      const { data, error } = await supabase.from("perfis").select("imobiliaria_id").eq("id", user.id).single();
+      const { data, error } = await supabase.from("perfis").select("imobiliaria_id, role").eq("id", user.id).single();
       if (error) throw error;
       return data;
     },
     enabled: !!user,
+    staleTime: 1000 * 60 * 5,
   });
 
   const { data: compromissosRaw, isLoading } = useQuery({

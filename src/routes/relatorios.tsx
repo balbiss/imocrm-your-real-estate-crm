@@ -83,15 +83,18 @@ function ReportsPage() {
     }
   }, [role, loadingPerms, navigate]);
 
+  // Chave de cache compartilhada com todas as outras páginas -- ver
+  // agenda.tsx pro motivo (evita refazer essa consulta a cada navegação).
   const { data: profile } = useQuery({
-    queryKey: ["user-profile-reports", user?.id],
+    queryKey: ["perfil-imobiliaria", user?.id],
     queryFn: async () => {
       if (!user) return null;
-      const { data, error } = await supabase.from("perfis").select("imobiliaria_id").eq("id", user.id).single();
+      const { data, error } = await supabase.from("perfis").select("imobiliaria_id, role").eq("id", user.id).single();
       if (error) throw error;
       return data;
     },
     enabled: !!user,
+    staleTime: 1000 * 60 * 5,
   });
 
   const { data: raw, isLoading } = useQuery({

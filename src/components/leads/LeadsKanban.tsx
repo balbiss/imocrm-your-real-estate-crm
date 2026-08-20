@@ -51,20 +51,23 @@ export function LeadsKanban({ leads: initialLeads, isLoading: initialLoading, im
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalInitialTab, setModalInitialTab] = useState<"detalhes" | "chat">("detalhes");
 
-  // Buscar perfil se não foi passado imobiliariaId
+  // Buscar perfil se não foi passado imobiliariaId. Chave de cache
+  // compartilhada com todas as outras páginas -- ver agenda.tsx pro
+  // motivo (evita refazer essa consulta a cada navegação).
   const { data: profile } = useQuery({
-    queryKey: ["user-profile-kanban", user?.id],
+    queryKey: ["perfil-imobiliaria", user?.id],
     queryFn: async () => {
       if (!user) return null;
       const { data, error } = await supabase
         .from("perfis")
-        .select("imobiliaria_id")
+        .select("imobiliaria_id, role")
         .eq("id", user.id)
         .single();
       if (error) throw error;
       return data;
     },
     enabled: !!user && !imobiliariaId,
+    staleTime: 1000 * 60 * 5,
   });
 
   const resolvedImobiliariaId = imobiliariaId || profile?.imobiliaria_id;
