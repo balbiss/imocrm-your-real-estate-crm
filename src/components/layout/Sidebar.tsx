@@ -321,8 +321,8 @@ export function Sidebar({ collapsed, onClose }: { collapsed: boolean; onClose?: 
                 <Loader2 className="absolute top-0.5 left-0.5 h-3 w-3 animate-spin text-white" />
               ) : (
                 <span
-                  className={`absolute top-0.5 h-3 w-3 rounded-full bg-white transition-transform ${
-                    emPlantao ? "translate-x-3" : "translate-x-0.5"
+                  className={`absolute top-0.5 left-0.5 h-3 w-3 rounded-full bg-white transition-transform ${
+                    emPlantao ? "translate-x-3" : "translate-x-0"
                   }`}
                 />
               )}

@@ -1,9 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useState } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { 
   Users, 
   MessageSquare, 
@@ -32,9 +35,25 @@ export const Route = createFileRoute("/dashboard")({
   component: DashboardPage,
 });
 
+// Primeiro e último dia do mês atual, em formato YYYY-MM-DD (o que o
+// <input type="date"> espera) -- essa é a faixa padrão do Dashboard, pedido
+// do dono (17/08): "aparecer automático do mês, mas ter opção de filtro por
+// data".
+function mesAtualRange() {
+  const hoje = new Date();
+  const inicio = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+  const fim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
+  const toISODate = (d: Date) => d.toISOString().split("T")[0];
+  return { inicio: toISODate(inicio), fim: toISODate(fim) };
+}
+
 function DashboardPage() {
   const { user } = useAuth();
   const { role, isLoading: loadingPerms } = usePermissions();
+  const mesAtual = mesAtualRange();
+  const [dataInicio, setDataInicio] = useState(mesAtual.inicio);
+  const [dataFim, setDataFim] = useState(mesAtual.fim);
+  const isMesAtual = dataInicio === mesAtual.inicio && dataFim === mesAtual.fim;
 
   // Chave de cache compartilhada com todas as outras páginas -- ver
   // agenda.tsx pro motivo (evita refazer essa consulta a cada navegação).
@@ -51,9 +70,14 @@ function DashboardPage() {
   });
 
   const { data: dashboardData, isLoading } = useQuery({
-    queryKey: ["dashboard-summary", profile?.imobiliaria_id, role],
+    queryKey: ["dashboard-summary", profile?.imobiliaria_id, role, dataInicio, dataFim],
     queryFn: async () => {
       if (!profile?.imobiliaria_id || loadingPerms) return null;
+
+      // Faixa exclusiva no fim (dataFim + 1 dia) pra pegar o dia inteiro
+      // selecionado, já que created_at/data_fechamento têm hora.
+      const inicioIso = new Date(`${dataInicio}T00:00:00`).toISOString();
+      const fimExclusivoIso = new Date(new Date(`${dataFim}T00:00:00`).getTime() + 24 * 60 * 60 * 1000).toISOString();
 
       // Antes isso baixava a tabela de leads INTEIRA pro navegador (paginando
       // de 1000 em 1000) so pra contar status e pegar os 6 mais recentes --
@@ -82,11 +106,17 @@ function DashboardPage() {
         return query;
       };
 
+      // "Total de Leads" e "Leads Novos" contam quem ENTROU no período
+      // (created_at); "Vendas" conta quem FECHOU no período
+      // (data_fechamento) -- um lead pode ter chegado meses atrás e vendido
+      // agora, não faria sentido exigir os dois na mesma janela. "Em
+      // Negociação" e "Atrasados" continuam sendo a foto de agora (estado
+      // atual), não fazem sentido "dentro de um período".
       const [totalRes, newRes, progressRes, concludedRes, overdueRes, recentRes] = await Promise.all([
-        base(),
-        base().eq("status", "novo"),
+        base().gte("created_at", inicioIso).lt("created_at", fimExclusivoIso),
+        base().eq("status", "novo").gte("created_at", inicioIso).lt("created_at", fimExclusivoIso),
         base().eq("status", "em_atendimento"),
-        base().eq("status", "venda_concluida"),
+        base().eq("status", "venda_concluida").gte("data_fechamento", inicioIso).lt("data_fechamento", fimExclusivoIso),
         base().lte("lembrete_follow_up", new Date().toISOString()).is("data_fechamento", null),
         (() => {
           let q = supabase
@@ -144,7 +174,35 @@ function DashboardPage() {
                 : "Monitoramento de performance e gestão em tempo real."}
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="space-y-1">
+              <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">De</Label>
+              <Input
+                type="date"
+                value={dataInicio}
+                onChange={(e) => setDataInicio(e.target.value)}
+                className="h-8 text-xs w-[140px]"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Até</Label>
+              <Input
+                type="date"
+                value={dataFim}
+                onChange={(e) => setDataFim(e.target.value)}
+                className="h-8 text-xs w-[140px]"
+              />
+            </div>
+            {!isMesAtual && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-[11px] font-bold uppercase tracking-wider px-3"
+                onClick={() => { setDataInicio(mesAtual.inicio); setDataFim(mesAtual.fim); }}
+              >
+                Mês Atual
+              </Button>
+            )}
             <Link to="/leads">
               <Button size="sm" className="h-8 text-[11px] font-bold uppercase tracking-wider px-4">
                 <PlusCircle className="mr-1.5 h-3.5 w-3.5" /> Adicionar Lead
@@ -159,7 +217,7 @@ function DashboardPage() {
             { title: "Total de Leads", value: dashboardData?.totalLeads || 0, icon: Users, color: "text-primary", bg: "bg-primary/5", trend: "" },
             { title: "Leads Novos", value: dashboardData?.newLeads || 0, icon: Zap, color: "text-amber-500", bg: "bg-amber-50", trend: "" },
             { title: "Em Negociação", value: dashboardData?.inProgress || 0, icon: Clock, color: "text-blue-500", bg: "bg-blue-50", trend: "" },
-            { title: "Vendas (Mês)", value: dashboardData?.concluded || 0, icon: TrendingUp, color: "text-emerald-500", bg: "bg-emerald-50", trend: "" },
+            { title: isMesAtual ? "Vendas (Mês)" : "Vendas (Período)", value: dashboardData?.concluded || 0, icon: TrendingUp, color: "text-emerald-500", bg: "bg-emerald-50", trend: "" },
           ].map((stat, i) => (
             <Card 
               key={i} 

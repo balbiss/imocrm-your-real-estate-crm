@@ -43,6 +43,14 @@ export function BolsaoResgateDialog({ open, onOpenChange, imobiliariaId }: Bolsa
       return count || 0;
     },
     enabled: open && !!user,
+    // Esse número trava a ação real (bloqueia +Mais Rebatidas). O staleTime
+    // global de 1min (ver __root.tsx) fazia o corretor devolver um lead e,
+    // se reabrisse o popup em menos de 1min, ver a contagem antiga -- achado
+    // real (24/08): "Devolver" às vezes não tirava o lead da base do
+    // corretor, mas o problema real era esse contador não refletir a
+    // devolução recém-feita, não o devolver em si (que já está correto no
+    // banco). staleTime: 0 força buscar de novo toda vez que o popup abre.
+    staleTime: 0,
   });
 
   // Rebatidas hoje: conta pelo log de distribuição (quando foi PUXADA), não
@@ -63,6 +71,7 @@ export function BolsaoResgateDialog({ open, onOpenChange, imobiliariaId }: Bolsa
       return count || 0;
     },
     enabled: open && !!user,
+    staleTime: 0, // mesmo motivo do contador de tarefas atrasadas acima
   });
 
   // RPC dedicada (não select cru + .limit(500)): a Rebatida acumula
