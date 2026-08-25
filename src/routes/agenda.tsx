@@ -97,6 +97,40 @@ function AgendaPage() {
     enabled: !!profile?.imobiliaria_id && !loadingPerms,
   });
 
+  // Visão do calendário (grid mensal) é sempre da imobiliária inteira, mesmo
+  // pra corretor -- RLS de "leads" restringe SELECT normal a corretor_id =
+  // auth.uid() pra esse papel, então sem isso corretor não via agendamento
+  // de ninguém além do próprio e podia marcar cliente em cima de outro
+  // horário já ocupado. RPC SECURITY DEFINER expõe só o essencial pro
+  // calendário (nome do cliente, corretor, data/tipo/status), sem telefone
+  // nem histórico de lead alheio.
+  const { data: agendaVisitas } = useQuery({
+    queryKey: ["agenda-visitas", profile?.imobiliaria_id],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("listar_agenda_visitas");
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!profile?.imobiliaria_id,
+  });
+
+  const calendarEvents: CalendarEvent[] = React.useMemo(() => {
+    if (!agendaVisitas) return [];
+    return agendaVisitas.map((v: any) => ({
+      id: `${v.lead_id}-visita`,
+      lead_id: v.lead_id,
+      nome: v.nome,
+      status: "",
+      telefone: "",
+      date: new Date(v.data_visita),
+      type: v.tipo_visita === "FID" ? "fid" : "visita",
+      corretor_id: v.corretor_id,
+      corretor_nome: v.corretor_nome || "Sem Corretor",
+      status_visita: v.status_visita || "AGENDADA",
+      favorito: !!v.favorito,
+    }));
+  }, [agendaVisitas]);
+
   const { data: corretores } = useQuery({
     queryKey: ["corretores-agenda", profile?.imobiliaria_id],
     queryFn: async () => {
@@ -298,7 +332,7 @@ function AgendaPage() {
                   // A grade do Calendário é só pra visita/FID agendada — os
                   // follow-ups continuam aparecendo normalmente na aba
                   // "Lista de Tarefas" (atrasadas/a fazer/futuras usam allEvents).
-                  const dayEvents = allEvents.filter(e => (e.type === 'visita' || e.type === 'fid') && isSameDay(e.date, day));
+                  const dayEvents = calendarEvents.filter(e => isSameDay(e.date, day));
                   const isCurrentMonth = isSameMonth(day, currentMonth);
                   const isTodayDate = isToday(day);
 
@@ -329,14 +363,12 @@ function AgendaPage() {
                                 setIsModalOpen(true);
                               }}
                               className="flex items-center gap-1.5 text-[9px] md:text-[10px] p-0.5 rounded hover:bg-slate-100 cursor-pointer font-bold text-slate-600 transition-colors"
-                              title={event.nome}
+                              title={`${event.corretor_nome} - ${event.type === 'fid' ? 'FID' : 'Visita'} - ${event.nome}`}
                             >
                               <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${dotColor}`} />
                               <span className="opacity-70 flex-shrink-0">{format(event.date, "HH:mm")}</span>
                               <span className="truncate uppercase tracking-tight">
-                                {event.type === 'follow_up' 
-                                  ? event.nome.split(' ')[0] 
-                                  : `${event.nome.split(' ')[0]} - ${event.type === 'fid' ? 'FID' : 'Visita'}`}
+                                {`${(event.corretor_nome || "").split(' ')[0]} - ${event.type === 'fid' ? 'FID' : 'Visita'} - ${event.nome.split(' ')[0]}`}
                               </span>
                             </div>
                           );
