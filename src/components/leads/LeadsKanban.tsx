@@ -374,13 +374,23 @@ export function LeadsKanban({ leads: initialLeads, isLoading: initialLoading, im
                           </DropdownMenu>
                         </div>
                       </div>
-                      <Badge
-                        variant="outline"
-                        title={lead.origem || "Site"}
-                        className="text-[8px] h-3.5 px-1 max-w-[92px] shrink-0 truncate font-bold border-slate-200 text-slate-500 bg-slate-50 uppercase"
-                      >
-                        {lead.origem || "Site"}
-                      </Badge>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {lead.recadastro_em && (
+                          <Badge
+                            title={`Cadastrou de novo em ${new Date(lead.recadastro_em).toLocaleDateString("pt-BR")}${lead.recadastro_origem ? ` (${lead.recadastro_origem})` : ""}`}
+                            className="text-[8px] h-3.5 px-1 font-black border-none bg-red-100 text-red-700 uppercase"
+                          >
+                            2º cad
+                          </Badge>
+                        )}
+                        <Badge
+                          variant="outline"
+                          title={lead.origem || "Site"}
+                          className="text-[8px] h-3.5 px-1 max-w-[92px] truncate font-bold border-slate-200 text-slate-500 bg-slate-50 uppercase"
+                        >
+                          {lead.origem || "Site"}
+                        </Badge>
+                      </div>
                     </div>
                   </CardHeader>
                   <CardContent className="p-2.5 pt-0 flex flex-col gap-2">

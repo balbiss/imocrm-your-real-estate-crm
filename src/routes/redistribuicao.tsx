@@ -149,16 +149,17 @@ function RedistributionPage() {
         } else if (activeTab === "descartados") {
           // Descarte "normal" (Sem Resposta, Não Tem Interesse, etc) --
           // volta pro bolsão com 1 clique. Os motivos extremos (Descadastrar
-          // / Já Comprou) já aprovados pelo dono ficam de fora daqui, numa
-          // aba própria (ver "descadastrados" abaixo) porque, ao contrário
-          // do descarte normal, esses já foram validados como definitivos.
+          // / Já Comprou / Contato Errado) já aprovados pelo dono ficam de
+          // fora daqui, numa aba própria (ver "descadastrados" abaixo) porque,
+          // ao contrário do descarte normal, esses já foram validados como
+          // definitivos.
           query = query
             .not("descartado_em", "is", null)
-            .not("motivo_descarte", "in", '("Descadastrar","Já Comprou (Outra Empresa)")');
+            .not("motivo_descarte", "in", '("Descadastrar","Já Comprou (Outra Empresa)","Contato Errado")');
         } else if (activeTab === "descadastrados") {
           query = query
             .not("descartado_em", "is", null)
-            .in("motivo_descarte", ["Descadastrar", "Já Comprou (Outra Empresa)"]);
+            .in("motivo_descarte", ["Descadastrar", "Já Comprou (Outra Empresa)", "Contato Errado"]);
         } else {
           // Regra de redistribuição: tentativas >= 5 ou sem contato há > 24h
           const yesterday = new Date();

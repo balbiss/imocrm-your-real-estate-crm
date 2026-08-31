@@ -514,6 +514,8 @@ export type Database = {
           nome: string
           origem: string | null
           primeiro_contato_em: string | null
+          recadastro_em: string | null
+          recadastro_origem: string | null
           referencia: string | null
           renda_familiar: number | null
           saldo_fgts: number | null
@@ -560,6 +562,8 @@ export type Database = {
           nome: string
           origem?: string | null
           primeiro_contato_em?: string | null
+          recadastro_em?: string | null
+          recadastro_origem?: string | null
           referencia?: string | null
           renda_familiar?: number | null
           saldo_fgts?: number | null
@@ -606,6 +610,8 @@ export type Database = {
           nome?: string
           origem?: string | null
           primeiro_contato_em?: string | null
+          recadastro_em?: string | null
+          recadastro_origem?: string | null
           referencia?: string | null
           renda_familiar?: number | null
           saldo_fgts?: number | null

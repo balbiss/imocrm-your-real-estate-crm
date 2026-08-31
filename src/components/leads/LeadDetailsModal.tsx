@@ -420,7 +420,7 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
         observacao: obsDescarte,
       });
 
-      const isExtreme = motivoDescarte === "Descadastrar" || motivoDescarte === "Já Comprou (Outra Empresa)";
+      const isExtreme = motivoDescarte === "Descadastrar" || motivoDescarte === "Já Comprou (Outra Empresa)" || motivoDescarte === "Contato Errado";
       
       if (isExtreme) {
         // Fluxo de Aprovação Gerencial (O lead "morre" da tela do corretor mas aguarda aprovação)
@@ -638,7 +638,7 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
                     </Button>
                   </div>
                 )}
-                <div className="flex items-center gap-2 mt-1">
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
                   <Badge variant="secondary" className="h-4 px-1.5 text-[9px] font-bold uppercase bg-slate-100 text-slate-500 border-none">
                     {lead.status.replace("_", " ")}
                   </Badge>
@@ -646,6 +646,12 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
                     <span className="text-[10px] font-medium text-slate-400">
                       Desde {format(new Date(lead.created_at), "dd/MM/yy 'às' HH:mm")}
                     </span>
+                  )}
+                  {lead.recadastro_em && (
+                    <Badge className="h-4 px-1.5 text-[9px] font-black uppercase bg-red-100 text-red-700 border-none">
+                      Segundo cadastro · {format(new Date(lead.recadastro_em), "dd/MM/yy")}
+                      {lead.recadastro_origem ? ` (${lead.recadastro_origem})` : ""}
+                    </Badge>
                   )}
                 </div>
               </div>
@@ -1226,6 +1232,7 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
                     <SelectItem value="Aprovado/Desistiu">Aprovado/Desistiu</SelectItem>
                     <SelectItem value="Descadastrar" className="text-red-600 font-bold">Descadastrar (Requer Aprovação)</SelectItem>
                     <SelectItem value="Já Comprou (Outra Empresa)" className="text-red-600 font-bold">Já Comprou - Outra Empresa (Requer Aprovação)</SelectItem>
+                    <SelectItem value="Contato Errado" className="text-red-600 font-bold">Contato Errado (Requer Aprovação)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1242,7 +1249,7 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
                 <Button 
                   className="flex-1 bg-orange-600 hover:bg-orange-700" 
                   onClick={handleDescarte} 
-                  disabled={!motivoDescarte || ((motivoDescarte === "Descadastrar" || motivoDescarte === "Já Comprou (Outra Empresa)") && !obsDescarte.trim())}
+                  disabled={!motivoDescarte || ((motivoDescarte === "Descadastrar" || motivoDescarte === "Já Comprou (Outra Empresa)" || motivoDescarte === "Contato Errado") && !obsDescarte.trim())}
                 >
                   Confirmar Devolução
                 </Button>

@@ -243,7 +243,7 @@ function ManualPage() {
 
             <Section id="leads" title="Leads e Kanban" roles={["todos"]} lede="O coração do sistema. Cada lead é um cartão que anda por colunas conforme avança no atendimento — da primeira mensagem até a venda ou descarte.">
               <p><strong>Fluxo das colunas:</strong> Lead Novo → Tarefas → Agendado → Visitou → Cobrar Doc → Pendente → Aprovado. As colunas de Rebatida (lead que voltou a responder) e Sem Resposta ficam paralelas ao fluxo principal. É possível renomear/reordenar colunas em <a href="#configuracoes">Configurações</a>.</p>
-              <p><strong>Temperatura</strong> indica quão quente está o interesse. <strong>SLA de 5 minutos</strong> marca um lead novo como atrasado se ninguém responder a tempo. <strong>Devolver</strong> manda o lead de volta ao Bolsão sem corretor. <strong>Descartar</strong> encerra o lead — descarte extremo (ex: "Já Comprou") exige aprovação, veja <a href="#aprovacoes">Aprovações</a>. <strong>Fechar venda</strong> não fecha na hora — o valor e os detalhes vão pra aprovação do dono/gerente antes de virar venda de verdade.</p>
+              <p><strong>Temperatura</strong> indica quão quente está o interesse. <strong>SLA de 5 minutos</strong> marca um lead novo como atrasado se ninguém responder a tempo. <strong>Devolver</strong> manda o lead de volta ao Bolsão sem corretor. <strong>Descartar</strong> encerra o lead — descarte extremo ("Descadastrar", "Já Comprou", "Contato Errado") exige observação e aprovação do dono/gerente, veja <a href="#aprovacoes">Aprovações</a>. <strong>Fechar venda</strong> não fecha na hora — o valor e os detalhes vão pra aprovação do dono/gerente antes de virar venda de verdade.</p>
               <p><strong>Filtros da tela (busca, temperatura, coluna, cidade, corretor, data):</strong> a barra no topo filtra a lista/Kanban por qualquer combinação desses campos. O filtro de data usa dois campos (início/fim) e considera <em>quando o lead entrou no CRM</em> — útil pra saber quantos leads novos, rebatidas etc aconteceram num dia específico.</p>
               <div className="flex flex-wrap items-baseline gap-2">
                 <RoleBadge role="dono" />
@@ -273,8 +273,13 @@ function ManualPage() {
               <Callout title="Alerta de possível duplicidade">
                 Se uma mensagem chega em um número diferente do corretor responsável — ou de um lead marcado como rebatida — dono e gerente recebem uma notificação avisando, para decidirem se transferem o atendimento.
               </Callout>
-              <Callout title="Um número que já é lead 'reaparece' sozinho no funil">
-                Quando o Facebook reenvia um cadastro antigo do mesmo anúncio (isso acontece, é do lado da Meta, não do CRM), o sistema não cria um lead duplicado — ele atualiza o lead que já existia. Se esse lead estava sem corretor, ele é redistribuído pela roleta na hora e o corretor sorteado recebe o mesmo aviso de lead novo (som + pop-up).
+              <Callout title="Cliente se cadastra de novo (mesmo telefone)">
+                O sistema <strong>nunca cria um segundo card</strong> pro mesmo telefone. Quando um cliente que já é lead preenche um formulário de novo:
+                <ul className="list-disc pl-4 mt-1 space-y-0.5">
+                  <li>Se ele <strong>já está com um corretor</strong>, continua com esse corretor. O corretor recebe uma notificação ("seu lead se cadastrou de novo numa campanha") e o card ganha o selo vermelho <strong>SEGUNDO CADASTRO</strong> com a data — é sinal de interesse forte.</li>
+                  <li>Se ele estava <strong>sem corretor</strong> (rebatida/bolsão), entra na roleta na hora; se não tiver ninguém disponível, fica na rebatida e dono/gerente são avisados.</li>
+                </ul>
+                No card, "Desde dd/mm/aa" continua mostrando a data do <strong>primeiro</strong> cadastro.
               </Callout>
             </Section>
 
@@ -291,7 +296,7 @@ function ManualPage() {
               <p><strong>Rebatidas Geral (Bolsão):</strong> todo lead sem corretor, incluindo os antigos — a lista completa, sem filtrar por "nunca teve dono". Mostra os 500 mais antigos por padrão (a base pode ter milhares); o <strong>filtro de cidade</strong> busca no banco antes desse corte, então filtrar por uma cidade específica sempre traz os leads certos dela, mesmo que o lote seja mais recente que os 500 mais antigos gerais.</p>
               <p><strong>Presos para Redistribuir:</strong> leads com corretor, mas parados há tempo demais sem movimento (5 ou mais tentativas de contato, ou mais de 24h sem sair de "Novo").</p>
               <p><strong>Leads Descartados:</strong> descartes normais (Sem Resposta, Não Tem Interesse, etc) — têm botão <strong>Reativar</strong>, que devolve o lead pro Bolsão do zero (sem corretor, sem histórico do descarte).</p>
-              <p><strong>Lead Descadastrar:</strong> só os descartes extremos (Descadastrar / Já Comprou em Outra Empresa) que já foram aprovados pelo dono em <a href="#aprovacoes">Aprovações</a> — ficam numa aba própria porque são definitivos, diferente de um descarte normal que qualquer corretor pode reverter puxando de novo.</p>
+              <p><strong>Lead Descadastrar:</strong> só os descartes extremos (Descadastrar / Já Comprou em Outra Empresa / Contato Errado) que já foram aprovados pelo dono em <a href="#aprovacoes">Aprovações</a> — ficam numa aba própria porque são definitivos, diferente de um descarte normal que qualquer corretor pode reverter puxando de novo.</p>
               <p><strong>Histórico da Roleta:</strong> mostra, lead por lead, pra qual corretor a roleta automática mandou e em que data/hora — só o que a roleta decidiu sozinha, não o que foi transferido manualmente (isso fica registrado à parte, no próprio card do lead).</p>
               <p>Um campo de busca por nome, telefone ou corretor ajuda a localizar um lead rápido dentro dessas listas. Quando o lead distribuído (individualmente ou em massa) é um Lead Novo genuíno — nunca teve corretor antes — ele sempre avisa o corretor (som + pop-up + contagem de SLA), mesmo em "Ações em Massa"; distribuição de rebatida em massa continua silenciosa, só a transferência individual ("Encaminhar para...") avisa nesse caso, pra não virar spam de notificação.</p>
               <p><strong>Filtro de cidade/bairro:</strong> tanto em "+ Mais Rebatidas" quanto nos filtros de cidade em Leads e Rebatidas Geral, cidades com grafia parecida (acento, maiúscula) são agrupadas como uma só opção.</p>
