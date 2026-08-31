@@ -81,6 +81,15 @@ webhookRouter.post("/waha", async (req, res) => {
     if (event === "session.status") {
       await handleWahaStatus(session, payload || {});
     } else if (event === "message" || event === "message.any") {
+      // Ao conectar, o WAHA re-emite o HISTORICO recente de conversas como
+      // eventos "message" -- isso criava um monte de lead de conversa antiga
+      // (achado real: 22 mensagens de um cliente do dia todo chegando de uma
+      // vez ao conectar). So processa mensagem fresca (<10min).
+      const ts = Number(payload?.timestamp || payload?._data?.messageTimestamp || 0);
+      const idadeSeg = ts ? Date.now() / 1000 - ts : 0;
+      if (idadeSeg > 600) {
+        return res.json({ success: true, skipped: "historico" });
+      }
       const instance = await getInstanceBySession(session);
       const normalized = normalizeWahaMessage(payload || {});
       if (normalized) {
