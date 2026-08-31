@@ -524,6 +524,7 @@ export type Database = {
           status: Database["public"]["Enums"]["lead_status"]
           status_visita: string | null
           telefone: string
+          telefone_alternativo: string | null
           temperatura: Database["public"]["Enums"]["lead_temperatura"] | null
           tentativas_contato: number | null
           tipo_imovel_interesse: string | null
@@ -572,6 +573,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["lead_status"]
           status_visita?: string | null
           telefone: string
+          telefone_alternativo?: string | null
           temperatura?: Database["public"]["Enums"]["lead_temperatura"] | null
           tentativas_contato?: number | null
           tipo_imovel_interesse?: string | null
@@ -620,6 +622,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["lead_status"]
           status_visita?: string | null
           telefone?: string
+          telefone_alternativo?: string | null
           temperatura?: Database["public"]["Enums"]["lead_temperatura"] | null
           tentativas_contato?: number | null
           tipo_imovel_interesse?: string | null

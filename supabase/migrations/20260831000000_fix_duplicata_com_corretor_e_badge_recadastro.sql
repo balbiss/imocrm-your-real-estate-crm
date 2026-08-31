@@ -27,6 +27,15 @@ ALTER TABLE public.leads
   ADD COLUMN IF NOT EXISTS recadastro_em timestamptz,
   ADD COLUMN IF NOT EXISTS recadastro_origem text;
 
+-- Telefone alternativo: o formulario da Meta ganhou um campo "confirme o seu
+-- telefone". Quando o numero digitado la for DIFERENTE do phone_number (em
+-- ~22% dos casos que tem o campo, e as vezes o principal e' que veio
+-- quebrado), guarda os dois -- o corretor tenta o alternativo se o principal
+-- nao atender. Preenchido pelo n8n (workflow "FACEBOOK FORM - CAPTACAO
+-- LEADS") e exibido no card (LeadDetailsModal).
+ALTER TABLE public.leads
+  ADD COLUMN IF NOT EXISTS telefone_alternativo text;
+
 -- ===========================================================================
 -- PERF (bug real: "CRM carregando infinitamente" / "Melissa nao consegue
 -- entrar"): get_auth_imobiliaria_id() e get_auth_role() -- as duas funcoes

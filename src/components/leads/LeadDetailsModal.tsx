@@ -704,6 +704,18 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
                           <a href={`https://wa.me/55${lead.telefone.replace(/\D/g, "")}`} target="_blank" rel="noreferrer"><MessageSquare className="h-4 w-4" /></a>
                         </Button>
                       </div>
+                      {lead.telefone_alternativo && lead.telefone_alternativo.replace(/\D/g, "") !== lead.telefone.replace(/\D/g, "") && (
+                        <div className="flex gap-2 items-center pt-1">
+                          <span className="text-[10px] font-bold text-amber-600 uppercase shrink-0">2º nº (form):</span>
+                          <span className="text-sm text-slate-600 flex-1">{lead.telefone_alternativo}</span>
+                          <Button size="sm" variant="outline" className="h-7 px-2 text-[10px] font-bold text-slate-500" onClick={() => { setEditTelefone(lead.telefone_alternativo!); handleUpdateField("telefone", lead.telefone_alternativo!); }}>
+                            Usar este
+                          </Button>
+                          <Button size="sm" variant="outline" className="h-7 px-2 text-green-600 border-green-100 bg-green-50" asChild>
+                            <a href={`https://wa.me/55${lead.telefone_alternativo.replace(/\D/g, "")}`} target="_blank" rel="noreferrer"><MessageSquare className="h-3.5 w-3.5" /></a>
+                          </Button>
+                        </div>
+                      )}
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">E-mail</Label>
