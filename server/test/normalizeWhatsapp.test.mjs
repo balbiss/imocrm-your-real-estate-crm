@@ -117,3 +117,45 @@ test("waha: midia com URL vira media com ref = URL", () => {
 test("waha: payload sem id e' descartado", () => {
   assert.equal(normalizeWahaMessage({ from: "x@c.us" }), null);
 });
+
+test("waha: @lid resolve pro numero real via _data.key.remoteJidAlt", () => {
+  const n = normalizeWahaMessage({
+    id: "false_226838882291903@lid_ABC",
+    from: "226838882291903@lid",
+    fromMe: false,
+    body: "oi",
+    _data: {
+      key: { remoteJidAlt: "5512982973348@s.whatsapp.net", addressingMode: "lid" },
+      pushName: "Renata Stefany",
+    },
+  });
+  assert.equal(n.contactPhone, "5512982973348");
+  assert.equal(n.pushName, "Renata Stefany");
+  assert.equal(n.text, "oi");
+});
+
+test("waha: @lid sem numero real -> descarta (null)", () => {
+  assert.equal(
+    normalizeWahaMessage({ id: "x", from: "226838882291903@lid", fromMe: false, body: "oi", _data: {} }),
+    null
+  );
+});
+
+test("waha: @newsletter / @broadcast -> ignora", () => {
+  assert.equal(normalizeWahaMessage({ id: "x", from: "120363@newsletter", fromMe: false }).isGroup, true);
+  assert.equal(normalizeWahaMessage({ id: "x", from: "status@broadcast", fromMe: false }).isGroup, true);
+});
+
+test("waha: numero gigante (id interno) -> descarta", () => {
+  assert.equal(
+    normalizeWahaMessage({ id: "x", from: "120363173003902460@c.us", fromMe: false, body: "oi" }),
+    null
+  );
+});
+
+test("baileys: @lid sem remoteJidAlt -> descarta", () => {
+  assert.equal(
+    normalizeBaileysMessage({ key: { remoteJid: "226838882291903@lid", id: "L2" }, message: { conversation: "oi" } }),
+    null
+  );
+});
