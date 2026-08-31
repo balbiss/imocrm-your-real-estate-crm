@@ -9,15 +9,16 @@ import { AprovacoesVendaDialog } from "@/components/leads/AprovacoesVendaDialog"
 import { ManageColumnsDialog } from "@/components/leads/ManageColumnsDialog";
 
 import { Button } from "@/components/ui/button";
-import { Plus, Filter, Search, List, Kanban, AlertCircle, Clock, Flame, Snowflake, Sun, Loader2, RefreshCw, User, Sliders, MapPin } from "lucide-react";
+import { Plus, Filter, Search, List, Kanban, AlertCircle, Clock, Loader2, RefreshCw, Sliders, MoreHorizontal, X } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useState, useEffect } from "react";
@@ -236,9 +237,25 @@ function LeadsPage() {
 
   const cidadesDisponiveis = dedupCidades((leads || []).map(l => l.bairro_interesse));
 
-  const leadsVencidosCount = leads?.filter(l => 
+  const leadsVencidosCount = leads?.filter(l =>
     l.lembrete_follow_up && new Date(l.lembrete_follow_up) <= new Date() && !l.data_fechamento
   ).length || 0;
+
+  const filtrosAtivos =
+    (tempFilter ? 1 : 0) +
+    (statusFilter !== "todos" ? 1 : 0) +
+    (cidadeFilter !== "todas" ? 1 : 0) +
+    (corretorFilter !== "todos" ? 1 : 0) +
+    (dataInicioFiltro || dataFimFiltro ? 1 : 0);
+
+  const limparFiltros = () => {
+    setTempFilter(null);
+    setStatusFilter("todos");
+    setCidadeFilter("todas");
+    setCorretorFilter("todos");
+    setDataInicioFiltro("");
+    setDataFimFiltro("");
+  };
 
   return (
     <MainLayout>
@@ -250,134 +267,11 @@ function LeadsPage() {
               Acompanhe e converta seus leads de forma eficiente através do funil.
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className={`h-9 px-3 border-slate-200 ${tempFilter ? 'bg-primary/5 border-primary/20' : ''}`}>
-                  <Filter className={`h-3.5 w-3.5 mr-1.5 ${tempFilter ? 'text-primary' : 'text-slate-400'}`} /> 
-                  <span className="text-[10px] font-bold uppercase">
-                    {tempFilter ? `Filtro: ${tempFilter}` : 'Filtros'}
-                  </span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuLabel className="text-[10px] uppercase font-bold text-slate-400">Temperatura</DropdownMenuLabel>
-                <DropdownMenuItem onClick={() => setTempFilter(null)} className="text-xs cursor-pointer">Todas</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setTempFilter('quente')} className="text-xs cursor-pointer flex items-center gap-2">
-                  <Flame className="h-3 w-3 text-red-500" /> Quente
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setTempFilter('morno')} className="text-xs cursor-pointer flex items-center gap-2">
-                  <Sun className="h-3 w-3 text-amber-500" /> Morno
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setTempFilter('frio')} className="text-xs cursor-pointer flex items-center gap-2">
-                  <Snowflake className="h-3 w-3 text-blue-500" /> Frio
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            {colunas && colunas.length > 0 && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className={`h-9 px-3 border-slate-200 ${statusFilter !== 'todos' ? 'bg-primary/5 border-primary/20' : ''}`}>
-                    <Filter className={`h-3.5 w-3.5 mr-1.5 ${statusFilter !== 'todos' ? 'text-primary' : 'text-slate-400'}`} />
-                    <span className="text-[10px] font-bold uppercase">
-                      {statusFilter !== 'todos' ? colunas.find(c => c.id === statusFilter)?.nome || 'Status' : 'Status'}
-                    </span>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-48 max-h-64 overflow-y-auto">
-                  <DropdownMenuLabel className="text-[10px] uppercase font-bold text-slate-400">Filtrar por status</DropdownMenuLabel>
-                  <DropdownMenuItem onClick={() => setStatusFilter('todos')} className="text-xs cursor-pointer font-bold">Todos os Status</DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  {colunas.map(coluna => (
-                    <DropdownMenuItem key={coluna.id} onClick={() => setStatusFilter(coluna.id)} className="text-xs cursor-pointer">
-                      {coluna.nome}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-
-            {cidadesDisponiveis.length > 0 && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className={`h-9 px-3 border-slate-200 ${cidadeFilter !== 'todas' ? 'bg-primary/5 border-primary/20' : ''}`}>
-                    <MapPin className={`h-3.5 w-3.5 mr-1.5 ${cidadeFilter !== 'todas' ? 'text-primary' : 'text-slate-400'}`} />
-                    <span className="text-[10px] font-bold uppercase">
-                      {cidadeFilter !== 'todas' ? cidadeFilter : 'Cidade'}
-                    </span>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-48 max-h-64 overflow-y-auto">
-                  <DropdownMenuLabel className="text-[10px] uppercase font-bold text-slate-400">Filtrar por cidade</DropdownMenuLabel>
-                  <DropdownMenuItem onClick={() => setCidadeFilter('todas')} className="text-xs cursor-pointer font-bold">Todas as Cidades</DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  {cidadesDisponiveis.map(cidade => (
-                    <DropdownMenuItem key={cidade} onClick={() => setCidadeFilter(cidade)} className="text-xs cursor-pointer">
-                      {cidade}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-
-            <div className="flex items-center gap-1.5">
-              <Input
-                type="date"
-                value={dataInicioFiltro}
-                onChange={(e) => setDataInicioFiltro(e.target.value)}
-                className="h-9 w-[136px] text-[11px] font-bold border-slate-200"
-                title="Data de início (quando o lead entrou)"
-              />
-              <span className="text-[10px] font-bold text-slate-300">até</span>
-              <Input
-                type="date"
-                value={dataFimFiltro}
-                onChange={(e) => setDataFimFiltro(e.target.value)}
-                className="h-9 w-[136px] text-[11px] font-bold border-slate-200"
-                title="Data de fim"
-              />
-              {(dataInicioFiltro || dataFimFiltro) && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-9 px-2 text-[10px] font-bold text-slate-400"
-                  onClick={() => { setDataInicioFiltro(""); setDataFimFiltro(""); }}
-                >
-                  Limpar
-                </Button>
-              )}
-            </div>
-
-            {canMonitor && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className={`h-9 px-3 border-slate-200 ${corretorFilter !== 'todos' ? 'bg-primary/5 border-primary/20' : ''}`}>
-                    <User className={`h-3.5 w-3.5 mr-1.5 ${corretorFilter !== 'todos' ? 'text-primary' : 'text-slate-400'}`} /> 
-                    <span className="text-[10px] font-bold uppercase">
-                      {corretorFilter === 'meus' ? 'Meus Leads' : corretorFilter !== 'todos' ? 'Filtro Corretor' : 'Corretor'}
-                    </span>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-48 max-h-64 overflow-y-auto">
-                  <DropdownMenuLabel className="text-[10px] uppercase font-bold text-slate-400">Filtrar por</DropdownMenuLabel>
-                  <DropdownMenuItem onClick={() => setCorretorFilter('todos')} className="text-xs cursor-pointer font-bold">Todos os Leads</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setCorretorFilter('meus')} className="text-xs cursor-pointer font-bold text-primary">Meus Leads</DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuLabel className="text-[10px] uppercase font-bold text-slate-400">Equipe</DropdownMenuLabel>
-                  {Array.from(new Map(leads?.filter(l => l.corretor && l.corretor_id).map(l => [l.corretor_id, l.corretor])).entries()).map(([id, c]: any) => (
-                    <DropdownMenuItem key={id} onClick={() => setCorretorFilter(id)} className="text-xs cursor-pointer">
-                      {c.nome}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-
+          <div className="flex items-center gap-2 flex-wrap">
             {canMonitor && (
               <Button
                 variant="outline"
-                className="h-9 px-4 font-bold uppercase text-[10px] tracking-wider border-red-200 text-red-600 hover:bg-red-50 bg-white relative"
+                className="h-9 px-3 font-bold uppercase text-[10px] tracking-wider border-red-200 text-red-600 hover:bg-red-50 bg-white relative"
                 onClick={() => setIsAprovacoesOpen(true)}
               >
                 Aprovações
@@ -388,11 +282,10 @@ function LeadsPage() {
                 )}
               </Button>
             )}
-
             {canMonitor && (
               <Button
                 variant="outline"
-                className="h-9 px-4 font-bold uppercase text-[10px] tracking-wider border-green-200 text-green-600 hover:bg-green-50 bg-white relative"
+                className="h-9 px-3 font-bold uppercase text-[10px] tracking-wider border-green-200 text-green-600 hover:bg-green-50 bg-white relative"
                 onClick={() => setIsAprovacoesVendaOpen(true)}
               >
                 Aprovar Vendas
@@ -404,17 +297,25 @@ function LeadsPage() {
               </Button>
             )}
 
-            <Button variant="outline" size="sm" className="h-9 px-4 font-bold uppercase text-[10px] tracking-wider border-orange-200 text-orange-600 hover:bg-orange-50 bg-white" onClick={() => setIsBolsaoOpen(true)}>
-              <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> + Mais Rebatidas
-            </Button>
-
-            <Button variant="outline" size="sm" className="h-9 px-4 font-bold uppercase text-[10px] tracking-wider border-slate-200 text-slate-700 hover:bg-slate-50 bg-white" onClick={() => setIsManageColumnsOpen(true)}>
-              <Sliders className="mr-1.5 h-3.5 w-3.5 text-slate-400" /> Gerenciar Funil
-            </Button>
-
             <Button size="sm" className="h-9 px-4 font-bold uppercase text-[10px] tracking-wider" onClick={() => setIsNewLeadOpen(true)}>
               <Plus className="mr-1.5 h-3.5 w-3.5" /> Novo Lead
             </Button>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="h-9 w-9 p-0 border-slate-200">
+                  <MoreHorizontal className="h-4 w-4 text-slate-500" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52">
+                <DropdownMenuItem onClick={() => setIsBolsaoOpen(true)} className="text-xs cursor-pointer gap-2">
+                  <RefreshCw className="h-3.5 w-3.5 text-orange-500" /> + Mais Rebatidas
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setIsManageColumnsOpen(true)} className="text-xs cursor-pointer gap-2">
+                  <Sliders className="h-3.5 w-3.5 text-slate-400" /> Gerenciar Funil
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
@@ -439,17 +340,156 @@ function LeadsPage() {
           </div>
         )}
 
-        <div className="flex flex-col sm:flex-row items-center gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
           <div className="relative flex-1 w-full max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-            <Input 
-              placeholder="Buscar por nome, e-mail, telefone, campanha, bairro, chamada..." 
+            <Input
+              placeholder="Buscar por nome, e-mail, telefone, campanha, bairro..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-9 h-9 text-saas-sm border-slate-200 focus-visible:ring-primary/20" 
+              className="pl-9 h-9 text-saas-sm border-slate-200 focus-visible:ring-primary/20"
             />
           </div>
-          <div className="flex items-center gap-4">
+
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className={`h-9 px-3 border-slate-200 shrink-0 ${filtrosAtivos ? "bg-primary/5 border-primary/20" : ""}`}
+              >
+                <Filter className={`h-3.5 w-3.5 mr-1.5 ${filtrosAtivos ? "text-primary" : "text-slate-400"}`} />
+                <span className="text-[10px] font-bold uppercase">Filtros</span>
+                {!!filtrosAtivos && (
+                  <span className="ml-1.5 h-4 min-w-4 px-1 rounded-full bg-primary text-white text-[9px] font-black flex items-center justify-center">
+                    {filtrosAtivos}
+                  </span>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-72 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">Filtros</span>
+                {!!filtrosAtivos && (
+                  <button
+                    onClick={limparFiltros}
+                    className="text-[10px] font-bold text-slate-400 hover:text-slate-600 flex items-center gap-1"
+                  >
+                    <X className="h-3 w-3" /> Limpar tudo
+                  </button>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-[10px] font-bold uppercase text-slate-400">Temperatura</Label>
+                <div className="grid grid-cols-4 gap-1">
+                  {[
+                    { v: null as string | null, label: "Todas" },
+                    { v: "quente", label: "Quente" },
+                    { v: "morno", label: "Morno" },
+                    { v: "frio", label: "Frio" },
+                  ].map((o) => (
+                    <Button
+                      key={o.label}
+                      variant="outline"
+                      size="sm"
+                      className={`h-7 px-0 text-[10px] font-bold ${
+                        tempFilter === o.v
+                          ? "bg-primary/10 border-primary/30 text-primary"
+                          : "border-slate-200 text-slate-500"
+                      }`}
+                      onClick={() => setTempFilter(o.v)}
+                    >
+                      {o.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              {colunas && colunas.length > 0 && (
+                <div className="space-y-1">
+                  <Label className="text-[10px] font-bold uppercase text-slate-400">Etapa do funil</Label>
+                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <SelectTrigger className="h-8 text-xs border-slate-200">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="todos" className="text-xs">Todas as etapas</SelectItem>
+                      {colunas.map((c) => (
+                        <SelectItem key={c.id} value={c.id} className="text-xs">
+                          {c.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {cidadesDisponiveis.length > 0 && (
+                <div className="space-y-1">
+                  <Label className="text-[10px] font-bold uppercase text-slate-400">Cidade / bairro</Label>
+                  <Select value={cidadeFilter} onValueChange={setCidadeFilter}>
+                    <SelectTrigger className="h-8 text-xs border-slate-200">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-60">
+                      <SelectItem value="todas" className="text-xs">Todas as cidades</SelectItem>
+                      {cidadesDisponiveis.map((c) => (
+                        <SelectItem key={c} value={c} className="text-xs">
+                          {c}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {canMonitor && (
+                <div className="space-y-1">
+                  <Label className="text-[10px] font-bold uppercase text-slate-400">Corretor</Label>
+                  <Select value={corretorFilter} onValueChange={setCorretorFilter}>
+                    <SelectTrigger className="h-8 text-xs border-slate-200">
+                      <SelectValue placeholder="Todos os corretores" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-60">
+                      <SelectItem value="todos" className="text-xs">Todos os corretores</SelectItem>
+                      <SelectItem value="meus" className="text-xs">Meus leads</SelectItem>
+                      {Array.from(
+                        new Map(
+                          leads?.filter((l) => l.corretor && l.corretor_id).map((l) => [l.corretor_id, l.corretor])
+                        ).entries()
+                      ).map(([id, c]: any) => (
+                        <SelectItem key={id} value={id} className="text-xs">
+                          {c.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              <div className="space-y-1">
+                <Label className="text-[10px] font-bold uppercase text-slate-400">Entrou no CRM entre</Label>
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    type="date"
+                    value={dataInicioFiltro}
+                    onChange={(e) => setDataInicioFiltro(e.target.value)}
+                    className="h-8 text-[11px] font-bold border-slate-200"
+                  />
+                  <span className="text-[10px] font-bold text-slate-300">até</span>
+                  <Input
+                    type="date"
+                    value={dataFimFiltro}
+                    onChange={(e) => setDataFimFiltro(e.target.value)}
+                    className="h-8 text-[11px] font-bold border-slate-200"
+                  />
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+
+          <div className="flex items-center gap-4 sm:ml-auto">
             <Tabs value={view} onValueChange={setView} className="w-full md:w-auto">
               <TabsList className="h-8 bg-slate-50 p-0.5 border border-slate-100">
                 <TabsTrigger value="kanban" className="h-7 text-[10px] font-bold uppercase data-[state=active]:bg-white data-[state=active]:shadow-sm">
