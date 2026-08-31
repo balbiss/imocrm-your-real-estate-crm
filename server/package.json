@@ -5,7 +5,8 @@
   "version": "1.0.0",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "node --watch src/index.js"
+    "dev": "node --watch src/index.js",
+    "test": "node --test"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.105.1",

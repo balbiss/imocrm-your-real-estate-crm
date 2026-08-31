@@ -265,7 +265,7 @@ function ManualPage() {
             </Section>
 
             <Section id="conversas" title="Conversas (WhatsApp)" roles={["todos"]} lede="Cada corretor conecta o próprio número de WhatsApp ao sistema e atende os leads direto por aqui.">
-              <p><strong>Conectar:</strong> abra Integrações, escaneie o QR Code com o WhatsApp do celular (Aparelhos conectados). A conexão fica ativa enquanto o celular tiver internet.</p>
+              <p><strong>Conectar:</strong> abra Integrações, escolha o motor de conexão (<strong>WAHA</strong> — recomendado — ou <strong>Baileys</strong>), digite seu número com DDD e escaneie o QR Code com o WhatsApp do celular (Aparelhos conectados). A conexão fica ativa enquanto o celular tiver internet. Se um motor cair ou instabilizar, dá para desconectar e reconectar pelo outro sem perder nada do histórico.</p>
               <p><strong>Mensagens prontas:</strong> digite <strong>/</strong> sozinho no campo de mensagem para abrir a lista de <a href="#templates">mensagens prontas</a> sem sair da conversa.</p>
               <p><strong>Leads automáticos:</strong> quando um cliente ainda não cadastrado manda mensagem para o número conectado, o sistema cria o lead sozinho e distribui pela roleta — não é preciso cadastrar manualmente antes.</p>
               <p><strong>Divisor de data no chat:</strong> entre mensagens de dias diferentes aparece "Hoje", "Ontem" ou a data completa, igual ao WhatsApp do celular.</p>

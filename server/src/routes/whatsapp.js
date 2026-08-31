@@ -1,13 +1,20 @@
 import { Router } from "express";
 import { requireUser } from "../middleware/auth.js";
 import { supabaseAdmin } from "../supabase.js";
-import * as baileys from "../baileysClient.js";
-import { toDigitsWithDDI, toJid } from "../lib/phone.js";
+import { providerFor } from "../whatsappProvider.js";
+import { toDigitsWithDDI } from "../lib/phone.js";
 
 export const whatsappRouter = Router();
 whatsappRouter.use(requireUser);
 
-function buildWebhookUrl(phoneNumber) {
+const DEFAULT_PROVIDER = "waha";
+
+function buildWebhookUrl(provider, phoneNumber) {
+  if (provider === "waha") {
+    const url = new URL(process.env.WAHA_PUBLIC_WEBHOOK_URL);
+    url.searchParams.set("secret", process.env.WEBHOOK_SECRET);
+    return url.toString();
+  }
   const url = new URL(process.env.PUBLIC_WEBHOOK_URL);
   url.searchParams.set("phone", phoneNumber);
   url.searchParams.set("secret", process.env.WEBHOOK_SECRET);
@@ -30,18 +37,37 @@ whatsappRouter.post("/connect", async (req, res) => {
     if (phoneNumber.length < 12) {
       return res.status(400).json({ error: "Numero de telefone invalido" });
     }
+    const provider = req.body?.provider === "baileys" ? "baileys" : DEFAULT_PROVIDER;
+
+    // Trocar de provider sem apagar a instancia antes: derruba a conexao
+    // antiga (engine que estava em uso) pra nao ficar sessao orfã rodando.
+    const anterior = await getInstance(req.userId);
+    if (anterior && anterior.provider !== provider) {
+      try {
+        await providerFor(anterior).remove();
+      } catch (e) {
+        console.warn("Erro ao limpar conexao antiga ao trocar de provider:", e.message);
+      }
+    }
 
     const { data: instance, error } = await supabaseAdmin
       .from("whatsapp_instances")
       .upsert(
-        { user_id: req.userId, phone_number: phoneNumber, connected: false, qr_code: null },
+        {
+          user_id: req.userId,
+          phone_number: phoneNumber,
+          provider,
+          session_name: provider === "waha" ? req.userId : null,
+          connected: false,
+          qr_code: null,
+        },
         { onConflict: "user_id" }
       )
       .select()
       .single();
     if (error) throw error;
 
-    await baileys.createConnection(phoneNumber, buildWebhookUrl(phoneNumber));
+    await providerFor(instance).createConnection(buildWebhookUrl(provider, phoneNumber));
 
     res.json({ success: true, instance });
   } catch (err) {
@@ -55,11 +81,42 @@ whatsappRouter.get("/status", async (req, res) => {
     const instance = await getInstance(req.userId);
     if (!instance) return res.json({ hasInstance: false });
 
+    let connected = instance.connected;
+    let qrCode = instance.qr_code;
+
+    // WAHA nao empurra o QR em todo webhook -- consulta ao vivo e busca o QR
+    // na hora se a sessao estiver pedindo leitura. Tambem sincroniza o cache.
+    if (instance.provider === "waha" && instance.session_name) {
+      const provider = providerFor(instance);
+      try {
+        const sess = await provider.liveStatus();
+        const status = sess?.status;
+        if (status === "WORKING") {
+          connected = true;
+          qrCode = null;
+        } else if (status === "SCAN_QR_CODE") {
+          connected = false;
+          qrCode = (await provider.getQr()) || qrCode;
+        } else if (status === "FAILED" || status === "STOPPED") {
+          connected = false;
+        }
+        if (connected !== instance.connected || qrCode !== instance.qr_code) {
+          await supabaseAdmin
+            .from("whatsapp_instances")
+            .update({ connected, qr_code: connected ? null : qrCode })
+            .eq("user_id", req.userId);
+        }
+      } catch (e) {
+        console.warn("Erro ao consultar status ao vivo do WAHA:", e.message);
+      }
+    }
+
     res.json({
       hasInstance: true,
-      connected: instance.connected,
+      provider: instance.provider,
+      connected,
       jid: instance.jid,
-      qrCode: instance.qr_code,
+      qrCode,
       phoneNumber: instance.phone_number,
     });
   } catch (err) {
@@ -74,25 +131,22 @@ whatsappRouter.get("/avatar", async (req, res) => {
     const raw = req.query.jid;
     if (!instance?.phone_number || !raw) return res.json({ url: null });
 
-    // Aceita telefone puro ou jid pronto — toJid e idempotente pra jid ja formatado.
-    const url = await baileys.fetchProfilePictureUrl(instance.phone_number, toJid(String(raw)));
+    const url = await providerFor(instance).fetchProfilePictureUrl(String(raw));
     res.json({ url });
   } catch (err) {
     res.json({ url: null });
   }
 });
 
-// O baileys-api so oferece logout completo (sem opcao de "pausar" mantendo a
-// sessao) — a diferenca entre desconectar e deletar e so no nosso lado:
-// desconectar mantem o numero salvo (reconecta sem digitar de novo, mas
-// precisa ler QR de novo do mesmo jeito); deletar apaga o registro inteiro.
 whatsappRouter.post("/disconnect", async (req, res) => {
   try {
     const instance = await getInstance(req.userId);
-    if (instance?.phone_number) {
-      await baileys.deleteConnection(instance.phone_number).catch((e) =>
-        console.warn("Erro ao apagar conexao no baileys-api (seguindo mesmo assim):", e.message)
-      );
+    if (instance) {
+      await providerFor(instance)
+        .disconnect()
+        .catch((e) =>
+          console.warn("Erro ao desconectar na engine (seguindo mesmo assim):", e.message)
+        );
     }
     await supabaseAdmin
       .from("whatsapp_instances")
@@ -108,10 +162,12 @@ whatsappRouter.post("/disconnect", async (req, res) => {
 whatsappRouter.delete("/instance", async (req, res) => {
   try {
     const instance = await getInstance(req.userId);
-    if (instance?.phone_number) {
-      await baileys.deleteConnection(instance.phone_number).catch((e) =>
-        console.warn("Erro ao apagar conexao no baileys-api (seguindo mesmo assim):", e.message)
-      );
+    if (instance) {
+      await providerFor(instance)
+        .remove()
+        .catch((e) =>
+          console.warn("Erro ao apagar conexao na engine (seguindo mesmo assim):", e.message)
+        );
     }
     await supabaseAdmin.from("whatsapp_instances").delete().eq("user_id", req.userId);
     res.json({ success: true });
@@ -131,7 +187,9 @@ whatsappRouter.post("/send", async (req, res) => {
       return res.status(409).json({ error: "WhatsApp nao conectado" });
     }
 
-    const jid = await baileys.resolveJid(instance.phone_number, phone);
+    const provider = providerFor(instance);
+
+    const jid = await provider.resolveJid(phone);
     if (!jid) {
       return res.status(422).json({ error: "Numero nao encontrado no WhatsApp" });
     }
@@ -143,14 +201,15 @@ whatsappRouter.post("/send", async (req, res) => {
         : attachment.base64;
       const mimetype = attachment.mimetype || "application/octet-stream";
 
-      // WhatsApp rejeita video mandado como mensagem de video acima de ~16mb
-      // (limite bem mais apertado que o de documento) — video grande demais
-      // vai como documento em vez de dar erro no envio.
+      // WhatsApp rejeita video como mensagem de video acima de ~16mb -- vai
+      // como documento em vez de dar erro no envio.
       const tamanhoBytes = (pureBase64.length * 3) / 4;
       const videoGrandeDemais = mimetype.startsWith("video/") && tamanhoBytes > 16 * 1024 * 1024;
 
       if (mimetype.startsWith("image/")) {
         messageContent.image = pureBase64;
+        messageContent.mimetype = mimetype;
+        if (attachment.fileName) messageContent.fileName = attachment.fileName;
         if (text) messageContent.caption = text;
       } else if (mimetype.startsWith("audio/")) {
         messageContent.audio = pureBase64;
@@ -159,6 +218,7 @@ whatsappRouter.post("/send", async (req, res) => {
       } else if (mimetype.startsWith("video/") && !videoGrandeDemais) {
         messageContent.video = pureBase64;
         messageContent.mimetype = mimetype;
+        if (attachment.fileName) messageContent.fileName = attachment.fileName;
         if (text) messageContent.caption = text;
       } else {
         messageContent.document = pureBase64;
@@ -170,11 +230,13 @@ whatsappRouter.post("/send", async (req, res) => {
       messageContent.text = text || "";
     }
 
-    // "quoted" replica a mensagem original (formato bruto salvo em
-    // mensagens_whatsapp.metadata) pra baileys-api renderizar a citação
-    // nativa do WhatsApp — só funciona respondendo mensagem que RECEBEMOS
-    // (é a unica que guardamos o objeto bruto completo).
-    const result = await baileys.sendMessage(instance.phone_number, jid, messageContent, quoted ? { quoted } : undefined);
+    // "quoted" (citacao nativa) so e' suportado no baileys hoje -- ele guarda
+    // o objeto bruto da mensagem original. No WAHA seria por reply_to (id),
+    // fica pra depois.
+    const options =
+      instance.provider === "baileys" && quoted ? { quoted } : undefined;
+
+    const result = await provider.sendMessage(jid, messageContent, options);
     const messageId = result?.data?.key?.id || null;
 
     res.json({ success: true, jid, messageId });

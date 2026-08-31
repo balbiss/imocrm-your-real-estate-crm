@@ -1,0 +1,74 @@
+# Stack Swarm do WAHA dedicado do CRM OKA -- waha-oka.inoovaweb.cloud
+#
+# Deploy no Portainer .cloud (portainer.inoovaweb.cloud), endpoint 1 (Swarm).
+# Stack SEPARADO do `crm-oka` (id 27) mas na MESMA rede overlay `inoovaweb`,
+# entao o backend (crm_oka_backend) pode falar com ele por
+# http://waha_oka_waha:3000 OU pela URL publica. Usamos a URL publica no
+# WAHA_API_URL pra manter simples e explicito.
+
+version: "3.7"
+
+services:
+  waha:
+    image: devlikeapro/waha:latest      # WAHA Core (gratis, multi-sessao desde 2026.6.1)
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    environment:
+      - WAHA_API_KEY=29ca098d1fbe187c87da5e9e9a34c2a960012c0aa97d3a95
+      - WAHA_DASHBOARD_ENABLED=True
+      - WAHA_DASHBOARD_USERNAME=admin
+      - WAHA_DASHBOARD_PASSWORD=T8X53koE0gVJpv2LR48ajgI6
+      - WHATSAPP_SWAGGER_ENABLED=True
+      - WHATSAPP_SWAGGER_USERNAME=admin
+      - WHATSAPP_SWAGGER_PASSWORD=kQHtC4O_kNSHNQjAETEVP0AA
+      - WHATSAPP_DEFAULT_ENGINE=NOWEB
+      - WAHA_BASE_URL=https://waha-oka.inoovaweb.cloud
+      - WAHA_PUBLIC_URL=https://waha-oka.inoovaweb.cloud
+      - WAHA_PRINT_QR=False
+      - WAHA_LOG_FORMAT=JSON
+      - WAHA_LOG_LEVEL=info
+      - TZ=America/Sao_Paulo
+      - WAHA_MEDIA_STORAGE=LOCAL
+      - WHATSAPP_FILES_LIFETIME=0
+      - WHATSAPP_FILES_FOLDER=/app/.media
+    volumes:
+      - waha_oka_sessions:/app/.sessions
+      - waha_oka_media:/app/.media
+    networks:
+      - inoovaweb
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+      labels:
+        - traefik.enable=true
+        - traefik.http.routers.waha_oka.rule=Host(`waha-oka.inoovaweb.cloud`)
+        - traefik.http.routers.waha_oka.entrypoints=websecure
+        - traefik.http.routers.waha_oka.tls.certresolver=letsencryptresolver
+        - traefik.http.routers.waha_oka.service=waha_oka
+        - traefik.http.routers.waha_oka_http.rule=Host(`waha-oka.inoovaweb.cloud`)
+        - traefik.http.routers.waha_oka_http.entrypoints=web
+        - traefik.http.routers.waha_oka_http.middlewares=redirect-to-https
+        - traefik.http.services.waha_oka.loadbalancer.server.port=3000
+        - traefik.http.services.waha_oka.loadbalancer.passHostHeader=true
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+networks:
+  inoovaweb:
+    external: true
+    name: inoovaweb
+
+volumes:
+  waha_oka_sessions:
+  waha_oka_media:

@@ -5,12 +5,14 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { MessageCircle, AlertCircle, Loader2, User, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   connectWhatsapp,
   deleteWhatsappInstance,
   disconnectWhatsapp,
   getWhatsappAvatar,
   getWhatsappStatus,
+  WhatsappProvider,
   WhatsappStatus,
 } from "@/lib/baileys";
 import { UserWhatsAppModal } from "./UserWhatsAppModal";
@@ -27,6 +29,7 @@ export function WhatsAppIntegrationCard({ userId, userName }: WhatsAppIntegratio
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [phoneInput, setPhoneInput] = useState("");
+  const [provider, setProvider] = useState<WhatsappProvider>("waha");
 
   // Uma linha antiga (herdada da WUZAPI, sem numero de telefone) nao conta
   // como conexao de verdade — trata como "sem instancia" pra pedir o numero.
@@ -64,7 +67,7 @@ export function WhatsAppIntegrationCard({ userId, userName }: WhatsAppIntegratio
 
     setProcessing(true);
     try {
-      await connectWhatsapp(digits);
+      await connectWhatsapp(digits, provider);
       await loadStatus();
       setIsModalOpen(true);
     } catch (error: any) {
@@ -79,9 +82,9 @@ export function WhatsAppIntegrationCard({ userId, userName }: WhatsAppIntegratio
     if (!status?.phoneNumber) return;
     setProcessing(true);
     try {
-      // Repete o connect pra pedir um QR fresco ao baileys-api — o anterior
-      // pode ja ter expirado (o baileys so gera QR sob demanda, nao guarda).
-      await connectWhatsapp(status.phoneNumber);
+      // Repete o connect pra pedir um QR fresco — o anterior pode ja ter
+      // expirado (as engines so geram QR sob demanda, nao guardam).
+      await connectWhatsapp(status.phoneNumber, status.provider ?? "waha");
       setIsModalOpen(true);
     } catch (error: any) {
       console.error(error);
@@ -162,6 +165,23 @@ export function WhatsAppIntegrationCard({ userId, userName }: WhatsAppIntegratio
             </div>
           </div>
           <div className="mt-auto pt-2 space-y-2">
+            <div className="space-y-1.5">
+              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Motor de conexão</span>
+              <RadioGroup
+                value={provider}
+                onValueChange={(v) => setProvider(v as WhatsappProvider)}
+                className="grid grid-cols-2 gap-2"
+              >
+                <label className={`flex items-center gap-2 rounded-lg border p-2 cursor-pointer transition-colors ${provider === "waha" ? "border-primary bg-primary/5" : "border-slate-200"}`}>
+                  <RadioGroupItem value="waha" className="h-3.5 w-3.5" />
+                  <span className="text-[11px] font-bold text-slate-600">WAHA <span className="text-emerald-500 font-medium">(recomendado)</span></span>
+                </label>
+                <label className={`flex items-center gap-2 rounded-lg border p-2 cursor-pointer transition-colors ${provider === "baileys" ? "border-primary bg-primary/5" : "border-slate-200"}`}>
+                  <RadioGroupItem value="baileys" className="h-3.5 w-3.5" />
+                  <span className="text-[11px] font-bold text-slate-600">Baileys</span>
+                </label>
+              </RadioGroup>
+            </div>
             <Input
               placeholder="Seu numero com DDD (ex: 11999998888)"
               value={phoneInput}
@@ -197,7 +217,9 @@ export function WhatsAppIntegrationCard({ userId, userName }: WhatsAppIntegratio
               </div>
               <div>
                 <h3 className="text-sm font-bold text-slate-700">WhatsApp</h3>
-                <p className="text-[10px] text-slate-400 font-medium">Conexão Individual</p>
+                <p className="text-[10px] text-slate-400 font-medium">
+                  Conexão Individual{status?.provider ? ` · ${status.provider === "waha" ? "WAHA" : "Baileys"}` : ""}
+                </p>
               </div>
             </div>
             {isConnected ? (

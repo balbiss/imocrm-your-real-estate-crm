@@ -1,8 +1,10 @@
 import { Router } from "express";
 import { supabaseAdmin } from "../supabase.js";
-import * as baileys from "../baileysClient.js";
+import { providerFor } from "../whatsappProvider.js";
+import * as waha from "../wahaClient.js";
 import { uploadWhatsappMedia } from "../lib/media.js";
 import { sendPushToUser } from "../push.js";
+import { normalizeBaileysMessage, normalizeWahaMessage } from "../lib/normalizeWhatsapp.js";
 
 export const webhookRouter = Router();
 
@@ -14,19 +16,28 @@ function checkSecret(req, res) {
   return true;
 }
 
+// ============================ BAILEYS ============================
+// O baileys-api manda {event, data, webhookVerifyToken, awaitResponse} direto
+// na raiz do body -- sem nenhum wrapper "payload".
 webhookRouter.post("/baileys", async (req, res) => {
   if (!checkSecret(req, res)) return;
 
   try {
-    // O baileys-api manda {event, data, webhookVerifyToken, awaitResponse} direto
-    // na raiz do body — sem nenhum wrapper "payload".
     const { event, data } = req.body || {};
     const phoneNumber = String(req.query.phone || "");
 
     if (event === "connection.update") {
-      await handleConnectionUpdate(phoneNumber, data || {});
+      await handleBaileysConnectionUpdate(phoneNumber, data || {});
     } else if (event === "messages.upsert") {
-      await handleMessagesUpsert(data || {}, phoneNumber);
+      const instance = await getInstanceByPhone(phoneNumber);
+      for (const msg of data?.messages || []) {
+        const normalized = normalizeBaileysMessage(msg);
+        if (normalized) {
+          await processInboundMessage(normalized, instance).catch((e) =>
+            console.error("Erro ao processar mensagem baileys:", e)
+          );
+        }
+      }
     }
 
     res.json({ success: true });
@@ -36,7 +47,7 @@ webhookRouter.post("/baileys", async (req, res) => {
   }
 });
 
-async function handleConnectionUpdate(phoneNumber, data) {
+async function handleBaileysConnectionUpdate(phoneNumber, data) {
   if (!phoneNumber) return;
 
   const update = {};
@@ -53,42 +64,244 @@ async function handleConnectionUpdate(phoneNumber, data) {
   const { error } = await supabaseAdmin
     .from("whatsapp_instances")
     .update(update)
-    .eq("phone_number", phoneNumber);
-  if (error) console.error("Erro ao atualizar whatsapp_instances no webhook:", error);
+    .eq("phone_number", phoneNumber)
+    .eq("provider", "baileys");
+  if (error) console.error("Erro ao atualizar whatsapp_instances (baileys):", error);
 }
 
-async function handleMessagesUpsert(data, receivingPhoneNumber) {
-  const messages = data.messages || [];
+// ============================= WAHA =============================
+// WAHA manda {event, session, payload, me, engine} na raiz. A sessao (=
+// user_id do corretor) identifica a instancia.
+webhookRouter.post("/waha", async (req, res) => {
+  if (!checkSecret(req, res)) return;
 
-  for (const msg of messages) {
-    await handleSingleMessage(msg, receivingPhoneNumber).catch((e) =>
-      console.error("Erro ao processar mensagem individual:", e)
+  try {
+    const { event, session, payload } = req.body || {};
+
+    if (event === "session.status") {
+      await handleWahaStatus(session, payload || {});
+    } else if (event === "message" || event === "message.any") {
+      const instance = await getInstanceBySession(session);
+      const normalized = normalizeWahaMessage(payload || {});
+      if (normalized) {
+        await processInboundMessage(normalized, instance).catch((e) =>
+          console.error("Erro ao processar mensagem waha:", e)
+        );
+      }
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Erro no webhook do WAHA:", err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+async function handleWahaStatus(sessionName, payload) {
+  if (!sessionName) return;
+
+  const status = payload.status;
+  const update = {};
+
+  if (status === "WORKING") {
+    update.connected = true;
+    update.qr_code = null;
+  } else if (status === "SCAN_QR_CODE") {
+    update.connected = false;
+    update.qr_code = await waha.getQrDataUrl(sessionName).catch(() => null);
+  } else if (status === "FAILED" || status === "STOPPED") {
+    update.connected = false;
+  } else {
+    return; // STARTING etc -- ignora
+  }
+
+  const { error } = await supabaseAdmin
+    .from("whatsapp_instances")
+    .update(update)
+    .eq("session_name", sessionName)
+    .eq("provider", "waha");
+  if (error) console.error("Erro ao atualizar whatsapp_instances (waha):", error);
+}
+
+// ===================== NORMALIZADORES =====================
+// Formato interno unico: { sourceId, contactPhone, fromMe, pushName, isGroup,
+//   reaction?: {targetId, emoji}, text, media?: {tipo, mimetype, fileName, ref},
+//   raw }
+// media.ref = id da mensagem (baileys) OU URL da midia (waha).
+// (implementacao em ../lib/normalizeWhatsapp.js -- funcoes puras, testaveis)
+
+// ===================== LOOKUPS DE INSTANCIA =====================
+async function getInstanceByPhone(phoneNumber) {
+  if (!phoneNumber) return null;
+  const { data } = await supabaseAdmin
+    .from("whatsapp_instances")
+    .select("*, perfis!inner(imobiliaria_id)")
+    .eq("phone_number", phoneNumber)
+    .eq("provider", "baileys")
+    .maybeSingle();
+  return data || null;
+}
+
+async function getInstanceBySession(sessionName) {
+  if (!sessionName) return null;
+  const { data } = await supabaseAdmin
+    .from("whatsapp_instances")
+    .select("*, perfis!inner(imobiliaria_id)")
+    .eq("session_name", sessionName)
+    .eq("provider", "waha")
+    .maybeSingle();
+  return data || null;
+}
+
+// ===================== PIPELINE COMUM =====================
+async function processInboundMessage(normalized, instance) {
+  if (!normalized || normalized.isGroup) return;
+
+  const {
+    sourceId,
+    contactPhone,
+    fromMe,
+    pushName,
+    reaction,
+    media,
+  } = normalized;
+  if (!sourceId || !contactPhone) return;
+
+  // Dedupe: se ja gravamos essa mensagem, nao faz nada.
+  const { data: existing } = await supabaseAdmin
+    .from("mensagens_whatsapp")
+    .select("id")
+    .eq("whatsapp_message_id", sourceId)
+    .maybeSingle();
+  if (existing) return;
+
+  // Reacao (emoji em cima de uma mensagem) -- atualiza o metadata da original.
+  if (reaction) {
+    const { targetId, emoji } = reaction;
+    if (targetId) {
+      const { data: targetMsg } = await supabaseAdmin
+        .from("mensagens_whatsapp")
+        .select("id, metadata")
+        .eq("whatsapp_message_id", targetId)
+        .maybeSingle();
+      if (targetMsg) {
+        await supabaseAdmin
+          .from("mensagens_whatsapp")
+          .update({ metadata: { ...(targetMsg.metadata || {}), reacao: emoji } })
+          .eq("id", targetMsg.id);
+      }
+    }
+    return;
+  }
+
+  const imobiliariaId = instance?.perfis?.imobiliaria_id || null;
+
+  const { data: leads, error: searchError } = await supabaseAdmin.rpc(
+    "buscar_lead_por_telefone",
+    { telefone_busca: contactPhone }
+  );
+  if (searchError) {
+    console.error("Erro ao buscar lead por telefone:", searchError);
+    return;
+  }
+
+  let lead;
+  let leadDetail;
+
+  if (leads?.length) {
+    lead = leads[0];
+    const { data } = await supabaseAdmin
+      .from("leads")
+      .select("corretor_id, nome, telefone, status")
+      .eq("id", lead.id)
+      .single();
+    leadDetail = data;
+
+    await alertaPossivelDuplicidade(lead, leadDetail, instance).catch((e) =>
+      console.error("Erro ao checar duplicidade:", e)
     );
+  } else {
+    if (!instance || !imobiliariaId) return; // nao da pra saber a imobiliaria dona
+    const novoLead = await criarLeadDoWhatsapp(contactPhone, instance, imobiliariaId, pushName);
+    if (!novoLead) return;
+    lead = { id: novoLead.id, imobiliaria_id: novoLead.imobiliaria_id };
+    leadDetail = {
+      corretor_id: novoLead.corretor_id,
+      nome: novoLead.nome,
+      telefone: novoLead.telefone,
+      status: novoLead.status,
+    };
+  }
+
+  let text = normalized.text || "";
+  let tipo = media?.tipo || "text";
+
+  if (media && instance) {
+    try {
+      const provider = providerFor(instance);
+      const buffer = await provider.downloadMedia(media.ref);
+      const url = await uploadWhatsappMedia(buffer, media.mimetype, media.fileName);
+      const caption = media.caption ? `\n${media.caption}` : "";
+      text =
+        tipo === "document"
+          ? `[Anexo]: ${url}\n${media.fileName || ""}${caption}`
+          : `[Anexo]: ${url}${caption}`;
+    } catch (e) {
+      console.error(`Erro ao baixar midia (${tipo}) da mensagem ${sourceId}:`, e.message);
+      text = text || "📎 Arquivo não pôde ser baixado";
+    }
+  }
+
+  if (!text) text = "📎 Arquivo não suportado ou vazio";
+
+  // upsert com ignoreDuplicates: corrida real com o insert do proprio CRM
+  // (WhatsAppChat.tsx) pro eco da mensagem que ELE mandou -- o indice unico
+  // parcial em whatsapp_message_id torna isso atomico.
+  const { error: insertError } = await supabaseAdmin
+    .from("mensagens_whatsapp")
+    .upsert(
+      {
+        lead_id: lead.id,
+        imobiliaria_id: lead.imobiliaria_id,
+        corretor_id: leadDetail?.corretor_id || null,
+        conteudo: text,
+        direcao: fromMe ? "outbound" : "inbound",
+        status: fromMe ? "sent" : "delivered",
+        whatsapp_message_id: sourceId,
+        tipo,
+        lida: fromMe ? true : false,
+        metadata: normalized.raw,
+      },
+      { onConflict: "whatsapp_message_id", ignoreDuplicates: true }
+    );
+  if (insertError) console.error("Erro ao inserir mensagem:", insertError);
+
+  await supabaseAdmin
+    .from("leads")
+    .update({ ultima_acao_at: new Date().toISOString() })
+    .eq("id", lead.id);
+
+  if (leadDetail?.corretor_id) {
+    const nomeExibicao = leadDetail.nome || leadDetail.telefone || "Novo lead";
+    sendPushToUser(leadDetail.corretor_id, {
+      title: nomeExibicao,
+      body: text.length > 120 ? `${text.slice(0, 117)}...` : text,
+      tag: lead.id,
+      url: "/conversas",
+    }).catch((e) => console.error("Erro ao enviar push:", e));
   }
 }
 
-// Se o lead que mandou a mensagem ja pertence a outro corretor (ou esta
-// marcado como rebatida) e quem recebeu foi um numero de WhatsApp diferente
-// do dono do lead, avisa dono/gerente pra decidirem se transferem o card.
-async function alertaPossivelDuplicidade(lead, leadDetail, receivingPhoneNumber) {
-  if (!receivingPhoneNumber) return;
-
-  const { data: instance } = await supabaseAdmin
-    .from("whatsapp_instances")
-    .select("user_id")
-    .eq("phone_number", receivingPhoneNumber)
-    .maybeSingle();
-
+// Se o lead ja pertence a outro corretor (ou e' rebatida) e quem recebeu foi
+// um numero diferente do dono do lead, avisa dono/gerente.
+async function alertaPossivelDuplicidade(lead, leadDetail, instance) {
   const receivingUserId = instance?.user_id;
   if (!receivingUserId) return;
 
   const isRebatida = leadDetail?.status === "rebatida";
   const isOutroCorretor = leadDetail?.corretor_id && leadDetail.corretor_id !== receivingUserId;
-
   if (!isRebatida && !isOutroCorretor) return;
 
-  // Evita duplicar alerta: se ja existe um aviso nao lido pra esse lead
-  // nas ultimas 2 horas, nao cria outro a cada mensagem nova.
   const duasHorasAtras = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
   const { data: alertaExistente } = await supabaseAdmin
     .from("notificacoes")
@@ -125,28 +338,7 @@ async function alertaPossivelDuplicidade(lead, leadDetail, receivingPhoneNumber)
   if (error) console.error("Erro ao criar alerta de duplicidade:", error);
 }
 
-// Descobre a imobiliaria e o corretor dono do numero de WhatsApp que recebeu
-// a mensagem (whatsapp_instances nao guarda imobiliaria_id direto, so via perfis).
-async function resolverDonoDaInstancia(receivingPhoneNumber) {
-  if (!receivingPhoneNumber) return null;
-
-  const { data } = await supabaseAdmin
-    .from("whatsapp_instances")
-    .select("user_id, perfis!inner(imobiliaria_id)")
-    .eq("phone_number", receivingPhoneNumber)
-    .maybeSingle();
-
-  const imobiliariaId = data?.perfis?.imobiliaria_id;
-  if (!data?.user_id || !imobiliariaId) return null;
-
-  return { userId: data.user_id, imobiliariaId };
-}
-
-// leads.telefone e' salvo sem o DDI 55 em todo o resto do sistema (ver leads
-// vindos do Facebook Ads), e a funcao buscar_lead_por_telefone so casa DDD+
-// numero sem DDI. Se guardassemos o numero cru do WhatsApp (com "55" na
-// frente) a busca nunca encontraria o lead de novo e cada mensagem seguinte
-// criaria outro lead duplicado pro mesmo contato.
+// leads.telefone e' salvo sem o DDI 55 no resto do sistema.
 function telefoneSemDDI(digitsOnly) {
   if (digitsOnly.startsWith("55") && digitsOnly.length >= 12) {
     return digitsOnly.slice(2);
@@ -154,16 +346,10 @@ function telefoneSemDDI(digitsOnly) {
   return digitsOnly;
 }
 
-// Cliente novo (nao cadastrado) mandou mensagem pro WhatsApp conectado: cria
-// o lead na hora, na roleta de distribuicao, em vez de simplesmente ignorar.
-async function criarLeadDoWhatsapp(contactPhone, receivingPhoneNumber, pushName) {
-  const dono = await resolverDonoDaInstancia(receivingPhoneNumber);
-  if (!dono) return null;
-
+// Cliente novo mandou mensagem: cria o lead na hora, na roleta.
+async function criarLeadDoWhatsapp(contactPhone, instance, imobiliariaId, pushName) {
   const telefone = telefoneSemDDI(contactPhone);
 
-  // Ultima checagem, ja com o telefone no formato certo: evita duplicar caso
-  // duas mensagens do mesmo contato cheguem quase juntas.
   const { data: existentes } = await supabaseAdmin.rpc("buscar_lead_por_telefone", {
     telefone_busca: telefone,
   });
@@ -177,29 +363,17 @@ async function criarLeadDoWhatsapp(contactPhone, receivingPhoneNumber, pushName)
   }
 
   const { data: rodizio } = await supabaseAdmin.rpc("get_next_corretor_rodizio", {
-    p_imobiliaria_id: dono.imobiliariaId,
+    p_imobiliaria_id: imobiliariaId,
   });
-  // Sem ninguem online na roleta, o lead fica sem corretor (cai no Bolsao
-  // pro dono distribuir manualmente depois) em vez de acumular tudo na
-  // conta do dono.
   const corretorId = rodizio?.[0]?.corretor_id || null;
 
-  // Cliente que chama primeiro no WhatsApp de um corretor disponivel ja
-  // "esta conversando" -- entra direto na coluna Conversando (nao Lead Novo)
-  // com uma tarefa de follow-up pro mesmo horario que ele mandou a mensagem,
-  // pra aparecer imediatamente em Atrasadas/A Fazer e o corretor responder
-  // logo. Sem corretor disponivel, mantem o fluxo normal (cai no
-  // Bolsao/Rebatida). "conversando" nao existe no enum lead_status (so a
-  // coluna do kanban tem esse nome) -- usa 'tarefas' (status retrocompatible
-  // generico pos-triagem) e aponta coluna_kanban_id direto pra coluna real,
-  // que e' o que decide a posicao visual (ver getRetrocompatibleStatus).
   const agora = new Date().toISOString();
   let colunaConversando = null;
   if (corretorId) {
     const { data: coluna } = await supabaseAdmin
       .from("colunas_kanban")
       .select("id")
-      .eq("imobiliaria_id", dono.imobiliariaId)
+      .eq("imobiliaria_id", imobiliariaId)
       .ilike("nome", "%conversando%")
       .order("posicao")
       .limit(1)
@@ -212,7 +386,7 @@ async function criarLeadDoWhatsapp(contactPhone, receivingPhoneNumber, pushName)
     .insert({
       nome: pushName || telefone,
       telefone,
-      imobiliaria_id: dono.imobiliariaId,
+      imobiliaria_id: imobiliariaId,
       corretor_id: corretorId,
       origem: "WhatsApp",
       status: corretorId ? "tarefas" : "novo",
@@ -227,175 +401,4 @@ async function criarLeadDoWhatsapp(contactPhone, receivingPhoneNumber, pushName)
     return null;
   }
   return novoLead;
-}
-
-async function handleSingleMessage(msg, receivingPhoneNumber) {
-  const remoteJid = msg?.key?.remoteJid;
-  if (!remoteJid || remoteJid.includes("@g.us")) return; // ignora grupos
-
-  const remoteJidAlt = msg?.key?.remoteJidAlt;
-  let contactPhone;
-  if (remoteJid.includes("@s.whatsapp.net")) {
-    contactPhone = remoteJid.split("@")[0];
-  } else if (remoteJid.includes("@lid") && remoteJidAlt?.includes("@s.whatsapp.net")) {
-    contactPhone = remoteJidAlt.split("@")[0];
-  } else {
-    contactPhone = remoteJid.split("@")[0];
-  }
-
-  const sourceId = msg?.key?.id;
-  if (!sourceId) return;
-
-  // Dedupe: se ja gravamos essa mensagem, nao faz nada.
-  const { data: existing } = await supabaseAdmin
-    .from("mensagens_whatsapp")
-    .select("id")
-    .eq("whatsapp_message_id", sourceId)
-    .maybeSingle();
-  if (existing) return;
-
-  // Reação (emoji em cima de uma mensagem) não é mensagem nova — antes disso
-  // caia no fallback "Arquivo não suportado" e virava um card fantasma no
-  // chat. Agora atualiza o metadata da mensagem original em vez de inserir.
-  const reactionMessage = msg?.message?.reactionMessage;
-  if (reactionMessage) {
-    const targetMessageId = reactionMessage.key?.id;
-    const emoji = reactionMessage.text || null; // string vazia = reação removida
-    if (targetMessageId) {
-      const { data: targetMsg } = await supabaseAdmin
-        .from("mensagens_whatsapp")
-        .select("id, metadata")
-        .eq("whatsapp_message_id", targetMessageId)
-        .maybeSingle();
-      if (targetMsg) {
-        await supabaseAdmin
-          .from("mensagens_whatsapp")
-          .update({ metadata: { ...(targetMsg.metadata || {}), reacao: emoji } })
-          .eq("id", targetMsg.id);
-      }
-    }
-    return;
-  }
-
-  const { data: leads, error: searchError } = await supabaseAdmin.rpc(
-    "buscar_lead_por_telefone",
-    { telefone_busca: contactPhone }
-  );
-  if (searchError) {
-    console.error("Erro ao buscar lead por telefone:", searchError);
-    return;
-  }
-
-  let lead;
-  let leadDetail;
-
-  if (leads?.length) {
-    lead = leads[0];
-    const { data } = await supabaseAdmin
-      .from("leads")
-      .select("corretor_id, nome, telefone, status")
-      .eq("id", lead.id)
-      .single();
-    leadDetail = data;
-
-    await alertaPossivelDuplicidade(lead, leadDetail, receivingPhoneNumber).catch((e) =>
-      console.error("Erro ao checar duplicidade:", e)
-    );
-  } else {
-    const novoLead = await criarLeadDoWhatsapp(contactPhone, receivingPhoneNumber, msg?.pushName);
-    if (!novoLead) return; // nao foi possivel identificar a imobiliaria dona do numero
-    lead = { id: novoLead.id, imobiliaria_id: novoLead.imobiliaria_id };
-    leadDetail = { corretor_id: novoLead.corretor_id, nome: novoLead.nome, telefone: novoLead.telefone, status: novoLead.status };
-  }
-
-  let text =
-    msg?.message?.conversation || msg?.message?.extendedTextMessage?.text || "";
-  let tipo = "text";
-  let mediaInfo = null;
-
-  const message = msg?.message || {};
-  if (message.imageMessage) {
-    tipo = "image";
-    mediaInfo = message.imageMessage;
-  } else if (message.audioMessage) {
-    tipo = "audio";
-    mediaInfo = message.audioMessage;
-  } else if (message.videoMessage) {
-    tipo = "video";
-    mediaInfo = message.videoMessage;
-  } else if (message.documentMessage) {
-    tipo = "document";
-    mediaInfo = message.documentMessage;
-  } else if (message.stickerMessage) {
-    tipo = "sticker";
-    mediaInfo = message.stickerMessage;
-  }
-
-  if (mediaInfo) {
-    try {
-      const buffer = await baileys.downloadMedia(sourceId);
-      const mimetype = mediaInfo.mimetype || "application/octet-stream";
-      const fileName = mediaInfo.fileName || null;
-      const url = await uploadWhatsappMedia(buffer, mimetype, fileName);
-
-      const caption = mediaInfo.caption ? `\n${mediaInfo.caption}` : "";
-      text = tipo === "document" ? `[Anexo]: ${url}\n${fileName || ""}${caption}` : `[Anexo]: ${url}${caption}`;
-    } catch (e) {
-      console.error(`Erro ao baixar midia ${tipo} da mensagem ${sourceId}:`, e.message);
-      text = text || "📎 Arquivo não pôde ser baixado";
-    }
-  }
-
-  if (!text) text = "📎 Arquivo não suportado ou vazio";
-
-  // fromMe=true chega tanto pro eco do que o proprio CRM manda (ja
-  // descartado pelo dedupe acima, porque o insert do CRM grava
-  // whatsapp_message_id com o id retornado pelo /send) quanto pra mensagem
-  // mandada direto do celular do corretor, fora do CRM — essa segunda
-  // precisamos sincronizar como outbound normal.
-  const isFromMe = !!msg?.key?.fromMe;
-
-  // upsert com ignoreDuplicates em vez de insert: a checagem de dedupe acima
-  // (SELECT por whatsapp_message_id) tem uma corrida real contra o insert
-  // que o proprio CRM faz em paralelo pro eco da mensagem que ELE mandou
-  // (WhatsAppChat.tsx) — os dois podem passar pelo SELECT antes de o outro
-  // ter commitado o INSERT, e cada um nao ve o registro do outro ainda.
-  // O indice unico parcial em whatsapp_message_id (nao-null) e o upsert
-  // tornam isso atomico: quem chegar primeiro grava, o outro vira um no-op.
-  const { error: insertError } = await supabaseAdmin
-    .from("mensagens_whatsapp")
-    .upsert(
-      {
-        lead_id: lead.id,
-        imobiliaria_id: lead.imobiliaria_id,
-        corretor_id: leadDetail?.corretor_id || null,
-        conteudo: text,
-        direcao: isFromMe ? "outbound" : "inbound",
-        status: isFromMe ? "sent" : "delivered",
-        whatsapp_message_id: sourceId,
-        tipo,
-        lida: isFromMe ? true : false,
-        metadata: msg,
-      },
-      { onConflict: "whatsapp_message_id", ignoreDuplicates: true }
-    );
-  if (insertError) console.error("Erro ao inserir mensagem:", insertError);
-
-  await supabaseAdmin
-    .from("leads")
-    .update({ ultima_acao_at: new Date().toISOString() })
-    .eq("id", lead.id);
-
-  if (leadDetail?.corretor_id) {
-    const nomeExibicao = leadDetail.nome || leadDetail.telefone || "Novo lead";
-    console.log(`Disparando push pro corretor ${leadDetail.corretor_id} (lead ${lead.id})`);
-    sendPushToUser(leadDetail.corretor_id, {
-      title: nomeExibicao,
-      body: text.length > 120 ? `${text.slice(0, 117)}...` : text,
-      tag: lead.id,
-      url: "/conversas",
-    }).catch((e) => console.error("Erro ao enviar push:", e));
-  } else {
-    console.log(`Lead ${lead.id} sem corretor_id — push nao disparado`);
-  }
 }

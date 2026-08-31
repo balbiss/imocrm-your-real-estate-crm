@@ -5,8 +5,11 @@ import { supabase } from "@/integrations/supabase/client";
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || process.env.BACKEND_URL || "";
 
+export type WhatsappProvider = "baileys" | "waha";
+
 export interface WhatsappStatus {
   hasInstance: boolean;
+  provider?: WhatsappProvider;
   connected?: boolean;
   jid?: string | null;
   qrCode?: string | null;
@@ -36,10 +39,10 @@ async function call<T = any>(path: string, options: RequestInit = {}): Promise<T
   return data as T;
 }
 
-export function connectWhatsapp(phoneNumber: string) {
+export function connectWhatsapp(phoneNumber: string, provider: WhatsappProvider = "waha") {
   return call("/api/whatsapp/connect", {
     method: "POST",
-    body: JSON.stringify({ phoneNumber }),
+    body: JSON.stringify({ phoneNumber, provider }),
   });
 }
 

@@ -1092,7 +1092,9 @@ export type Database = {
           id: string
           jid: string | null
           phone_number: string | null
+          provider: string
           qr_code: string | null
+          session_name: string | null
           updated_at: string
           user_id: string
         }
@@ -1104,7 +1106,9 @@ export type Database = {
           id?: string
           jid?: string | null
           phone_number?: string | null
+          provider?: string
           qr_code?: string | null
+          session_name?: string | null
           updated_at?: string
           user_id: string
         }
@@ -1116,7 +1120,9 @@ export type Database = {
           id?: string
           jid?: string | null
           phone_number?: string | null
+          provider?: string
           qr_code?: string | null
+          session_name?: string | null
           updated_at?: string
           user_id?: string
         }
