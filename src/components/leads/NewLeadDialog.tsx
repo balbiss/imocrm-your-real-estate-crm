@@ -75,8 +75,15 @@ export function NewLeadDialog({ open, onOpenChange }: NewLeadDialogProps) {
 
       if (!perfil) throw new Error("Perfil não encontrado");
 
+      // Telefone SÓ dígitos, sem DDI 55 -- mesmo formato do resto do sistema
+      // (leads do Facebook, webhook do WhatsApp). Digitado como
+      // "(11) 99363-3874" virava lead com espaço/traço no telefone e o
+      // WhatsApp / a busca por duplicata não casavam direito.
+      const telefoneLimpo = String(values.telefone || "").replace(/\D/g, "").replace(/^55(?=\d{10,11}$)/, "");
+
       const { error } = await supabase.from("leads").insert({
         ...values,
+        telefone: telefoneLimpo,
         imobiliaria_id: perfil.imobiliaria_id,
         corretor_id: profile.user.id,
       });

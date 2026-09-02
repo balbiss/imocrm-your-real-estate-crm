@@ -86,10 +86,12 @@ export function VisitaAlertProvider() {
     setActiveAlert(null);
   };
 
-  // Pedido do dono: a janela só libera quando o corretor manda a mensagem
-  // de lembrete pro cliente (não um "ciente" genérico) -- abre o chat do
-  // WhatsApp direto do lead e já marca como confirmado.
-  const handleEnviarLembrete = async () => {
+  // Marca o alerta como ciente + registra no histórico. `abrirChat`:
+  // "Enviar Mensagem de Lembrete" abre o WhatsApp do lead depois;
+  // "Confirmei por ligação/pessoalmente" só fecha (pra lead sem WhatsApp
+  // ou quando o corretor já falou por outro canal -- não fica preso no
+  // loop de 10 em 10 min).
+  const confirmarAlerta = async (abrirChat: boolean) => {
     if (!activeAlert) return;
     setIsConfirming(true);
 
@@ -106,16 +108,20 @@ export function VisitaAlertProvider() {
       if (error) throw error;
 
       if (user) {
+        const tipoTxt = activeAlert.type === "17h" ? "lembrete de 17h do dia anterior" : "lembrete de 2 horas antes";
         await supabase.from("leads_interacoes").insert({
           lead_id: activeAlert.lead.id,
           autor_id: user.id,
           tipo: "status",
-          conteudo: `Corretor confirmou o alerta de visita (${activeAlert.type === "17h" ? "lembrete de 17h do dia anterior" : "lembrete de 2 horas antes"}) e abriu o WhatsApp para enviar o lembrete.`,
+          conteudo: abrirChat
+            ? `Corretor confirmou o alerta de visita (${tipoTxt}) e abriu o WhatsApp para enviar o lembrete.`
+            : `Corretor confirmou o alerta de visita (${tipoTxt}) — lembrete feito por ligação / pessoalmente.`,
         });
       }
 
       queryClient.invalidateQueries({ queryKey: ["leads"] });
-      setChatAberto(true);
+      if (abrirChat) setChatAberto(true);
+      else setActiveAlert(null);
     } catch (error) {
       toast.error("Erro ao confirmar alerta. Tente novamente.");
       console.error(error);
@@ -123,6 +129,8 @@ export function VisitaAlertProvider() {
       setIsConfirming(false);
     }
   };
+
+  const handleEnviarLembrete = () => confirmarAlerta(true);
 
   if (!activeAlert) return null;
 
@@ -190,7 +198,7 @@ export function VisitaAlertProvider() {
 
         <div className="bg-red-50 p-3 rounded-lg border border-red-100 text-center">
           <p className="text-xs font-bold text-red-700">
-            Se você fechar sem confirmar, esse alerta volta a aparecer em 10 minutos.
+            Confirme de alguma forma — se só fechar, o alerta volta em 10 minutos.
           </p>
         </div>
 
@@ -207,12 +215,20 @@ export function VisitaAlertProvider() {
             )}
           </Button>
           <Button
+            variant="outline"
+            className="w-full h-10 text-xs font-bold border-slate-200 text-slate-600 hover:bg-slate-50"
+            onClick={() => confirmarAlerta(false)}
+            disabled={isConfirming}
+          >
+            <CheckCircle2 className="mr-1.5 h-4 w-4 text-emerald-500" /> Já confirmei por ligação / pessoalmente
+          </Button>
+          <Button
             variant="ghost"
-            className="w-full h-9 text-xs font-bold text-slate-500 hover:text-slate-700"
+            className="w-full h-8 text-[11px] font-bold text-slate-400 hover:text-slate-600"
             onClick={handleFechar}
             disabled={isConfirming}
           >
-            <X className="mr-1.5 h-3.5 w-3.5" /> Fechar (lembrar em 10 min)
+            <X className="mr-1.5 h-3 w-3" /> Agora não (lembrar de novo em 10 min)
           </Button>
         </DialogFooter>
       </DialogContent>
