@@ -5,12 +5,18 @@
 # entao o backend (crm_oka_backend) pode falar com ele por
 # http://waha_oka_waha:3000 OU pela URL publica. Usamos a URL publica no
 # WAHA_API_URL pra manter simples e explicito.
+#
+# Engine: GOWS (Go/whatsmeow) desde 2026-09-02 -- NOWEB estava causando ban
+# do WhatsApp ao conectar (corretora Julia banida 2x). GOWS e' o sucessor do
+# NOWEB, tambem sem browser (leve), com menos historico de ban. Trocar de
+# engine EXIGE recriar as sessoes existentes (re-scan QR) -- sessao e'
+# engine-specific.
 
 version: "3.7"
 
 services:
   waha:
-    image: devlikeapro/waha:latest      # WAHA Core (gratis, multi-sessao desde 2026.6.1)
+    image: devlikeapro/waha:latest      # WAHA Core (gratis, multi-sessao/multi-engine desde 2026.6.1)
     dns:
       - 1.1.1.1
       - 8.8.8.8
@@ -22,7 +28,8 @@ services:
       - WHATSAPP_SWAGGER_ENABLED=True
       - WHATSAPP_SWAGGER_USERNAME=admin
       - WHATSAPP_SWAGGER_PASSWORD=kQHtC4O_kNSHNQjAETEVP0AA
-      - WHATSAPP_DEFAULT_ENGINE=NOWEB
+      - WHATSAPP_DEFAULT_ENGINE=GOWS
+      - WAHA_NAMESPACE=all
       - WAHA_BASE_URL=https://waha-oka.inoovaweb.cloud
       - WAHA_PUBLIC_URL=https://waha-oka.inoovaweb.cloud
       - WAHA_PRINT_QR=False
