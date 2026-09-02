@@ -230,6 +230,12 @@ async function processInboundMessage(normalized, instance) {
       console.error("Erro ao checar duplicidade:", e)
     );
   } else {
+    // Nao vira lead se a PRIMEIRA mensagem que vemos desse contato foi o
+    // proprio corretor (fromMe) mandando -- e' o corretor falando com uma
+    // outra empresa / colega / contato pessoal, nao um cliente. Se for
+    // cliente de verdade, ele responde e a proxima mensagem (inbound) cria
+    // o lead normalmente.
+    if (fromMe) return;
     if (!instance || !imobiliariaId) return; // nao da pra saber a imobiliaria dona
     const novoLead = await criarLeadDoWhatsapp(contactPhone, instance, imobiliariaId, pushName);
     if (!novoLead) return;

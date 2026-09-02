@@ -30,17 +30,18 @@ export function BolsaoResgateDialog({ open, onOpenChange, imobiliariaId }: Bolsa
   const queryClient = useQueryClient();
   const [cidadeFiltro, setCidadeFiltro] = useState<string>("todas");
 
-  const { data: tarefasAtrasadasCount } = useQuery({
+  const { data: tarefasAtrasadas } = useQuery({
     queryKey: ["tarefas-atrasadas", user?.id],
     queryFn: async () => {
-      if (!user) return 0;
-      const { count } = await supabase
+      if (!user) return [];
+      const { data } = await supabase
         .from("leads")
-        .select("*", { count: "exact", head: true })
+        .select("id, nome, telefone, lembrete_follow_up, status")
         .eq("corretor_id", user.id)
         .lte("lembrete_follow_up", new Date().toISOString())
-        .is("data_fechamento", null);
-      return count || 0;
+        .is("data_fechamento", null)
+        .order("lembrete_follow_up", { ascending: true });
+      return data || [];
     },
     enabled: open && !!user,
     // Esse número trava a ação real (bloqueia +Mais Rebatidas). O staleTime
@@ -91,10 +92,12 @@ export function BolsaoResgateDialog({ open, onOpenChange, imobiliariaId }: Bolsa
     enabled: open && !!imobiliariaId,
   });
 
+  const tarefasAtrasadasCount = tarefasAtrasadas?.length || 0;
+
   const puxarMutation = useMutation({
     mutationFn: async () => {
       if (!user) throw new Error("Não autenticado");
-      if (tarefasAtrasadasCount && tarefasAtrasadasCount > 0) {
+      if (tarefasAtrasadasCount > 0) {
         throw new Error("Você possui tarefas atrasadas. Zere suas pendências primeiro!");
       }
       const { data, error } = await supabase.rpc("puxar_mais_rebatidas", {
@@ -119,7 +122,7 @@ export function BolsaoResgateDialog({ open, onOpenChange, imobiliariaId }: Bolsa
     },
   });
 
-  const bloqueado = (tarefasAtrasadasCount && tarefasAtrasadasCount > 0) || (rebatidasHojeCount && rebatidasHojeCount >= 50);
+  const bloqueado = tarefasAtrasadasCount > 0 || (rebatidasHojeCount && rebatidasHojeCount >= 50);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -141,7 +144,7 @@ export function BolsaoResgateDialog({ open, onOpenChange, imobiliariaId }: Bolsa
               <div className="w-full space-y-2 text-left bg-white p-4 rounded-md">
                 <div className="flex justify-between text-xs font-bold">
                   <span className="text-slate-600">Tarefas Atrasadas (Máx: 0):</span>
-                  <span className={tarefasAtrasadasCount! > 0 ? "text-red-600" : "text-green-600"}>
+                  <span className={tarefasAtrasadasCount > 0 ? "text-red-600" : "text-green-600"}>
                     {tarefasAtrasadasCount} atrasadas
                   </span>
                 </div>
@@ -152,6 +155,29 @@ export function BolsaoResgateDialog({ open, onOpenChange, imobiliariaId }: Bolsa
                   </span>
                 </div>
               </div>
+
+              {tarefasAtrasadasCount > 0 && (
+                <div className="w-full mt-3 text-left">
+                  <p className="text-[11px] font-black uppercase text-slate-500 mb-1.5">
+                    Resolva estes {tarefasAtrasadasCount} follow-up(s) primeiro:
+                  </p>
+                  <div className="bg-white rounded-md border border-red-100 divide-y divide-slate-100 max-h-44 overflow-y-auto">
+                    {tarefasAtrasadas!.map((t: any) => (
+                      <div key={t.id} className="flex items-center justify-between px-3 py-2 text-xs">
+                        <span className="font-bold text-slate-700 truncate">
+                          {t.nome || t.telefone || "Sem nome"}
+                        </span>
+                        <span className="text-[10px] font-medium text-red-500 shrink-0 ml-2">
+                          venceu {new Date(t.lembrete_follow_up).toLocaleDateString("pt-BR")}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-1.5">
+                    Abra cada um na aba <strong>Tarefas</strong> ou no funil e reagende / conclua o contato.
+                  </p>
+                </div>
+              )}
             </div>
           ) : (
             <div className="space-y-4">

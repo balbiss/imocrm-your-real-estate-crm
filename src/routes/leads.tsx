@@ -205,6 +205,12 @@ function LeadsPage() {
 
 
   const filteredLeads = leads?.filter(lead => {
+    // Lead descartado / com descarte ou venda pendente de aprovação some das
+    // duas visões (Kanban já escondia; a Lista mostrava e virava "lead
+    // fantasma"). Descarte extremo aprovado só aparece na tela de
+    // Redistribuição, não aqui.
+    if (lead.descartado_em || lead.descarte_pendente_aprovacao || lead.venda_pendente_aprovacao) return false;
+
     const term = searchTerm.toLowerCase().trim();
     const matchesSearch = !term ||
       lead.nome?.toLowerCase().includes(term) ||
