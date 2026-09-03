@@ -20,6 +20,7 @@ import { Route as LinksUteisRouteImport } from './routes/links-uteis'
 import { Route as LeadsRouteImport } from './routes/leads'
 import { Route as IntegracoesRouteImport } from './routes/integracoes'
 import { Route as ImoveisRouteImport } from './routes/imoveis'
+import { Route as FollowupsRouteImport } from './routes/followups'
 import { Route as FilasRouteImport } from './routes/filas'
 import { Route as EsqueciSenhaRouteImport } from './routes/esqueci-senha'
 import { Route as EquipeRouteImport } from './routes/equipe'
@@ -85,6 +86,11 @@ const IntegracoesRoute = IntegracoesRouteImport.update({
 const ImoveisRoute = ImoveisRouteImport.update({
   id: '/imoveis',
   path: '/imoveis',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FollowupsRoute = FollowupsRouteImport.update({
+  id: '/followups',
+  path: '/followups',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FilasRoute = FilasRouteImport.update({
@@ -154,6 +160,7 @@ export interface FileRoutesByFullPath {
   '/equipe': typeof EquipeRoute
   '/esqueci-senha': typeof EsqueciSenhaRoute
   '/filas': typeof FilasRoute
+  '/followups': typeof FollowupsRoute
   '/imoveis': typeof ImoveisRoute
   '/integracoes': typeof IntegracoesRoute
   '/leads': typeof LeadsRouteWithChildren
@@ -178,6 +185,7 @@ export interface FileRoutesByTo {
   '/equipe': typeof EquipeRoute
   '/esqueci-senha': typeof EsqueciSenhaRoute
   '/filas': typeof FilasRoute
+  '/followups': typeof FollowupsRoute
   '/imoveis': typeof ImoveisRoute
   '/integracoes': typeof IntegracoesRoute
   '/leads': typeof LeadsRouteWithChildren
@@ -203,6 +211,7 @@ export interface FileRoutesById {
   '/equipe': typeof EquipeRoute
   '/esqueci-senha': typeof EsqueciSenhaRoute
   '/filas': typeof FilasRoute
+  '/followups': typeof FollowupsRoute
   '/imoveis': typeof ImoveisRoute
   '/integracoes': typeof IntegracoesRoute
   '/leads': typeof LeadsRouteWithChildren
@@ -229,6 +238,7 @@ export interface FileRouteTypes {
     | '/equipe'
     | '/esqueci-senha'
     | '/filas'
+    | '/followups'
     | '/imoveis'
     | '/integracoes'
     | '/leads'
@@ -253,6 +263,7 @@ export interface FileRouteTypes {
     | '/equipe'
     | '/esqueci-senha'
     | '/filas'
+    | '/followups'
     | '/imoveis'
     | '/integracoes'
     | '/leads'
@@ -277,6 +288,7 @@ export interface FileRouteTypes {
     | '/equipe'
     | '/esqueci-senha'
     | '/filas'
+    | '/followups'
     | '/imoveis'
     | '/integracoes'
     | '/leads'
@@ -302,6 +314,7 @@ export interface RootRouteChildren {
   EquipeRoute: typeof EquipeRoute
   EsqueciSenhaRoute: typeof EsqueciSenhaRoute
   FilasRoute: typeof FilasRoute
+  FollowupsRoute: typeof FollowupsRoute
   ImoveisRoute: typeof ImoveisRoute
   IntegracoesRoute: typeof IntegracoesRoute
   LeadsRoute: typeof LeadsRouteWithChildren
@@ -392,6 +405,13 @@ declare module '@tanstack/react-router' {
       path: '/imoveis'
       fullPath: '/imoveis'
       preLoaderRoute: typeof ImoveisRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/followups': {
+      id: '/followups'
+      path: '/followups'
+      fullPath: '/followups'
+      preLoaderRoute: typeof FollowupsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/filas': {
@@ -495,6 +515,7 @@ const rootRouteChildren: RootRouteChildren = {
   EquipeRoute: EquipeRoute,
   EsqueciSenhaRoute: EsqueciSenhaRoute,
   FilasRoute: FilasRoute,
+  FollowupsRoute: FollowupsRoute,
   ImoveisRoute: ImoveisRoute,
   IntegracoesRoute: IntegracoesRoute,
   LeadsRoute: LeadsRouteWithChildren,

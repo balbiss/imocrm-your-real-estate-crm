@@ -47,8 +47,10 @@ import {
   LayoutGrid,
   MessageCircle,
   Star,
+  Repeat,
 } from "lucide-react";
 import { WhatsAppChat } from "./WhatsAppChat";
+import { FollowUpPanel } from "./FollowUpPanel";
 import { toast } from "sonner";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { format, isToday } from "date-fns";
@@ -61,7 +63,7 @@ interface LeadDetailsModalProps {
   leadId: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  initialTab?: "detalhes" | "chat";
+  initialTab?: "detalhes" | "chat" | "followup";
 }
 
 export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "detalhes" }: LeadDetailsModalProps) {
@@ -658,11 +660,12 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
             </div>
           </div>
 
-          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "detalhes" | "chat")} className="w-full">
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "detalhes" | "chat" | "followup")} className="w-full">
             <TabsList className="bg-transparent border-b rounded-none h-9 p-0 gap-5">
               {[
                 { id: "detalhes", icon: User, label: "Detalhes" },
                 { id: "chat", icon: MessageCircle, label: "Chat WhatsApp" },
+                { id: "followup", icon: Repeat, label: "Follow-up" },
               ].map(tab => (
                 <TabsTrigger 
                   key={tab.id}
@@ -1192,11 +1195,17 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
                   />
                 </div>
               )}
+
+              {activeTab === "followup" && (
+                <div className="mt-2">
+                  <FollowUpPanel leadId={lead.id} leadCorretorId={lead.corretor_id} />
+                </div>
+              )}
             </div>
           </ScrollArea>
         </div>
 
-        {activeTab !== "chat" && (
+        {activeTab === "detalhes" && (
           <div className="p-3 bg-white border-t flex items-center gap-2">
             <Input 
               placeholder="Registrar mensagem rápida..." 

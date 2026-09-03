@@ -69,6 +69,7 @@ const NAV_GROUPS: { title: string; items: { id: string; label: string }[] }[] = 
     items: [
       { id: "imoveis", label: "Imóveis" },
       { id: "templates", label: "Mensagens Prontas" },
+      { id: "followups", label: "Follow-ups automáticos" },
       { id: "notificacoes", label: "Notificações" },
       { id: "configuracoes", label: "Configurações" },
       { id: "conta", label: "Conta e senha" },
@@ -342,6 +343,15 @@ function ManualPage() {
 
             <Section id="templates" title="Mensagens Prontas" roles={["todos"]} lede="Biblioteca de textos padronizados — saudação inicial, envio de documentos, confirmação de visita, etc.">
               <p>Acessível de dentro de qualquer conversa digitando <strong>/</strong>, como descrito em <a href="#conversas">Conversas</a>.</p>
+            </Section>
+
+            <Section id="followups" title="Follow-ups automáticos" roles={["todos"]} lede="Cada corretor monta uma sequência de mensagens de WhatsApp que o sistema envia sozinho pro lead — mensagem inicial + acompanhamentos.">
+              <p><strong>Criar um fluxo:</strong> em <em>Follow-ups</em> no menu, clique em <strong>Novo Fluxo</strong>, dê um nome e adicione os passos. Cada passo tem um momento ("assim que iniciar", "2 horas depois", "1 dia depois"...) e a mensagem. Dá pra usar as tags <strong>{"{nome}"}</strong>, <strong>{"{corretor}"}</strong>, <strong>{"{origem}"}</strong> e <strong>{"{bairro}"}</strong>, que o sistema troca pelos dados do lead na hora do envio.</p>
+              <p><strong>Ligar num lead:</strong> abra o card do lead, vá na aba <strong>Follow-up</strong>, escolha o fluxo e clique em <strong>Iniciar follow-up</strong>. A aba mostra em que passo está, o que já foi enviado e se o cliente respondeu. Botões de <strong>Pausar</strong>, <strong>Retomar</strong>, <strong>Encerrar</strong> e <strong>Trocar fluxo</strong> ficam ali.</p>
+              <p>As mensagens automáticas aparecem no <strong>Chat WhatsApp</strong> com o selo <strong>🤖 Follow-up</strong> e um fundo roxo — pra você bater o olho e saber que não foi você que mandou.</p>
+              <Callout title="O follow-up para sozinho na hora certa">
+                Assim que o cliente responde qualquer coisa, ou assim que você manda uma mensagem manual pelo Chat, a sequência para automaticamente — quem assume a conversa é você. Também para se o lead for descartado, vendido ou passar pra outro corretor. Fora do horário comercial (Seg–Sáb, 8h–20h) os passos ficam esperando e saem no próximo horário útil.
+              </Callout>
             </Section>
 
             <Section id="notificacoes" title="Notificações" roles={["todos"]} lede="O sino no topo do sistema avisa em tempo real sobre lead novo, SLA vencido, follow-up do dia, pedido de descarte, redistribuição e possível duplicidade de atendimento.">

@@ -5,6 +5,7 @@ import cors from "cors";
 import { whatsappRouter } from "./routes/whatsapp.js";
 import { webhookRouter } from "./routes/webhook.js";
 import { pushRouter } from "./routes/push.js";
+import { automacaoRouter } from "./routes/automacao.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -33,6 +34,7 @@ app.use(express.static(path.join(__dirname, "../public")));
 app.use("/api/whatsapp", whatsappRouter);
 app.use("/api/push", pushRouter);
 app.use("/webhooks", webhookRouter);
+app.use("/automacao", automacaoRouter);
 
 app.use((err, _req, res, _next) => {
   console.error("Erro nao tratado:", err);

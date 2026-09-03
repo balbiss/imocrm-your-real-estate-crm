@@ -30,6 +30,7 @@ interface Message {
   tipo: string;
   status?: string;
   metadata?: any;
+  canal?: string | null;
 }
 
 interface WhatsAppChatProps {
@@ -484,10 +485,17 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, leadName, ful
                 <div
                   className={`p-2 px-3 rounded-lg text-[14px] shadow-[0_1px_0.5px_rgba(11,20,26,.13)] relative ${
                     msg.direcao === "outbound"
-                      ? "bg-[#D9FDD3] text-[#111B21] rounded-tr-none"
+                      ? msg.canal === "followup"
+                        ? "bg-[#EDE9FE] text-[#111B21] rounded-tr-none border border-violet-200"
+                        : "bg-[#D9FDD3] text-[#111B21] rounded-tr-none"
                       : "bg-[#FFFFFF] text-[#111B21] rounded-tl-none"
                   }`}
                 >
+                  {msg.canal === "followup" && (
+                    <div className="text-[10px] font-bold text-violet-600 mb-0.5 flex items-center gap-1">
+                      🤖 Follow-up{msg.metadata?.passo ? ` · passo ${msg.metadata.passo}` : ""}
+                    </div>
+                  )}
                   {hasAnexo && anexoUrl && (
                     <div className="mb-1 mt-1">
                       {(msg as any).tipo === "sticker" ? (

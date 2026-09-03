@@ -49,7 +49,7 @@ export function LeadsKanban({ leads: initialLeads, isLoading: initialLoading, im
   const queryClient = useQueryClient();
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalInitialTab, setModalInitialTab] = useState<"detalhes" | "chat">("detalhes");
+  const [modalInitialTab, setModalInitialTab] = useState<"detalhes" | "chat" | "followup">("detalhes");
 
   // Buscar perfil se não foi passado imobiliariaId. Chave de cache
   // compartilhada com todas as outras páginas -- ver agenda.tsx pro

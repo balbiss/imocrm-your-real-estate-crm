@@ -5,16 +5,9 @@ import * as waha from "../wahaClient.js";
 import { uploadWhatsappMedia } from "../lib/media.js";
 import { sendPushToUser } from "../push.js";
 import { normalizeBaileysMessage, normalizeWahaMessage } from "../lib/normalizeWhatsapp.js";
+import { checkSecret } from "../lib/webhookSecret.js";
 
 export const webhookRouter = Router();
-
-function checkSecret(req, res) {
-  if (req.query.secret !== process.env.WEBHOOK_SECRET) {
-    res.status(401).json({ error: "Segredo do webhook invalido" });
-    return false;
-  }
-  return true;
-}
 
 // ============================ BAILEYS ============================
 // O baileys-api manda {event, data, webhookVerifyToken, awaitResponse} direto

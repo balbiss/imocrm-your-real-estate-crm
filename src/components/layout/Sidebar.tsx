@@ -18,6 +18,7 @@ import {
   Link as LinkIcon,
   GraduationCap,
   BookOpen,
+  Repeat,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
@@ -217,6 +218,7 @@ export function Sidebar({ collapsed, onClose }: { collapsed: boolean; onClose?: 
   }
 
   tools.push({ to: "/templates", label: "Templates", icon: MessageSquare });
+  tools.push({ to: "/followups", label: "Follow-ups", icon: Repeat });
 
   // Todo mundo tem acesso à página de integrações (para conectar seu próprio WhatsApp)
   tools.push({ to: "/integracoes", label: "Integrações", icon: Settings });

@@ -59,7 +59,7 @@ export function LeadsTable({ leads, isLoading, colunas, role }: LeadsTableProps)
   const queryClient = useQueryClient();
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalInitialTab, setModalInitialTab] = useState<"detalhes" | "chat">("detalhes");
+  const [modalInitialTab, setModalInitialTab] = useState<"detalhes" | "chat" | "followup">("detalhes");
   const [pendingStatusChange, setPendingStatusChange] = useState<{ lead: any; coluna: Coluna } | null>(null);
   const [followUpDateTemp, setFollowUpDateTemp] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
