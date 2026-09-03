@@ -214,6 +214,13 @@ export function FollowUpPanel({
                 </span>
               </div>
             )}
+            {!ativo && exec.motivo_parada && (
+              <div className={`text-saas-xs mt-1 ${exec.motivo_parada.includes("descartado") ? "text-amber-600 font-medium" : "text-slate-400"}`}>
+                {exec.motivo_parada.includes("descartado")
+                  ? "Lead descartado automaticamente — todos os passos foram enviados sem resposta."
+                  : `Encerrado: ${exec.motivo_parada}`}
+              </div>
+            )}
           </div>
 
           <div className="flex flex-wrap gap-2 px-4 py-3 border-t border-slate-100 bg-slate-50/50">

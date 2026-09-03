@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Plus, Repeat, Trash2, Edit, ArrowUp, ArrowDown } from "lucide-react";
+import { Plus, Repeat, Trash2, Edit, ArrowUp, ArrowDown, Copy, UserX } from "lucide-react";
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -52,6 +52,7 @@ function FollowupsPage() {
   const [nome, setNome] = useState("");
   const [ativo, setAtivo] = useState(false);
   const [eGeral, setEGeral] = useState(false);
+  const [aoEsgotar, setAoEsgotar] = useState<"nada" | "descartar">("nada");
   const [passos, setPassos] = useState<PassoForm[]>([]);
 
   const { data: fluxos, isLoading } = useQuery({
@@ -74,15 +75,17 @@ function FollowupsPage() {
     setNome("");
     setAtivo(false);
     setEGeral(false);
+    setAoEsgotar("nada");
     setPassos([{ conteudo: "", atraso_minutos: 0, so_horario_comercial: true }]);
     setIsOpen(true);
   }
 
-  function abrirEdicao(f: any) {
-    setEditing(f);
-    setNome(f.nome || "");
-    setAtivo(!!f.ativo);
-    setEGeral(!!f.e_geral);
+  function carregarNoForm(f: any, opts: { comoNovo?: boolean } = {}) {
+    setEditing(opts.comoNovo ? null : f);
+    setNome(opts.comoNovo ? `${f.nome || "Fluxo"} (minha cópia)` : f.nome || "");
+    setAtivo(opts.comoNovo ? false : !!f.ativo);
+    setEGeral(opts.comoNovo ? false : !!f.e_geral);
+    setAoEsgotar((f.ao_esgotar as "nada" | "descartar") || "nada");
     setPassos(
       (f.followup_passos || []).map((p: any) => ({
         conteudo: p.conteudo || "",
@@ -92,6 +95,8 @@ function FollowupsPage() {
     );
     setIsOpen(true);
   }
+  const abrirEdicao = (f: any) => carregarNoForm(f);
+  const usarComoBase = (f: any) => carregarNoForm(f, { comoNovo: true });
 
   const salvar = useMutation({
     mutationFn: async () => {
@@ -105,7 +110,7 @@ function FollowupsPage() {
       if (fluxoId) {
         const { error } = await supabase
           .from("followup_fluxos" as any)
-          .update({ nome: nome.trim(), ativo, e_geral: eGeral })
+          .update({ nome: nome.trim(), ativo, e_geral: eGeral, ao_esgotar: aoEsgotar })
           .eq("id", fluxoId);
         if (error) throw error;
       } else {
@@ -120,6 +125,7 @@ function FollowupsPage() {
             nome: nome.trim(),
             ativo,
             e_geral: eGeral,
+            ao_esgotar: aoEsgotar,
             imobiliaria_id: perfil?.imobiliaria_id,
             corretor_id: user.id,
             criado_por: user.id,
@@ -218,12 +224,19 @@ function FollowupsPage() {
                       <span className="text-saas-sm font-bold text-slate-700 truncate">{f.nome}</span>
                     </div>
                     <div className="flex opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-primary" onClick={() => abrirEdicao(f)}>
-                        <Edit className="h-3.5 w-3.5" />
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-primary" title="Usar como base (cria uma cópia sua)" onClick={() => usarComoBase(f)}>
+                        <Copy className="h-3.5 w-3.5" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-red-500" onClick={() => remover.mutate(f.id)}>
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                      {f.corretor_id !== null && (
+                        <>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-primary" onClick={() => abrirEdicao(f)}>
+                            <Edit className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-red-500" onClick={() => remover.mutate(f.id)}>
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </div>
                 </CardHeader>
@@ -241,6 +254,11 @@ function FollowupsPage() {
                     <Badge variant="secondary" className="bg-slate-100 text-slate-500 border-none text-[9px] uppercase font-bold tracking-tighter">
                       {f.followup_passos?.length || 0} passo(s)
                     </Badge>
+                    {f.ao_esgotar === "descartar" && (
+                      <Badge className="border-none text-[9px] uppercase font-bold tracking-tighter bg-amber-100 text-amber-700 gap-1">
+                        <UserX className="h-2.5 w-2.5" /> Descarta ao esgotar
+                      </Badge>
+                    )}
                   </div>
                   <div className="space-y-1 mt-1">
                     {(f.followup_passos || []).slice(0, 4).map((p: any) => (
@@ -286,6 +304,27 @@ function FollowupsPage() {
                   quando o dono ligar a automática. Só um fluxo pode ser "geral".
                 </p>
               )}
+
+              <div className="space-y-1.5">
+                <label className="text-saas-xs font-bold text-slate-500 uppercase tracking-wider">
+                  Se terminar todos os passos sem o cliente responder
+                </label>
+                <Select value={aoEsgotar} onValueChange={(v) => setAoEsgotar(v as "nada" | "descartar")}>
+                  <SelectTrigger className="h-9 text-saas-sm border-slate-200">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="nada">Não fazer nada (marca como concluído)</SelectItem>
+                    <SelectItem value="descartar">Descartar o lead (motivo: Sem Resposta)</SelectItem>
+                  </SelectContent>
+                </Select>
+                {aoEsgotar === "descartar" && (
+                  <p className="text-[10px] text-muted-foreground">
+                    O lead sai do seu Kanban e vai pra Distribuição → Leads Descartados. Como o motivo
+                    é "Sem Resposta", ele volta pro bolsão de rebatidas depois de 3 dias.
+                  </p>
+                )}
+              </div>
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
