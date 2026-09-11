@@ -7,6 +7,7 @@ import { useFollowUpAlerts } from "@/hooks/useFollowUpAlerts";
 import { VisitaAlertProvider } from "@/components/analytics/VisitaAlertProvider";
 import { LeadNovoAlertProvider } from "@/components/leads/LeadNovoAlertProvider";
 import { AnaliseCreditoAlertProvider } from "@/components/leads/AnaliseCreditoAlertProvider";
+import { AvisoMetaWhatsappProvider } from "@/components/layout/AvisoMetaWhatsappProvider";
 
 import appCss from "../styles.css?url";
 
@@ -102,6 +103,7 @@ function RootComponent() {
         <VisitaAlertProvider />
         <LeadNovoAlertProvider />
         <AnaliseCreditoAlertProvider />
+        <AvisoMetaWhatsappProvider />
         <Outlet />
         <Toaster richColors position="top-right" />
       </AuthProvider>

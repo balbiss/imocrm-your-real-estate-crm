@@ -247,6 +247,30 @@ function SettingsPage() {
                   </div>
                 </CardContent>
               </Card>
+
+              <Card className="border-none shadow-soft bg-white overflow-hidden mt-6">
+                <CardHeader className="py-4 px-5 border-b border-slate-50">
+                  <CardTitle className="text-sm font-bold">Aviso: Atualização WhatsApp (Meta)</CardTitle>
+                  <CardDescription className="text-saas-xs">
+                    Aviso temporário — desligue quando o proxy reverso estiver atualizado.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="p-5">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <Label className="text-saas-sm font-bold text-slate-700">Mostrar aviso pra dono/gerente</Label>
+                      <p className="text-saas-xs text-muted-foreground max-w-md">
+                        Popup bloqueante avisando que a integração de WhatsApp vai precisar de atualização
+                        no proxy reverso. Aparece ao entrar no CRM e se repete a cada 1 hora. Corretores não veem.
+                      </p>
+                    </div>
+                    <Switch
+                      checked={!!(imobiliaria as any)?.aviso_meta_whatsapp_ativo}
+                      onCheckedChange={(v) => updateImobiliariaMutation.mutate({ aviso_meta_whatsapp_ativo: v })}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
             </TabsContent>
 
             <TabsContent value="assinatura">
