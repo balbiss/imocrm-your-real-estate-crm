@@ -66,6 +66,19 @@ interface LeadDetailsModalProps {
   initialTab?: "detalhes" | "chat" | "followup";
 }
 
+// Motivos que mandam o lead pra aprovação do gerente em vez de ir direto pro bolsão
+// (mesma lógica em handleDescarte e no botão "Confirmar Devolução").
+const MOTIVOS_DESCARTE_EXTREMO = [
+  "Descadastrar",
+  "Já Comprou (Outra Empresa)",
+  "Contato Errado",
+  "Descadastrar (Idoso)",
+  "Descadastrar (Outra Região)",
+  "Descadastrar (Número Errado)",
+];
+// Só esses exigem observação obrigatória — o motivo em si já explica os demais.
+const MOTIVOS_DESCARTE_OBS_OBRIGATORIA = ["Descadastrar", "Já Comprou (Outra Empresa)", "Contato Errado"];
+
 export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "detalhes" }: LeadDetailsModalProps) {
   const queryClient = useQueryClient();
   const { can, role } = usePermissions();
@@ -422,7 +435,7 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
         observacao: obsDescarte,
       });
 
-      const isExtreme = motivoDescarte === "Descadastrar" || motivoDescarte === "Já Comprou (Outra Empresa)" || motivoDescarte === "Contato Errado";
+      const isExtreme = MOTIVOS_DESCARTE_EXTREMO.includes(motivoDescarte);
       
       if (isExtreme) {
         // Fluxo de Aprovação Gerencial (O lead "morre" da tela do corretor mas aguarda aprovação)
@@ -1251,7 +1264,11 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
                     <SelectItem value="Parou de Responder">Parou de Responder</SelectItem>
                     <SelectItem value="Sem Interesse">Sem Interesse</SelectItem>
                     <SelectItem value="Aprovado/Desistiu">Aprovado/Desistiu</SelectItem>
+                    <SelectItem value="Sem Interesse (Renda Baixa)">Sem Interesse (Renda Baixa)</SelectItem>
                     <SelectItem value="Descadastrar" className="text-red-600 font-bold">Descadastrar (Requer Aprovação)</SelectItem>
+                    <SelectItem value="Descadastrar (Idoso)" className="text-red-600 font-bold">Descadastrar - Idoso (Requer Aprovação)</SelectItem>
+                    <SelectItem value="Descadastrar (Outra Região)" className="text-red-600 font-bold">Descadastrar - Outra Região (Requer Aprovação)</SelectItem>
+                    <SelectItem value="Descadastrar (Número Errado)" className="text-red-600 font-bold">Descadastrar - Número Errado (Requer Aprovação)</SelectItem>
                     <SelectItem value="Já Comprou (Outra Empresa)" className="text-red-600 font-bold">Já Comprou - Outra Empresa (Requer Aprovação)</SelectItem>
                     <SelectItem value="Contato Errado" className="text-red-600 font-bold">Contato Errado (Requer Aprovação)</SelectItem>
                   </SelectContent>
@@ -1270,7 +1287,7 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
                 <Button 
                   className="flex-1 bg-orange-600 hover:bg-orange-700" 
                   onClick={handleDescarte} 
-                  disabled={!motivoDescarte || ((motivoDescarte === "Descadastrar" || motivoDescarte === "Já Comprou (Outra Empresa)" || motivoDescarte === "Contato Errado") && !obsDescarte.trim())}
+                  disabled={!motivoDescarte || (MOTIVOS_DESCARTE_OBS_OBRIGATORIA.includes(motivoDescarte) && !obsDescarte.trim())}
                 >
                   Confirmar Devolução
                 </Button>

@@ -85,7 +85,7 @@ export function SlaMonitor() {
         .from("leads")
         .select("id, nome, descartado_em, motivo_descarte, imobiliaria_id")
         .not("descartado_em", "is", null)
-        .not("motivo_descarte", "in", '("Descadastrar", "Já Comprou (Outra Empresa)")');
+        .not("motivo_descarte", "in", '("Descadastrar", "Já Comprou (Outra Empresa)", "Descadastrar (Idoso)", "Descadastrar (Outra Região)", "Descadastrar (Número Errado)")');
 
       if (error || !leads) return;
 

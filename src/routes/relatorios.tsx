@@ -291,7 +291,7 @@ function ReportsPage() {
     // marcados por descartado_em/motivo_descarte (mesma regra já usada em
     // redistribuicao.tsx pra separar as abas "Leads Descartados" vs
     // "Lead Descadastrar": motivo extremo = precisou aprovação do dono).
-    const MOTIVOS_DESCADASTRO = ["Descadastrar", "Já Comprou (Outra Empresa)"];
+    const MOTIVOS_DESCADASTRO = ["Descadastrar", "Já Comprou (Outra Empresa)", "Descadastrar (Idoso)", "Descadastrar (Outra Região)", "Descadastrar (Número Errado)"];
     const ehDescadastrado = (l: any) => !!l.descartado_em && MOTIVOS_DESCADASTRO.includes(l.motivo_descarte);
     const ehDescarteComum = (l: any) => !!l.descartado_em && !MOTIVOS_DESCADASTRO.includes(l.motivo_descarte);
 
@@ -302,6 +302,31 @@ function ReportsPage() {
           return acc + diff;
         }, 0) / respondedLeads.length / (1000 * 60)
       : 0;
+
+    // Leads Novos: Renda e Status (pedido do dono, 11/09) — cruza quantos
+    // leads novos do período já responderam e em qual coluna do funil cada
+    // um está agora, com a renda familiar média informada por etapa.
+    const comRendaGeral = leads.filter((l: any) => l.renda_familiar);
+    const rendaMediaGeral = comRendaGeral.length
+      ? comRendaGeral.reduce((acc: number, l: any) => acc + Number(l.renda_familiar), 0) / comRendaGeral.length
+      : null;
+    const rendaPorStatus = raw.colunas
+      .map((c: any) => {
+        const nosLeads = leads.filter((l: any) => l.coluna_kanban_id === c.id);
+        const comRenda = nosLeads.filter((l: any) => l.renda_familiar);
+        return {
+          nome: c.nome,
+          total: nosLeads.length,
+          responderam: nosLeads.filter((l: any) => l.primeiro_contato_em).length,
+          rendaMedia: comRenda.length
+            ? comRenda.reduce((acc: number, l: any) => acc + Number(l.renda_familiar), 0) / comRenda.length
+            : null,
+        };
+      })
+      .filter((s: any) => s.total > 0)
+      .sort((a: any, b: any) => b.total - a.total);
+    const descartadosNoPeriodo = leads.filter(ehDescarteComum).length;
+    const descadastradosNoPeriodo = leads.filter(ehDescadastrado).length;
 
     // Performance por Corretor — pedido do dono: além de leads/vendas/conversão,
     // quebrar por etapa (rebatidas puxadas, agendados, visitou, análise de
@@ -393,6 +418,12 @@ function ReportsPage() {
       brokerPerformance: brokerPerformance.sort((a: any, b: any) => b[ordenarRankingPor] - a[ordenarRankingPor]),
       campanhaPerformance,
       leads,
+      respondedCount: respondedLeads.length,
+      rendaMediaGeral,
+      comRendaCount: comRendaGeral.length,
+      rendaPorStatus,
+      descartadosNoPeriodo,
+      descadastradosNoPeriodo,
     };
   }, [raw, mesFiltro, corretorFiltroRel, origemFiltroRel, cidadeFiltroRel, dentroDoPeriodo, gastosCampanha, ordenarRankingPor]);
 
@@ -547,6 +578,58 @@ function ReportsPage() {
                 </div>
               </div>
             </button>
+          </CardContent>
+        </Card>
+
+        <Card className="border-none shadow-soft bg-white overflow-hidden">
+          <CardHeader className="py-4 px-5 border-b border-slate-50">
+            <CardTitle className="text-sm font-bold">Leads Novos — Renda e Status</CardTitle>
+            <CardDescription className="text-saas-xs">Quantos leads novos do período já responderam, em qual etapa estão agora e a renda familiar média informada em cada uma</CardDescription>
+          </CardHeader>
+          <CardContent className="p-6 space-y-5">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="p-3 rounded-lg bg-slate-50">
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Responderam</p>
+                <p className="text-lg font-bold text-slate-900">{stats?.respondedCount} <span className="text-[10px] font-bold text-slate-400">/ {stats?.totalLeads}</span></p>
+              </div>
+              <div className="p-3 rounded-lg bg-slate-50">
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Renda Média Informada</p>
+                <p className="text-lg font-bold text-slate-900">{stats?.rendaMediaGeral != null ? stats.rendaMediaGeral.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }) : "—"}</p>
+              </div>
+              <div className="p-3 rounded-lg bg-slate-50">
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Informaram Renda</p>
+                <p className="text-lg font-bold text-slate-900">{stats?.comRendaCount} <span className="text-[10px] font-bold text-slate-400">/ {stats?.totalLeads}</span></p>
+              </div>
+              <div className="p-3 rounded-lg bg-slate-50">
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Descarte / Descadastro</p>
+                <p className="text-lg font-bold text-slate-900">{stats?.descartadosNoPeriodo} <span className="text-[10px] font-bold text-slate-400">/ {stats?.descadastradosNoPeriodo}</span></p>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="border-b border-slate-50 bg-slate-50/50">
+                    <th className="px-3 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider">Etapa</th>
+                    <th className="px-3 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-center">Leads</th>
+                    <th className="px-3 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-center">Responderam</th>
+                    <th className="px-3 py-3 text-[9px] font-bold text-slate-400 uppercase tracking-wider text-right">Renda Média</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {stats?.rendaPorStatus.map((etapa: any) => (
+                    <tr key={etapa.nome} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="px-3 py-3 text-saas-xs font-bold text-slate-700">{etapa.nome}</td>
+                      <td className="px-3 py-3 text-center text-saas-xs font-medium text-slate-600">{etapa.total}</td>
+                      <td className="px-3 py-3 text-center text-saas-xs font-medium text-slate-600">{etapa.responderam}</td>
+                      <td className="px-3 py-3 text-right text-saas-xs font-medium text-slate-600">{etapa.rendaMedia != null ? etapa.rendaMedia.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }) : "—"}</td>
+                    </tr>
+                  ))}
+                  {(!stats?.rendaPorStatus || stats.rendaPorStatus.length === 0) && (
+                    <tr><td colSpan={4} className="px-3 py-6 text-center text-saas-xs text-slate-400">Sem leads novos no período.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </CardContent>
         </Card>
 

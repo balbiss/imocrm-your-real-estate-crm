@@ -155,11 +155,11 @@ function RedistributionPage() {
           // definitivos.
           query = query
             .not("descartado_em", "is", null)
-            .not("motivo_descarte", "in", '("Descadastrar","Já Comprou (Outra Empresa)","Contato Errado")');
+            .not("motivo_descarte", "in", '("Descadastrar","Já Comprou (Outra Empresa)","Contato Errado","Descadastrar (Idoso)","Descadastrar (Outra Região)","Descadastrar (Número Errado)")');
         } else if (activeTab === "descadastrados") {
           query = query
             .not("descartado_em", "is", null)
-            .in("motivo_descarte", ["Descadastrar", "Já Comprou (Outra Empresa)", "Contato Errado"]);
+            .in("motivo_descarte", ["Descadastrar", "Já Comprou (Outra Empresa)", "Contato Errado", "Descadastrar (Idoso)", "Descadastrar (Outra Região)", "Descadastrar (Número Errado)"]);
         } else {
           // Regra de redistribuição: tentativas >= 5 ou sem contato há > 24h
           const yesterday = new Date();
