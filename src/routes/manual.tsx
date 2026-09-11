@@ -240,6 +240,10 @@ function ManualPage() {
 
             <Section id="dashboard" title="Dashboard" roles={["todos"]} lede="A tela inicial ao entrar no sistema. Mostra um resumo do que está acontecendo agora — leads novos, leads esperando resposta, visitas marcadas e como estão as vendas do período.">
               <p>Corretores veem os próprios números; dono e gerente veem o total da imobiliária, com opção de filtrar por corretor.</p>
+              <p><strong>Widgets de hoje</strong> (abaixo dos números do período): <strong>Leads Novos</strong>, <strong>Agendamento no Dia</strong> (próximo contato marcado pra hoje, não importa quando o lead entrou) e <strong>Visitas no Dia</strong> (visita marcada pra hoje) atualizam sozinhos em tempo real, sem precisar dar F5 — qualquer lead novo ou card movido já aparece na hora. Todo item de toda lista é clicável e abre o card do lead direto.</p>
+              <p><strong>Análise de Crédito</strong> mostra quantos cards <em>entraram</em> nessa coluna hoje (não quantos estão lá agora — um card que já passou por lá ontem não conta de novo hoje).</p>
+              <p><strong>Horários dos Cadastros:</strong> gráfico de barras por hora (00h–23h) de hoje, pra ver os picos de entrada de lead no dia. <strong>Campanhas:</strong> quantidade de leads por campanha/anúncio — esse segue o período escolhido no topo da página (não é só hoje, porque campanha não muda de minuto a minuto). Clique numa barra pra ver a lista de leads daquele horário/campanha.</p>
+              <p><strong>Rebatidas no Dia, por Corretor</strong> (só dono/gerente): quantos leads cada corretor devolveu pro bolsão hoje — conta só descarte normal, não os motivos extremos que exigem aprovação. Clique num corretor pra ver quais leads foram.</p>
             </Section>
 
             <Section id="leads" title="Leads e Kanban" roles={["todos"]} lede="O coração do sistema. Cada lead é um cartão que anda por colunas conforme avança no atendimento — da primeira mensagem até a venda ou descarte.">
