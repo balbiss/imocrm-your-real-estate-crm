@@ -34,13 +34,31 @@ const ATRASOS = [
 
 const VARIAVEIS = ["{nome}", "{corretor}", "{origem}", "{bairro}"];
 
-type PassoForm = { conteudo: string; atraso_minutos: number; so_horario_comercial: boolean };
+type PassoForm = { conteudo: string; atraso_minutos: number; so_horario_comercial: boolean; data_hora_fixa: string | null };
 
-function atrasoLabel(min: number, primeiro: boolean) {
+function atrasoLabel(min: number, primeiro: boolean, dataHoraFixa?: string | null) {
+  if (dataHoraFixa) {
+    const d = new Date(dataHoraFixa);
+    return "Em " + d.toLocaleDateString("pt-BR") + " às " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  }
   const found = ATRASOS.find((a) => a.min === min);
   const base = found ? found.label : `${min} min depois`;
   if (min === 0) return primeiro ? "Assim que iniciar" : "Logo após o passo anterior";
   return primeiro ? base.replace("depois", "após iniciar") : base + " (do passo anterior)";
+}
+
+// Converte um valor de <input type="datetime-local"> (hora local do
+// navegador, sem timezone) pro ISO em UTC que o banco espera, e vice-versa.
+function datetimeLocalToIso(v: string): string | null {
+  if (!v) return null;
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? null : d.toISOString();
+}
+function isoToDatetimeLocal(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 function FollowupsPage() {
@@ -76,7 +94,7 @@ function FollowupsPage() {
     setAtivo(false);
     setEGeral(false);
     setAoEsgotar("nada");
-    setPassos([{ conteudo: "", atraso_minutos: 0, so_horario_comercial: true }]);
+    setPassos([{ conteudo: "", atraso_minutos: 0, so_horario_comercial: true, data_hora_fixa: null }]);
     setIsOpen(true);
   }
 
@@ -91,6 +109,7 @@ function FollowupsPage() {
         conteudo: p.conteudo || "",
         atraso_minutos: p.atraso_minutos ?? 0,
         so_horario_comercial: p.so_horario_comercial ?? true,
+        data_hora_fixa: p.data_hora_fixa ?? null,
       }))
     );
     setIsOpen(true);
@@ -154,6 +173,7 @@ function FollowupsPage() {
         base_atraso: i === 0 ? "inscricao" : "passo_anterior",
         conteudo: p.conteudo.trim(),
         so_horario_comercial: p.so_horario_comercial,
+        data_hora_fixa: p.data_hora_fixa || null,
       }));
       const { error: passosErr } = await supabase.from("followup_passos" as any).insert(rows);
       if (passosErr) throw passosErr;
@@ -198,8 +218,9 @@ function FollowupsPage() {
           <div>
             <h1 className="text-xl font-bold tracking-tight text-slate-900">Follow-ups automáticos</h1>
             <p className="text-saas-sm text-muted-foreground">
-              Monte uma sequência de mensagens de WhatsApp. Depois é só abrir o card do lead e clicar
-              em <strong>Iniciar follow-up</strong>.
+              Monte uma sequência de mensagens de WhatsApp. Marque um fluxo como <strong>Geral</strong> e
+              <strong> Ativo</strong> pra todo lead que cair pra você entrar nele sozinho — ou abra o card
+              de um lead específico e clique em <strong>Iniciar follow-up</strong> pra rodar manualmente.
             </p>
           </div>
           <Button onClick={abrirNovo} className="h-9 text-[11px] font-bold uppercase tracking-wider px-6">
@@ -263,7 +284,7 @@ function FollowupsPage() {
                   <div className="space-y-1 mt-1">
                     {(f.followup_passos || []).slice(0, 4).map((p: any) => (
                       <div key={p.id} className="text-saas-xs text-slate-600 bg-slate-50 rounded-md px-2 py-1.5 border border-slate-100">
-                        <span className="font-bold text-slate-400 mr-1.5">{atrasoLabel(p.atraso_minutos, p.ordem === 1)}:</span>
+                        <span className="font-bold text-slate-400 mr-1.5">{atrasoLabel(p.atraso_minutos, p.ordem === 1, p.data_hora_fixa)}:</span>
                         <span className="line-clamp-2">{p.conteudo}</span>
                       </div>
                     ))}
@@ -300,8 +321,9 @@ function FollowupsPage() {
               </div>
               {eGeral && (
                 <p className="text-[10px] text-muted-foreground -mt-2">
-                  Todo lead novo atribuído a você entra neste fluxo automaticamente — passa a valer
-                  quando o dono ligar a automática. Só um fluxo pode ser "geral".
+                  Todo lead que ganhar você como corretor (roleta ou transferência) entra neste fluxo
+                  sozinho, na hora, contanto que ele também esteja <strong>Ativo</strong>. Só um fluxo pode
+                  ser "geral" por corretor.
                 </p>
               )}
 
@@ -352,7 +374,13 @@ function FollowupsPage() {
                         </Button>
                       </div>
                     </div>
-                    <Select value={String(p.atraso_minutos)} onValueChange={(v) => setPasso(idx, { atraso_minutos: Number(v) })}>
+                    <Select
+                      value={p.data_hora_fixa ? "fixa" : String(p.atraso_minutos)}
+                      onValueChange={(v) => {
+                        if (v === "fixa") setPasso(idx, { data_hora_fixa: new Date(Date.now() + 60 * 60000).toISOString(), so_horario_comercial: false });
+                        else setPasso(idx, { atraso_minutos: Number(v), data_hora_fixa: null });
+                      }}
+                    >
                       <SelectTrigger className="h-8 text-saas-xs border-slate-200 bg-white">
                         <SelectValue />
                       </SelectTrigger>
@@ -364,22 +392,39 @@ function FollowupsPage() {
                               : a.min === 0 ? "Logo após o passo anterior" : a.label}
                           </SelectItem>
                         ))}
+                        <SelectItem value="fixa" className="text-saas-xs">Data e hora específica…</SelectItem>
                       </SelectContent>
                     </Select>
+                    {p.data_hora_fixa && (
+                      <div className="space-y-1">
+                        <Input
+                          type="datetime-local"
+                          value={isoToDatetimeLocal(p.data_hora_fixa)}
+                          onChange={(e) => setPasso(idx, { data_hora_fixa: datetimeLocalToIso(e.target.value) })}
+                          className="h-8 text-saas-xs border-slate-200 bg-white"
+                        />
+                        <p className="text-[10px] text-muted-foreground">
+                          Envia exatamente nessa data/hora — vale só pra quem entrar neste fluxo antes desse momento. Se o fluxo for
+                          reaproveitado depois que essa data já passou, esse passo é enviado logo no próximo ciclo do motor (a cada 10 min).
+                        </p>
+                      </div>
+                    )}
                     <Textarea
                       value={p.conteudo}
                       onChange={(e) => setPasso(idx, { conteudo: e.target.value })}
                       placeholder="Oi {nome}, aqui é o {corretor}..."
                       className="min-h-[70px] text-saas-sm border-slate-200 bg-white resize-none"
                     />
-                    <label className="flex items-center gap-2 text-[11px] text-slate-500">
-                      <Switch checked={p.so_horario_comercial} onCheckedChange={(v) => setPasso(idx, { so_horario_comercial: v })} />
-                      Só em horário comercial (Seg–Sáb, 8h–20h)
-                    </label>
+                    {!p.data_hora_fixa && (
+                      <label className="flex items-center gap-2 text-[11px] text-slate-500">
+                        <Switch checked={p.so_horario_comercial} onCheckedChange={(v) => setPasso(idx, { so_horario_comercial: v })} />
+                        Só em horário comercial (Seg–Sáb, 8h–20h)
+                      </label>
+                    )}
                   </div>
                 ))}
 
-                <Button type="button" variant="outline" size="sm" className="w-full text-[11px]" onClick={() => setPassos((prev) => [...prev, { conteudo: "", atraso_minutos: 1440, so_horario_comercial: true }])}>
+                <Button type="button" variant="outline" size="sm" className="w-full text-[11px]" onClick={() => setPassos((prev) => [...prev, { conteudo: "", atraso_minutos: 1440, so_horario_comercial: true, data_hora_fixa: null }])}>
                   <Plus className="h-3.5 w-3.5 mr-1" /> Adicionar passo
                 </Button>
               </div>

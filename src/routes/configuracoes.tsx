@@ -221,6 +221,32 @@ function SettingsPage() {
                   </form>
                 </CardContent>
               </Card>
+
+              <Card className="border-none shadow-soft bg-white overflow-hidden mt-6">
+                <CardHeader className="py-4 px-5 border-b border-slate-50">
+                  <CardTitle className="text-sm font-bold">Follow-up Automático</CardTitle>
+                  <CardDescription className="text-saas-xs">
+                    Liga o disparo automático de mensagens quando um lead ganha corretor.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="p-5">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <Label className="text-saas-sm font-bold text-slate-700">Iniciar follow-up sozinho ao atribuir lead</Label>
+                      <p className="text-saas-xs text-muted-foreground max-w-md">
+                        Com isso ligado, todo lead que ganhar um corretor (pela roleta ou por transferência
+                        manual) entra na hora no fluxo marcado como <strong>Geral</strong> desse corretor —
+                        contanto que esse fluxo também esteja <strong>Ativo</strong>. Configure os fluxos em{" "}
+                        <strong>Follow-ups</strong>, no menu lateral.
+                      </p>
+                    </div>
+                    <Switch
+                      checked={!!(imobiliaria as any)?.followup_automatico_ativo}
+                      onCheckedChange={(v) => updateImobiliariaMutation.mutate({ followup_automatico_ativo: v })}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
             </TabsContent>
 
             <TabsContent value="assinatura">

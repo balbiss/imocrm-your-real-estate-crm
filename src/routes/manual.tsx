@@ -350,7 +350,10 @@ function ManualPage() {
             </Section>
 
             <Section id="followups" title="Follow-ups automáticos" roles={["todos"]} lede="Cada corretor monta uma sequência de mensagens de WhatsApp que o sistema envia sozinho pro lead — mensagem inicial + acompanhamentos.">
-              <p><strong>Criar um fluxo:</strong> em <em>Follow-ups</em> no menu, clique em <strong>Novo Fluxo</strong>, dê um nome e adicione os passos. Cada passo tem um momento ("assim que iniciar", "2 horas depois", "1 dia depois"...) e a mensagem. Dá pra usar as tags <strong>{"{nome}"}</strong>, <strong>{"{corretor}"}</strong>, <strong>{"{origem}"}</strong> e <strong>{"{bairro}"}</strong>, que o sistema troca pelos dados do lead na hora do envio.</p>
+              <p><strong>Criar um fluxo:</strong> em <em>Follow-ups</em> no menu, clique em <strong>Novo Fluxo</strong>, dê um nome e adicione os passos. Cada passo tem um momento ("assim que iniciar", "2 horas depois", "1 dia depois"... ou uma <strong>data e hora específica</strong> do calendário, se preferir escolher exatamente quando aquele passo sai) e a mensagem. Dá pra usar as tags <strong>{"{nome}"}</strong>, <strong>{"{corretor}"}</strong>, <strong>{"{origem}"}</strong> e <strong>{"{bairro}"}</strong>, que o sistema troca pelos dados do lead na hora do envio.</p>
+              <Callout title="Fluxo Geral: entra sozinho, sem precisar clicar em nada">
+                Marque um fluxo como <strong>Geral</strong> e <strong>Ativo</strong> ao mesmo tempo e ele passa a valer pra TODO lead que ganhar você como corretor — pela roleta ou por qualquer transferência manual ("Transferir para", "Encaminhar para...", Ações em Massa). Cada corretor só pode ter um fluxo "Geral". O dono liga/desliga essa automação pra imobiliária inteira em <a href="#configuracoes">Configurações → Imobiliária → Follow-up Automático</a> — desligado, os fluxos "Geral" ficam prontos mas não disparam sozinhos.
+              </Callout>
               <p><strong>Não sabe por onde começar?</strong> A imobiliária deixa um fluxo <strong>Modelo</strong> pronto na tela de Follow-ups. Passe o mouse nele e clique no ícone de copiar (<em>Usar como base</em>): o sistema cria uma cópia sua, já com os passos preenchidos, pra você ajustar o texto do seu jeito.</p>
               <p><strong>Ligar num lead:</strong> abra o card do lead, vá na aba <strong>Follow-up</strong>, escolha o fluxo e clique em <strong>Iniciar follow-up</strong>. A aba mostra em que passo está, o que já foi enviado e se o cliente respondeu. Botões de <strong>Pausar</strong>, <strong>Retomar</strong>, <strong>Encerrar</strong> e <strong>Trocar fluxo</strong> ficam ali.</p>
               <p>As mensagens automáticas aparecem no <strong>Chat WhatsApp</strong> com o selo <strong>🤖 Follow-up</strong> e um fundo roxo — pra você bater o olho e saber que não foi você que mandou. E cada passo dado pelo fluxo fica registrado no <strong>Histórico</strong> do card (início, resposta do cliente, encerramento).</p>
@@ -370,6 +373,7 @@ function ManualPage() {
 
             <Section id="configuracoes" title="Configurações" roles={["dono", "gerente"]} lede="Ajustes gerais da imobiliária, incluindo as colunas do Kanban — dá pra renomear, reordenar ou criar novas colunas para adaptar o funil ao processo de vendas da empresa.">
               <p>Mudanças nas colunas afetam o Kanban imediatamente para toda a equipe.</p>
+              <p><strong>Follow-up Automático</strong> (aba Imobiliária): interruptor único que liga/desliga, pra imobiliária inteira, o disparo automático de <a href="#followups">follow-up</a> quando um lead ganha corretor. Só quem é dono de fato consegue salvar essa mudança.</p>
             </Section>
 
             <Section id="conta" title="Conta e senha" roles={["todos"]} lede='Esqueceu a senha? Na tela de login, clique em "Esqueci minha senha", informe o e-mail cadastrado e siga o link recebido para cadastrar uma nova senha.'>
