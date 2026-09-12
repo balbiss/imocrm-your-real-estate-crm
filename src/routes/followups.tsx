@@ -34,6 +34,10 @@ const ATRASOS = [
 ];
 
 const VARIAVEIS = ["{nome}", "{corretor}", "{origem}", "{bairro}"];
+// Só fazem sentido em fluxo de campanha (dependem de um imóvel cadastrado
+// com a mesma "Referência do Anúncio" em Imóveis). {imovel_foto} não vira
+// texto -- é sinal pro motor anexar a foto de capa do imóvel casado.
+const VARIAVEIS_IMOVEL = ["{imovel_foto}", "{imovel_titulo}", "{imovel_descricao}", "{imovel_preco}"];
 
 type AnexoTipo = "imagem" | "video" | "documento";
 type PassoForm = {
@@ -437,6 +441,16 @@ function FollowupsPage() {
                     recebeu lead nenhum, não precisa esperar aparecer na lista de sugestões.
                     {campanha && " Compartilhado: todo lead que entrar por essa campanha já cai nesse fluxo, não importa qual corretor recebeu — tem prioridade sobre o fluxo \"Geral\" pessoal dele."}
                   </p>
+                  {campanha && (
+                    <p className="text-[10px] text-fuchsia-600 bg-fuchsia-50 rounded-md p-2">
+                      Cadastre um imóvel em <strong>Imóveis</strong> com a mesma referência em "Referência do
+                      Anúncio" e use <span className="font-mono">{"{imovel_foto}"}</span>,{" "}
+                      <span className="font-mono">{"{imovel_titulo}"}</span>,{" "}
+                      <span className="font-mono">{"{imovel_descricao}"}</span> ou{" "}
+                      <span className="font-mono">{"{imovel_preco}"}</span> nos passos abaixo — o
+                      follow-up puxa a foto e os dados sozinho, sem precisar subir imagem na mão.
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -462,11 +476,14 @@ function FollowupsPage() {
               </div>
 
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between flex-wrap gap-y-1">
                   <label className="text-saas-xs font-bold text-slate-500 uppercase tracking-wider">Passos</label>
                   <div className="flex flex-wrap gap-1">
                     {VARIAVEIS.map((v) => (
                       <span key={v} className="text-[9px] font-mono bg-slate-100 text-slate-500 rounded px-1.5 py-0.5">{v}</span>
+                    ))}
+                    {campanha && VARIAVEIS_IMOVEL.map((v) => (
+                      <span key={v} className="text-[9px] font-mono bg-fuchsia-50 text-fuchsia-600 rounded px-1.5 py-0.5" title="Precisa de um imóvel cadastrado com essa mesma Referência do Anúncio">{v}</span>
                     ))}
                   </div>
                 </div>

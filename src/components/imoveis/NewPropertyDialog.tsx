@@ -189,12 +189,26 @@ export function NewPropertyDialog({ open, onOpenChange }: NewPropertyDialogProps
           <form id="new-property-form" onSubmit={handleSubmit(onSubmit)} className="space-y-5 pb-6">
             <div className="space-y-2">
               <Label htmlFor="titulo" className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Título do Anúncio</Label>
-              <Input 
-                id="titulo" 
-                placeholder="Ex: Casa duplex no condomínio X" 
+              <Input
+                id="titulo"
+                placeholder="Ex: Casa duplex no condomínio X"
                 {...register("titulo", { required: true })}
                 className="h-10 text-sm border-slate-200 focus:border-primary transition-all"
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="referencia_anuncio" className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Referência do Anúncio (opcional)</Label>
+              <Input
+                id="referencia_anuncio"
+                placeholder="Ex: [CN 38] [SETE SÓIS] — igual ao que aparece na Origem do lead"
+                {...register("referencia_anuncio")}
+                className="h-10 text-sm border-slate-200 focus:border-primary transition-all"
+              />
+              <p className="text-[10px] text-muted-foreground">
+                Preenchendo igual à campanha do anúncio no Facebook, o follow-up dessa campanha já puxa
+                foto, título, descrição e preço deste imóvel sozinho, sem precisar subir imagem na mão.
+              </p>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

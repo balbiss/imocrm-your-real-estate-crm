@@ -70,12 +70,38 @@ automacaoRouter.post("/followup/enviar", async (req, res) => {
 
     const provider = providerFor(instance);
 
-    const texto = conteudo
-      ? renderTemplate(conteudo, {
+    // Imóvel casado pela referência do anúncio (mesmo texto de leads.origem) --
+    // pedido do dono (12/09) pra não precisar subir a imagem do criativo na
+    // mão em cada fluxo: cadastra o imóvel uma vez com essa referência e o
+    // follow-up puxa foto/título/descrição/preço sozinho.
+    let imovel = null;
+    if (lead_origem && imobiliaria_id) {
+      const { data } = await supabaseAdmin
+        .from("imoveis")
+        .select("titulo, descricao, preco, fotos")
+        .eq("imobiliaria_id", imobiliaria_id)
+        .eq("referencia_anuncio", lead_origem)
+        .maybeSingle();
+      imovel = data || null;
+    }
+
+    // {imovel_foto} não é texto -- é sinal pra anexar a foto de capa do
+    // imóvel casado. Tira o token (e a quebra de linha ao redor) ANTES de
+    // renderizar o resto das variáveis normais.
+    const pedeFotoImovel = /\{imovel_foto\}/i.test(conteudo || "");
+    const conteudoSemTokenFoto = (conteudo || "").replace(/\n?\s*\{imovel_foto\}\s*\n?/gi, "\n").trim();
+
+    const texto = conteudoSemTokenFoto
+      ? renderTemplate(conteudoSemTokenFoto, {
           nome: primeiroNome(lead_nome),
           corretor: corretor_nome || "",
           origem: lead_origem || "",
           bairro: "",
+          imovel_titulo: imovel?.titulo || "",
+          imovel_descricao: imovel?.descricao || "",
+          imovel_preco: imovel?.preco
+            ? Number(imovel.preco).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+            : "",
         })
       : "";
 
@@ -89,15 +115,28 @@ automacaoRouter.post("/followup/enviar", async (req, res) => {
       return res.json({ skipped: "jid_nao_resolvido" });
     }
 
-    // Passo com anexo (o criativo da campanha, ex: a imagem do anúncio que o
-    // lead viu) -- baixa e manda junto, com o texto como legenda. Falha no
-    // download cai pra texto puro em vez de travar o follow-up.
-    let anexoBase64 = null;
-    if (anexo_url) anexoBase64 = await baixarAnexoBase64(anexo_url);
+    // Anexo a mandar: o que o corretor subiu na mão no passo (prioridade) OU,
+    // se o texto pedir {imovel_foto} e não tiver anexo manual, a foto de capa
+    // do imóvel casado pela campanha.
+    let urlAnexoFinal = anexo_url || null;
+    let tipoAnexoFinal = anexo_tipo || null;
+    let mimetypeAnexoFinal = anexo_mimetype || null;
+    let nomeAnexoFinal = anexo_nome || null;
+    if (!urlAnexoFinal && pedeFotoImovel && imovel?.fotos?.[0]) {
+      urlAnexoFinal = imovel.fotos[0];
+      tipoAnexoFinal = "imagem";
+      nomeAnexoFinal = "foto-imovel.jpg";
+    }
 
-    const campoWaha = anexo_url && anexoBase64 ? CAMPO_WAHA_POR_TIPO[anexo_tipo] || "document" : null;
+    // Baixa o anexo (criativo da campanha ou foto do imóvel) e manda junto,
+    // com o texto como legenda. Falha no download cai pra texto puro em vez
+    // de travar o follow-up.
+    let anexoBase64 = null;
+    if (urlAnexoFinal) anexoBase64 = await baixarAnexoBase64(urlAnexoFinal);
+
+    const campoWaha = urlAnexoFinal && anexoBase64 ? CAMPO_WAHA_POR_TIPO[tipoAnexoFinal] || "document" : null;
     const messageContent = campoWaha
-      ? { [campoWaha]: anexoBase64, mimetype: anexo_mimetype || undefined, fileName: anexo_nome || undefined, caption: texto || undefined }
+      ? { [campoWaha]: anexoBase64, mimetype: mimetypeAnexoFinal || undefined, fileName: nomeAnexoFinal || undefined, caption: texto || undefined }
       : { text: texto };
 
     const result = await provider.sendMessage(jid, messageContent);
@@ -107,9 +146,9 @@ automacaoRouter.post("/followup/enviar", async (req, res) => {
     // "[Anexo]: <url>\n<legenda>" -- é isso que a tela de conversa procura
     // pra renderizar a miniatura em vez de texto puro.
     const conteudoSalvo = campoWaha
-      ? `[Anexo]: ${anexo_url}${texto ? `\n${texto}` : ""}`
+      ? `[Anexo]: ${urlAnexoFinal}${texto ? `\n${texto}` : ""}`
       : texto;
-    const tipoSalvo = campoWaha ? TIPO_MENSAGEM_POR_ANEXO[anexo_tipo] || "document" : "text";
+    const tipoSalvo = campoWaha ? TIPO_MENSAGEM_POR_ANEXO[tipoAnexoFinal] || "document" : "text";
 
     // Grava a mensagem no fio (mesmo padrão do webhook: upsert idempotente pelo
     // whatsapp_message_id). canal='followup' -> o chat mostra com selo 🤖 e o

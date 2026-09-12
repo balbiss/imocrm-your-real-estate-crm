@@ -311,6 +311,19 @@ export function PropertyDetailsDialog({ imovel, open, onOpenChange }: PropertyDe
                       )}
                     </div>
 
+                    <div className="space-y-2">
+                      <Label className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Referência do Anúncio</Label>
+                      {isEditing ? (
+                        <Input
+                          placeholder="Ex: [CN 38] [SETE SÓIS] — igual à Origem do lead"
+                          {...register("referencia_anuncio")}
+                          className="h-11 text-sm border-slate-200 focus:ring-primary/20"
+                        />
+                      ) : (
+                        <p className="text-sm text-slate-600">{(imovel as any).referencia_anuncio || "— não vinculado a nenhuma campanha"}</p>
+                      )}
+                    </div>
+
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Preço</Label>
