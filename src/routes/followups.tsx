@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Plus, Repeat, Trash2, Edit, ArrowUp, ArrowDown, Copy, UserX } from "lucide-react";
+import { Plus, Repeat, Trash2, Edit, ArrowUp, ArrowDown, Copy, UserX, Image as ImageIcon, Video, FileText as FileIcon, X, Megaphone } from "lucide-react";
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/context/AuthContext";
+import { usePermissions } from "@/hooks/usePermissions";
 
 export const Route = createFileRoute("/followups")({
   head: () => ({ meta: [{ title: "Follow-ups — CRM" }] }),
@@ -34,7 +35,30 @@ const ATRASOS = [
 
 const VARIAVEIS = ["{nome}", "{corretor}", "{origem}", "{bairro}"];
 
-type PassoForm = { conteudo: string; atraso_minutos: number; so_horario_comercial: boolean; data_hora_fixa: string | null };
+type AnexoTipo = "imagem" | "video" | "documento";
+type PassoForm = {
+  conteudo: string;
+  atraso_minutos: number;
+  so_horario_comercial: boolean;
+  data_hora_fixa: string | null;
+  anexo_url: string | null;
+  anexo_tipo: AnexoTipo | null;
+  anexo_nome: string | null;
+  anexo_mimetype: string | null;
+  anexo_novo: File | null; // arquivo escolhido agora, ainda não subiu
+};
+
+function tipoAnexoPorArquivo(file: File): AnexoTipo {
+  if (file.type.startsWith("image/")) return "imagem";
+  if (file.type.startsWith("video/")) return "video";
+  return "documento";
+}
+
+function IconeAnexo({ tipo, className }: { tipo: string | null; className?: string }) {
+  if (tipo === "imagem") return <ImageIcon className={className} />;
+  if (tipo === "video") return <Video className={className} />;
+  return <FileIcon className={className} />;
+}
 
 function atrasoLabel(min: number, primeiro: boolean, dataHoraFixa?: string | null) {
   if (dataHoraFixa) {
@@ -64,14 +88,30 @@ function isoToDatetimeLocal(iso: string | null | undefined): string {
 function FollowupsPage() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const { role } = usePermissions();
+  const podeGerenciarCampanha = role === "dono" || role === "gerente";
 
   const [isOpen, setIsOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [nome, setNome] = useState("");
   const [ativo, setAtivo] = useState(false);
   const [eGeral, setEGeral] = useState(false);
+  const [campanha, setCampanha] = useState<string>("");
   const [aoEsgotar, setAoEsgotar] = useState<"nada" | "descartar">("nada");
   const [passos, setPassos] = useState<PassoForm[]>([]);
+
+  // Campanhas reais já vistas nos leads, pra escolher de uma lista em vez de
+  // digitar (e arriscar não bater com leads.origem, que é o que o gatilho
+  // automático compara).
+  const { data: campanhasDisponiveis } = useQuery({
+    queryKey: ["campanhas-disponiveis-followup"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("leads").select("origem").not("origem", "is", null).limit(2000);
+      if (error) throw error;
+      return Array.from(new Set((data || []).map((l: any) => l.origem).filter(Boolean))).sort();
+    },
+    enabled: podeGerenciarCampanha,
+  });
 
   const { data: fluxos, isLoading } = useQuery({
     queryKey: ["followup-fluxos"],
@@ -93,8 +133,9 @@ function FollowupsPage() {
     setNome("");
     setAtivo(false);
     setEGeral(false);
+    setCampanha("");
     setAoEsgotar("nada");
-    setPassos([{ conteudo: "", atraso_minutos: 0, so_horario_comercial: true, data_hora_fixa: null }]);
+    setPassos([{ conteudo: "", atraso_minutos: 0, so_horario_comercial: true, data_hora_fixa: null, anexo_url: null, anexo_tipo: null, anexo_nome: null, anexo_mimetype: null, anexo_novo: null }]);
     setIsOpen(true);
   }
 
@@ -103,6 +144,7 @@ function FollowupsPage() {
     setNome(opts.comoNovo ? `${f.nome || "Fluxo"} (minha cópia)` : f.nome || "");
     setAtivo(opts.comoNovo ? false : !!f.ativo);
     setEGeral(opts.comoNovo ? false : !!f.e_geral);
+    setCampanha(opts.comoNovo ? "" : f.campanha || "");
     setAoEsgotar((f.ao_esgotar as "nada" | "descartar") || "nada");
     setPassos(
       (f.followup_passos || []).map((p: any) => ({
@@ -110,6 +152,11 @@ function FollowupsPage() {
         atraso_minutos: p.atraso_minutos ?? 0,
         so_horario_comercial: p.so_horario_comercial ?? true,
         data_hora_fixa: p.data_hora_fixa ?? null,
+        anexo_url: p.anexo_url ?? null,
+        anexo_tipo: p.anexo_tipo ?? null,
+        anexo_nome: p.anexo_nome ?? null,
+        anexo_mimetype: p.anexo_mimetype ?? null,
+        anexo_novo: null,
       }))
     );
     setIsOpen(true);
@@ -121,15 +168,18 @@ function FollowupsPage() {
     mutationFn: async () => {
       if (!user) throw new Error("Não autenticado");
       if (!nome.trim()) throw new Error("Dê um nome pro fluxo.");
-      const passosLimpos = passos.filter((p) => p.conteudo.trim());
+      const passosLimpos = passos.filter((p) => p.conteudo.trim() || p.anexo_url || p.anexo_novo);
       if (passosLimpos.length === 0) throw new Error("Adicione pelo menos um passo com mensagem.");
+
+      const campanhaFinal = podeGerenciarCampanha && campanha ? campanha : null;
+      const eGeralFinal = campanhaFinal ? false : eGeral; // mutuamente exclusivos
 
       let fluxoId = editing?.id as string | undefined;
 
       if (fluxoId) {
         const { error } = await supabase
           .from("followup_fluxos" as any)
-          .update({ nome: nome.trim(), ativo, e_geral: eGeral, ao_esgotar: aoEsgotar })
+          .update({ nome: nome.trim(), ativo, e_geral: eGeralFinal, campanha: campanhaFinal, ao_esgotar: aoEsgotar })
           .eq("id", fluxoId);
         if (error) throw error;
       } else {
@@ -143,10 +193,14 @@ function FollowupsPage() {
           .insert({
             nome: nome.trim(),
             ativo,
-            e_geral: eGeral,
+            e_geral: eGeralFinal,
+            campanha: campanhaFinal,
             ao_esgotar: aoEsgotar,
             imobiliaria_id: perfil?.imobiliaria_id,
-            corretor_id: user.id,
+            // Fluxo de campanha é compartilhado (Modelo da imobiliária) --
+            // corretor_id NULL, igual aos "Modelo" que já existiam. RLS só
+            // deixa dono/gerente inserir assim.
+            corretor_id: campanhaFinal ? null : user.id,
             criado_por: user.id,
           })
           .select("id")
@@ -155,8 +209,8 @@ function FollowupsPage() {
         fluxoId = (novo as any).id;
       }
 
-      // Só um fluxo "geral" por corretor.
-      if (eGeral && fluxoId) {
+      // Só um fluxo "geral" por corretor (não se aplica a fluxo de campanha).
+      if (eGeralFinal && fluxoId) {
         await supabase
           .from("followup_fluxos" as any)
           .update({ e_geral: false })
@@ -164,9 +218,28 @@ function FollowupsPage() {
           .neq("id", fluxoId);
       }
 
+      // Sobe os anexos novos (se algum passo tiver escolhido um arquivo agora).
+      const passosComAnexo = await Promise.all(
+        passosLimpos.map(async (p) => {
+          if (!p.anexo_novo) return p;
+          const fileExt = p.anexo_novo.name.split(".").pop();
+          const filePath = `${user.id}/${crypto.randomUUID()}.${fileExt}`;
+          const { error: uploadError } = await supabase.storage.from("templates_anexos").upload(filePath, p.anexo_novo);
+          if (uploadError) throw uploadError;
+          const { data: { publicUrl } } = supabase.storage.from("templates_anexos").getPublicUrl(filePath);
+          return {
+            ...p,
+            anexo_url: publicUrl,
+            anexo_tipo: tipoAnexoPorArquivo(p.anexo_novo),
+            anexo_nome: p.anexo_novo.name,
+            anexo_mimetype: p.anexo_novo.type,
+          };
+        })
+      );
+
       // Regrava os passos do zero (simples e sem risco de ordem furada).
       await supabase.from("followup_passos" as any).delete().eq("fluxo_id", fluxoId);
-      const rows = passosLimpos.map((p, i) => ({
+      const rows = passosComAnexo.map((p, i) => ({
         fluxo_id: fluxoId,
         ordem: i + 1,
         atraso_minutos: p.atraso_minutos,
@@ -174,6 +247,10 @@ function FollowupsPage() {
         conteudo: p.conteudo.trim(),
         so_horario_comercial: p.so_horario_comercial,
         data_hora_fixa: p.data_hora_fixa || null,
+        anexo_url: p.anexo_url || null,
+        anexo_tipo: p.anexo_tipo || null,
+        anexo_nome: p.anexo_nome || null,
+        anexo_mimetype: p.anexo_mimetype || null,
       }));
       const { error: passosErr } = await supabase.from("followup_passos" as any).insert(rows);
       if (passosErr) throw passosErr;
@@ -248,7 +325,7 @@ function FollowupsPage() {
                       <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-primary" title="Usar como base (cria uma cópia sua)" onClick={() => usarComoBase(f)}>
                         <Copy className="h-3.5 w-3.5" />
                       </Button>
-                      {f.corretor_id !== null && (
+                      {(f.corretor_id !== null || podeGerenciarCampanha) && (
                         <>
                           <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-primary" onClick={() => abrirEdicao(f)}>
                             <Edit className="h-3.5 w-3.5" />
@@ -269,7 +346,12 @@ function FollowupsPage() {
                     {f.e_geral && (
                       <Badge className="border-none text-[9px] uppercase font-bold tracking-tighter bg-blue-100 text-blue-700">Geral</Badge>
                     )}
-                    {f.corretor_id === null && (
+                    {f.campanha && (
+                      <Badge className="border-none text-[9px] uppercase font-bold tracking-tighter bg-fuchsia-100 text-fuchsia-700 gap-1">
+                        <Megaphone className="h-2.5 w-2.5" /> {f.campanha}
+                      </Badge>
+                    )}
+                    {f.corretor_id === null && !f.campanha && (
                       <Badge className="border-none text-[9px] uppercase font-bold tracking-tighter bg-violet-100 text-violet-700">Modelo</Badge>
                     )}
                     <Badge variant="secondary" className="bg-slate-100 text-slate-500 border-none text-[9px] uppercase font-bold tracking-tighter">
@@ -283,9 +365,12 @@ function FollowupsPage() {
                   </div>
                   <div className="space-y-1 mt-1">
                     {(f.followup_passos || []).slice(0, 4).map((p: any) => (
-                      <div key={p.id} className="text-saas-xs text-slate-600 bg-slate-50 rounded-md px-2 py-1.5 border border-slate-100">
-                        <span className="font-bold text-slate-400 mr-1.5">{atrasoLabel(p.atraso_minutos, p.ordem === 1, p.data_hora_fixa)}:</span>
-                        <span className="line-clamp-2">{p.conteudo}</span>
+                      <div key={p.id} className="text-saas-xs text-slate-600 bg-slate-50 rounded-md px-2 py-1.5 border border-slate-100 flex items-start gap-1.5">
+                        {p.anexo_tipo && <IconeAnexo tipo={p.anexo_tipo} className="h-3 w-3 mt-0.5 text-fuchsia-500 shrink-0" />}
+                        <span>
+                          <span className="font-bold text-slate-400 mr-1.5">{atrasoLabel(p.atraso_minutos, p.ordem === 1, p.data_hora_fixa)}:</span>
+                          <span className="line-clamp-2">{p.conteudo || <em className="text-slate-400">(sem texto, só o anexo)</em>}</span>
+                        </span>
                       </div>
                     ))}
                   </div>
@@ -315,16 +400,43 @@ function FollowupsPage() {
                 <label className="flex items-center gap-2 text-saas-sm text-slate-600">
                   <Switch checked={ativo} onCheckedChange={setAtivo} /> Ativo
                 </label>
-                <label className="flex items-center gap-2 text-saas-sm text-slate-600">
-                  <Switch checked={eGeral} onCheckedChange={setEGeral} /> Fluxo geral
-                </label>
+                {!campanha && (
+                  <label className="flex items-center gap-2 text-saas-sm text-slate-600">
+                    <Switch checked={eGeral} onCheckedChange={setEGeral} /> Fluxo geral
+                  </label>
+                )}
               </div>
-              {eGeral && (
+              {eGeral && !campanha && (
                 <p className="text-[10px] text-muted-foreground -mt-2">
                   Todo lead que ganhar você como corretor (roleta ou transferência) entra neste fluxo
                   sozinho, na hora, contanto que ele também esteja <strong>Ativo</strong>. Só um fluxo pode
                   ser "geral" por corretor.
                 </p>
+              )}
+
+              {podeGerenciarCampanha && !eGeral && (
+                <div className="space-y-1.5">
+                  <label className="text-saas-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                    <Megaphone className="h-3 w-3" /> Campanha (opcional)
+                  </label>
+                  <Select value={campanha || "__nenhuma__"} onValueChange={(v) => setCampanha(v === "__nenhuma__" ? "" : v)}>
+                    <SelectTrigger className="h-9 text-saas-sm border-slate-200">
+                      <SelectValue placeholder="Nenhuma — fluxo comum" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__nenhuma__">Nenhuma — fluxo comum</SelectItem>
+                      {(campanhasDisponiveis || []).map((c: string) => (
+                        <SelectItem key={c} value={c} className="text-saas-sm">{c}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {campanha && (
+                    <p className="text-[10px] text-muted-foreground">
+                      Compartilhado: todo lead que entrar por essa campanha já cai nesse fluxo, não
+                      importa qual corretor recebeu — tem prioridade sobre o fluxo "Geral" pessoal dele.
+                    </p>
+                  )}
+                </div>
               )}
 
               <div className="space-y-1.5">
@@ -415,6 +527,40 @@ function FollowupsPage() {
                       placeholder="Oi {nome}, aqui é o {corretor}..."
                       className="min-h-[70px] text-saas-sm border-slate-200 bg-white resize-none"
                     />
+
+                    {p.anexo_url && !p.anexo_novo ? (
+                      <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg p-2">
+                        {p.anexo_tipo === "imagem" ? (
+                          <img src={p.anexo_url} alt="" className="h-10 w-10 object-cover rounded" />
+                        ) : (
+                          <div className="h-10 w-10 flex items-center justify-center bg-slate-100 rounded"><IconeAnexo tipo={p.anexo_tipo} className="h-4 w-4 text-slate-400" /></div>
+                        )}
+                        <span className="text-[11px] text-slate-600 truncate flex-1">{p.anexo_nome}</span>
+                        <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-slate-400 hover:text-red-500" onClick={() => setPasso(idx, { anexo_url: null, anexo_tipo: null, anexo_nome: null, anexo_mimetype: null })}>
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    ) : p.anexo_novo ? (
+                      <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg p-2">
+                        <div className="h-10 w-10 flex items-center justify-center bg-slate-100 rounded"><IconeAnexo tipo={tipoAnexoPorArquivo(p.anexo_novo)} className="h-4 w-4 text-slate-400" /></div>
+                        <span className="text-[11px] text-slate-600 truncate flex-1">{p.anexo_novo.name} (novo)</span>
+                        <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-slate-400 hover:text-red-500" onClick={() => setPasso(idx, { anexo_novo: null })}>
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <label className="flex items-center gap-2 text-[11px] text-slate-500 border border-dashed border-slate-300 rounded-lg p-2 cursor-pointer hover:bg-white">
+                        <ImageIcon className="h-3.5 w-3.5" />
+                        Anexar imagem/vídeo/PDF (ex: o criativo do anúncio dessa campanha)
+                        <input
+                          type="file"
+                          accept="image/*,video/*,application/pdf"
+                          className="hidden"
+                          onChange={(e) => { const f = e.target.files?.[0]; if (f) setPasso(idx, { anexo_novo: f }); e.target.value = ""; }}
+                        />
+                      </label>
+                    )}
+
                     {!p.data_hora_fixa && (
                       <label className="flex items-center gap-2 text-[11px] text-slate-500">
                         <Switch checked={p.so_horario_comercial} onCheckedChange={(v) => setPasso(idx, { so_horario_comercial: v })} />
@@ -424,7 +570,7 @@ function FollowupsPage() {
                   </div>
                 ))}
 
-                <Button type="button" variant="outline" size="sm" className="w-full text-[11px]" onClick={() => setPassos((prev) => [...prev, { conteudo: "", atraso_minutos: 1440, so_horario_comercial: true, data_hora_fixa: null }])}>
+                <Button type="button" variant="outline" size="sm" className="w-full text-[11px]" onClick={() => setPassos((prev) => [...prev, { conteudo: "", atraso_minutos: 1440, so_horario_comercial: true, data_hora_fixa: null, anexo_url: null, anexo_tipo: null, anexo_nome: null, anexo_mimetype: null, anexo_novo: null }])}>
                   <Plus className="h-3.5 w-3.5 mr-1" /> Adicionar passo
                 </Button>
               </div>

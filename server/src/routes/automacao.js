@@ -11,6 +11,25 @@ import { renderTemplate, primeiroNome } from "../lib/template.js";
 
 export const automacaoRouter = Router();
 
+// Baixa o anexo (imagem/vídeo/pdf do criativo da campanha, subido no Supabase
+// Storage pela tela de Follow-ups) e devolve em base64 pro formato que
+// provider.sendMessage já espera (mesmo shape usado pro chat manual). Falha
+// de download não pode travar o follow-up -- cai pra texto puro nesse caso.
+async function baixarAnexoBase64(url) {
+  try {
+    const r = await fetch(url);
+    if (!r.ok) return null;
+    const buf = Buffer.from(await r.arrayBuffer());
+    return buf.toString("base64");
+  } catch (err) {
+    console.error("Falha ao baixar anexo do follow-up:", err.message);
+    return null;
+  }
+}
+
+const CAMPO_WAHA_POR_TIPO = { imagem: "image", video: "video", documento: "document" };
+const TIPO_MENSAGEM_POR_ANEXO = { imagem: "image", video: "video", documento: "document" };
+
 automacaoRouter.post("/followup/enviar", async (req, res) => {
   if (!checkSecret(req, res)) return;
 
@@ -27,9 +46,13 @@ automacaoRouter.post("/followup/enviar", async (req, res) => {
       lead_nome,
       lead_origem,
       corretor_nome,
+      anexo_url,
+      anexo_tipo,
+      anexo_nome,
+      anexo_mimetype,
     } = req.body || {};
 
-    if (!execucao_id || !lead_id || !corretor_id || !telefone || !conteudo) {
+    if (!execucao_id || !lead_id || !corretor_id || !telefone || (!conteudo && !anexo_url)) {
       return res.status(400).json({ error: "payload incompleto" });
     }
 
@@ -47,12 +70,14 @@ automacaoRouter.post("/followup/enviar", async (req, res) => {
 
     const provider = providerFor(instance);
 
-    const texto = renderTemplate(conteudo, {
-      nome: primeiroNome(lead_nome),
-      corretor: corretor_nome || "",
-      origem: lead_origem || "",
-      bairro: "",
-    });
+    const texto = conteudo
+      ? renderTemplate(conteudo, {
+          nome: primeiroNome(lead_nome),
+          corretor: corretor_nome || "",
+          origem: lead_origem || "",
+          bairro: "",
+        })
+      : "";
 
     let jid = await provider.resolveJid(telefone);
     if (!jid && telefone_alternativo) {
@@ -64,8 +89,27 @@ automacaoRouter.post("/followup/enviar", async (req, res) => {
       return res.json({ skipped: "jid_nao_resolvido" });
     }
 
-    const result = await provider.sendMessage(jid, { text: texto });
+    // Passo com anexo (o criativo da campanha, ex: a imagem do anúncio que o
+    // lead viu) -- baixa e manda junto, com o texto como legenda. Falha no
+    // download cai pra texto puro em vez de travar o follow-up.
+    let anexoBase64 = null;
+    if (anexo_url) anexoBase64 = await baixarAnexoBase64(anexo_url);
+
+    const campoWaha = anexo_url && anexoBase64 ? CAMPO_WAHA_POR_TIPO[anexo_tipo] || "document" : null;
+    const messageContent = campoWaha
+      ? { [campoWaha]: anexoBase64, mimetype: anexo_mimetype || undefined, fileName: anexo_nome || undefined, caption: texto || undefined }
+      : { text: texto };
+
+    const result = await provider.sendMessage(jid, messageContent);
     const messageId = result?.data?.key?.id || null;
+
+    // Mesma convenção já usada pelo Chat manual pra anexo (WhatsAppChat.tsx):
+    // "[Anexo]: <url>\n<legenda>" -- é isso que a tela de conversa procura
+    // pra renderizar a miniatura em vez de texto puro.
+    const conteudoSalvo = campoWaha
+      ? `[Anexo]: ${anexo_url}${texto ? `\n${texto}` : ""}`
+      : texto;
+    const tipoSalvo = campoWaha ? TIPO_MENSAGEM_POR_ANEXO[anexo_tipo] || "document" : "text";
 
     // Grava a mensagem no fio (mesmo padrão do webhook: upsert idempotente pelo
     // whatsapp_message_id). canal='followup' -> o chat mostra com selo 🤖 e o
@@ -79,11 +123,11 @@ automacaoRouter.post("/followup/enviar", async (req, res) => {
             lead_id,
             imobiliaria_id: imobiliaria_id || null,
             corretor_id,
-            conteudo: texto,
+            conteudo: conteudoSalvo,
             direcao: "outbound",
             status: "sent",
             whatsapp_message_id: messageId,
-            tipo: "text",
+            tipo: tipoSalvo,
             canal: "followup",
             lida: true,
             metadata: { followup: true, passo: passo_ordem },
