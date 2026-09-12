@@ -139,7 +139,22 @@ automacaoRouter.post("/followup/enviar", async (req, res) => {
       ? { [campoWaha]: anexoBase64, mimetype: mimetypeAnexoFinal || undefined, fileName: nomeAnexoFinal || undefined, caption: texto || undefined }
       : { text: texto };
 
-    const result = await provider.sendMessage(jid, messageContent);
+    let result;
+    try {
+      result = await provider.sendMessage(jid, messageContent);
+    } catch (sendErr) {
+      // Falha de verdade no envio (ex: bug conhecido do WAHA/GOWS "no LID
+      // found" -- https://github.com/devlikeapro/waha/issues/1714, sem fix
+      // upstream). Sem isso, ficaria tentando de novo pra sempre escondido.
+      // followup_registrar_erro já desiste na 3ª tentativa e avisa o
+      // corretor + dono/gerente.
+      console.error("Falha ao enviar follow-up:", sendErr.message);
+      await supabaseAdmin.rpc("followup_registrar_erro", {
+        p_execucao_id: execucao_id,
+        p_erro: sendErr.message?.slice(0, 500) || "erro desconhecido no envio",
+      });
+      return res.json({ erro_registrado: true, detail: sendErr.message });
+    }
     const messageId = result?.data?.key?.id || null;
 
     // Mesma convenção já usada pelo Chat manual pra anexo (WhatsAppChat.tsx):
