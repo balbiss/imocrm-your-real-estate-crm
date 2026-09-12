@@ -419,23 +419,24 @@ function FollowupsPage() {
                   <label className="text-saas-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
                     <Megaphone className="h-3 w-3" /> Campanha (opcional)
                   </label>
-                  <Select value={campanha || "__nenhuma__"} onValueChange={(v) => setCampanha(v === "__nenhuma__" ? "" : v)}>
-                    <SelectTrigger className="h-9 text-saas-sm border-slate-200">
-                      <SelectValue placeholder="Nenhuma — fluxo comum" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__nenhuma__">Nenhuma — fluxo comum</SelectItem>
-                      {(campanhasDisponiveis || []).map((c: string) => (
-                        <SelectItem key={c} value={c} className="text-saas-sm">{c}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {campanha && (
-                    <p className="text-[10px] text-muted-foreground">
-                      Compartilhado: todo lead que entrar por essa campanha já cai nesse fluxo, não
-                      importa qual corretor recebeu — tem prioridade sobre o fluxo "Geral" pessoal dele.
-                    </p>
-                  )}
+                  <Input
+                    list="campanhas-disponiveis-datalist"
+                    value={campanha}
+                    onChange={(e) => setCampanha(e.target.value)}
+                    placeholder="Escolha uma já usada ou digite a referência de uma campanha nova"
+                    className="h-9 text-saas-sm border-slate-200"
+                  />
+                  <datalist id="campanhas-disponiveis-datalist">
+                    {(campanhasDisponiveis || []).map((c: string) => (
+                      <option key={c} value={c} />
+                    ))}
+                  </datalist>
+                  <p className="text-[10px] text-muted-foreground">
+                    Precisa ser <strong>igual, palavra por palavra</strong>, ao que aparece em "Origem"
+                    no card do lead — pode digitar a referência de uma campanha nova que ainda não
+                    recebeu lead nenhum, não precisa esperar aparecer na lista de sugestões.
+                    {campanha && " Compartilhado: todo lead que entrar por essa campanha já cai nesse fluxo, não importa qual corretor recebeu — tem prioridade sobre o fluxo \"Geral\" pessoal dele."}
+                  </p>
                 </div>
               )}
 
