@@ -48,7 +48,7 @@ export function FollowUpPanel({
     queryFn: async () => {
       const { data: rows, error } = await supabase
         .from("followup_fluxos" as any)
-        .select("id, nome, corretor_id, e_geral")
+        .select("id, nome, corretor_id, e_geral, campanha")
         .eq("ativo", true);
       if (error) throw error;
       return (rows as any[]).filter(
@@ -141,7 +141,7 @@ export function FollowUpPanel({
               {fluxos.map((f: any) => (
                 <SelectItem key={f.id} value={f.id} className="text-saas-sm">
                   {f.nome}
-                  {f.corretor_id === null ? " (modelo)" : ""}
+                  {f.campanha ? ` (campanha: ${f.campanha})` : f.corretor_id === null ? " (modelo)" : ""}
                 </SelectItem>
               ))}
             </SelectContent>
