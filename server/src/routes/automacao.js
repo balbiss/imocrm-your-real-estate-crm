@@ -8,6 +8,7 @@ import { supabaseAdmin } from "../supabase.js";
 import { providerFor } from "../whatsappProvider.js";
 import { checkSecret } from "../lib/webhookSecret.js";
 import { renderTemplate, primeiroNome } from "../lib/template.js";
+import { sendMessageComRetry } from "../lib/sendComRetry.js";
 
 export const automacaoRouter = Router();
 
@@ -141,7 +142,7 @@ automacaoRouter.post("/followup/enviar", async (req, res) => {
 
     let result;
     try {
-      result = await provider.sendMessage(jid, messageContent);
+      result = await sendMessageComRetry(provider, jid, messageContent);
     } catch (sendErr) {
       // Falha de verdade no envio (ex: bug conhecido do WAHA/GOWS "no LID
       // found" -- https://github.com/devlikeapro/waha/issues/1714, sem fix

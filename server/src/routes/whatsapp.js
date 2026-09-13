@@ -3,6 +3,7 @@ import { requireUser } from "../middleware/auth.js";
 import { supabaseAdmin } from "../supabase.js";
 import { providerFor } from "../whatsappProvider.js";
 import { toDigitsWithDDI } from "../lib/phone.js";
+import { sendMessageComRetry } from "../lib/sendComRetry.js";
 
 export const whatsappRouter = Router();
 whatsappRouter.use(requireUser);
@@ -236,7 +237,7 @@ whatsappRouter.post("/send", async (req, res) => {
     const options =
       instance.provider === "baileys" && quoted ? { quoted } : undefined;
 
-    const result = await provider.sendMessage(jid, messageContent, options);
+    const result = await sendMessageComRetry(provider, jid, messageContent, options);
     const messageId = result?.data?.key?.id || null;
 
     res.json({ success: true, jid, messageId });
