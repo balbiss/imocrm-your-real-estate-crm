@@ -70,9 +70,28 @@ export function normalizeBaileysMessage(msg) {
   };
 }
 
+// Tipos de evento do PROTOCOLO do WhatsApp (não é o cliente nem o corretor
+// escrevendo) que o WAHA/WEBJS às vezes manda como evento "message" --
+// achado real (18/09): aviso automático de "duração das mensagens
+// temporárias foi atualizada" contava como mensagem de verdade e disparava
+// o "corretor assumiu"/"cliente respondeu" do followup_proximo_lote(),
+// travando o follow-up automático sem ninguém ter escrito nada.
+const TIPOS_SISTEMA_WHATSAPP = new Set([
+  "e2e_notification",
+  "notification_template",
+  "gp2",
+  "call_log",
+  "ciphertext",
+  "revoked",
+  "broadcast_notification",
+]);
+
 export function normalizeWahaMessage(payload) {
   const sourceId = payload?.id;
   if (!sourceId) return null;
+
+  const tipoBruto = payload._data?.type;
+  if (tipoBruto && TIPOS_SISTEMA_WHATSAPP.has(tipoBruto)) return null;
 
   const fromMe = !!payload.fromMe;
   let chatId = fromMe ? payload.to : payload.from;

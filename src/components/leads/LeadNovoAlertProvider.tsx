@@ -126,7 +126,7 @@ export function LeadNovoAlertProvider() {
             <Sparkles className="h-10 w-10 text-primary" />
           </div>
           <DialogTitle className="text-center text-2xl font-black text-primary uppercase tracking-tight">
-            Lead Novo!
+            Lead Atribuído!
           </DialogTitle>
           <div className="text-center text-slate-600 font-bold text-base">
             {activeAlert.titulo}

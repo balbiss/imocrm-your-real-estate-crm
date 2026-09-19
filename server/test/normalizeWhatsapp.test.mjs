@@ -153,6 +153,28 @@ test("waha: numero gigante (id interno) -> descarta", () => {
   );
 });
 
+test("waha: aviso de sistema (mensagens temporarias etc) -> descarta", () => {
+  assert.equal(
+    normalizeWahaMessage({
+      id: "x",
+      from: "5511999998888@c.us",
+      fromMe: false,
+      body: "",
+      _data: { type: "notification_template" },
+    }),
+    null
+  );
+  assert.equal(
+    normalizeWahaMessage({
+      id: "y",
+      from: "5511999998888@c.us",
+      fromMe: false,
+      _data: { type: "e2e_notification" },
+    }),
+    null
+  );
+});
+
 test("baileys: @lid sem remoteJidAlt -> descarta", () => {
   assert.equal(
     normalizeBaileysMessage({ key: { remoteJid: "226838882291903@lid", id: "L2" }, message: { conversation: "oi" } }),
