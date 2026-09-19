@@ -360,6 +360,12 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
       queryClient.invalidateQueries({ queryKey: ["lead", leadId] });
       queryClient.invalidateQueries({ queryKey: ["leads"] });
       queryClient.invalidateQueries({ queryKey: ["compromissos"] });
+      // Grid do calendário (agenda.tsx) lê de uma query SEPARADA
+      // (listar_agenda_visitas via RPC), não de "compromissos" -- sem isso,
+      // reagendar visita/FID salvava certinho no card mas o calendário
+      // continuava mostrando a data antiga até um reload manual (achado
+      // real, 18/09: "já agendei o próximo FID mas não aparece no calendário").
+      queryClient.invalidateQueries({ queryKey: ["agenda-visitas"] });
       toast.success("Informações atualizadas!");
     },
   });

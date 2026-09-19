@@ -7,20 +7,28 @@ import { useAuth } from "@/context/AuthContext";
 export function useFollowUpAlerts() {
   const { user } = useAuth();
 
+  // Pedido do dono (18/09): esse toast disparava pra QUALQUER lead com
+  // lembrete vencido, em qualquer etapa -- virou ruído (etapas como
+  // Agendado/Tarefas já têm aviso próprio). Restrito a Lead Novo e Análise
+  // de Crédito (novo/pendente/aprovado/cobrar_doc/reprovado), com janela
+  // maior (2h de atraso, não o instante em que vence) pra não incomodar por
+  // um lembrete que passou há 2 minutos.
+  const JANELA_ATRASO_MS = 2 * 60 * 60 * 1000;
+  const STATUS_COM_ALERTA = ["novo", "pendente", "aprovado", "cobrar_doc", "reprovado"];
+
   const { data: alerts } = useQuery({
     queryKey: ["follow-up-alerts", user?.id],
     queryFn: async () => {
       if (!user) return [];
-      
-      const now = new Date().toISOString();
-      
-      // Buscar leads com lembrete vencido ou próximo (nos próximos 15 min)
-      // que pertencem ao usuário atual
+
+      const limite = new Date(Date.now() - JANELA_ATRASO_MS).toISOString();
+
       const { data, error } = await supabase
         .from("leads")
-        .select("id, nome, lembrete_follow_up")
+        .select("id, nome, lembrete_follow_up, status")
         .eq("corretor_id", user.id)
-        .lte("lembrete_follow_up", now)
+        .in("status", STATUS_COM_ALERTA)
+        .lte("lembrete_follow_up", limite)
         .is("data_fechamento", null)
         .order("lembrete_follow_up", { ascending: true });
 
