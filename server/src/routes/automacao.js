@@ -34,6 +34,15 @@ const TIPO_MENSAGEM_POR_ANEXO = { imagem: "image", video: "video", documento: "d
 automacaoRouter.post("/followup/enviar", async (req, res) => {
   if (!checkSecret(req, res)) return;
 
+  // DIAGNÓSTICO TEMPORÁRIO (18/09): investigando envio duplicado de
+  // follow-up que sobrevive à correção de 15/09 -- objetivo é confirmar se
+  // chegam 2 requisições HTTP de verdade pro mesmo execucao_id/passo (bug no
+  // motor n8n/rede) ou se é 1 requisição só processada 2x aqui dentro
+  // (bug no handler). Remover depois de identificar a causa.
+  console.log(
+    `[followup-diag] chegada req_id=${Math.random().toString(36).slice(2, 8)} execucao_id=${req.body?.execucao_id} passo_ordem=${req.body?.passo_ordem} em=${new Date().toISOString()}`
+  );
+
   try {
     const {
       execucao_id,
