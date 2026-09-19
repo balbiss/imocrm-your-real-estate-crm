@@ -120,8 +120,18 @@ automacaoRouter.post("/followup/enviar", async (req, res) => {
       jid = await provider.resolveJid(telefone_alternativo);
     }
     if (!jid) {
-      // Pode ser número fora do WhatsApp OU sessão WAHA momentaneamente fora do
-      // ar. Não avança nem encerra -- tenta de novo na próxima passada.
+      // Pode ser número fora do WhatsApp OU sessão WAHA momentaneamente fora
+      // do ar -- por isso reaproveita o MESMO mecanismo de 3 tentativas do
+      // erro de envio (followup_registrar_erro), em vez de escalar na
+      // primeira falha: se for só a sessão temporariamente fora do ar, some
+      // sozinho na próxima passada (tentativas_erro zera a cada envio OK);
+      // se for número que realmente não tem WhatsApp, na 3ª falha avisa
+      // corretor + dono/gerente (pedido real: "número sem WhatsApp" ficava
+      // tentando pra sempre, escondido, sem avisar ninguém).
+      await supabaseAdmin.rpc("followup_registrar_erro", {
+        p_execucao_id: execucao_id,
+        p_erro: "número não encontrado no WhatsApp (ou conexão momentaneamente fora do ar)",
+      });
       return res.json({ skipped: "jid_nao_resolvido" });
     }
 
