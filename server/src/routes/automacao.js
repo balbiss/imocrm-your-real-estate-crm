@@ -31,17 +31,15 @@ async function baixarAnexoBase64(url) {
 const CAMPO_WAHA_POR_TIPO = { imagem: "image", video: "video", documento: "document" };
 const TIPO_MENSAGEM_POR_ANEXO = { imagem: "image", video: "video", documento: "document" };
 
+// Solta a reserva do lote quando este envio não acontece (sem conexão,
+// reivindicação recusada) -- senão o corretor fica 15min contado como
+// "envio em voo" no followup_proximo_lote e nada dele sai nesse intervalo.
+async function liberarReserva(execucaoId) {
+  await supabaseAdmin.from("followup_execucoes").update({ reservado_em: null }).eq("id", execucaoId);
+}
+
 automacaoRouter.post("/followup/enviar", async (req, res) => {
   if (!checkSecret(req, res)) return;
-
-  // DIAGNÓSTICO TEMPORÁRIO (18/09): investigando envio duplicado de
-  // follow-up que sobrevive à correção de 15/09 -- objetivo é confirmar se
-  // chegam 2 requisições HTTP de verdade pro mesmo execucao_id/passo (bug no
-  // motor n8n/rede) ou se é 1 requisição só processada 2x aqui dentro
-  // (bug no handler). Remover depois de identificar a causa.
-  console.log(
-    `[followup-diag] chegada req_id=${Math.random().toString(36).slice(2, 8)} execucao_id=${req.body?.execucao_id} passo_ordem=${req.body?.passo_ordem} em=${new Date().toISOString()}`
-  );
 
   try {
     const {
@@ -75,6 +73,7 @@ automacaoRouter.post("/followup/enviar", async (req, res) => {
 
     if (!instance?.phone_number || !instance.connected) {
       // Não é erro -- a execução fica pra próxima passada do motor.
+      await liberarReserva(execucao_id);
       return res.json({ skipped: "sem_conexao" });
     }
 
@@ -159,6 +158,21 @@ automacaoRouter.post("/followup/enviar", async (req, res) => {
       ? { [campoWaha]: anexoBase64, mimetype: mimetypeAnexoFinal || undefined, fileName: nomeAnexoFinal || undefined, caption: texto || undefined }
       : { text: texto };
 
+    // Reivindica (execução, passo) IMEDIATAMENTE antes de mandar: só um
+    // chamador por passo recebe "ok". Bug real 21-22/09: passadas do motor
+    // que se sobrepõem mandavam o mesmo passo 2x, e o 2º contava como o
+    // passo seguinte (40 leads descartados antes da hora). Também reconfere
+    // se o cliente respondeu / corretor falou / lead mudou de mãos desde o lote.
+    const { data: reivindicacao, error: reivErr } = await supabaseAdmin.rpc("followup_reivindicar_envio", {
+      p_execucao_id: execucao_id,
+      p_passo_ordem: passo_ordem,
+    });
+    if (reivErr || reivindicacao !== "ok") {
+      if (reivErr) console.error("followup_reivindicar_envio falhou:", reivErr.message);
+      await liberarReserva(execucao_id);
+      return res.json({ skipped: reivErr ? "reivindicacao_falhou" : reivindicacao });
+    }
+
     let result;
     try {
       result = await sendMessageComRetry(provider, jid, messageContent);
@@ -221,6 +235,7 @@ automacaoRouter.post("/followup/enviar", async (req, res) => {
       p_whatsapp_message_id: messageId,
       p_conteudo: texto,
       p_mensagem_whatsapp_id: mensagemWhatsappId,
+      p_passo_ordem: passo_ordem,
     });
     if (rpcError) {
       console.error("followup_registrar_envio falhou:", rpcError.message);

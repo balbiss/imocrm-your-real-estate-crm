@@ -214,11 +214,18 @@ export function FollowUpPanel({
                 </span>
               </div>
             )}
+            {/* Só o "esgotado" é descarte feito PELO follow-up. O parado_lead
+                ("lead descartado / vendido / trocou de corretor") também contém
+                a palavra "descartado" e antes caía aqui, afirmando "todos os
+                passos foram enviados" em lead recém-cadastrado que só tinha
+                mudado de corretor (relato real 22/09). */}
             {!ativo && exec.motivo_parada && (
-              <div className={`text-saas-xs mt-1 ${exec.motivo_parada.includes("descartado") ? "text-amber-600 font-medium" : "text-slate-400"}`}>
-                {exec.motivo_parada.includes("descartado")
+              <div className={`text-saas-xs mt-1 ${exec.motivo_parada.startsWith("esgotado") ? "text-amber-600 font-medium" : "text-slate-400"}`}>
+                {exec.motivo_parada.startsWith("esgotado")
                   ? "Lead descartado automaticamente — todos os passos foram enviados sem resposta."
-                  : `Encerrado: ${exec.motivo_parada}`}
+                  : exec.status === "parado_lead" && exec.corretor_id !== leadCorretorId
+                    ? "Encerrado: este follow-up era do corretor anterior e parou quando o lead mudou de responsável."
+                    : `Encerrado: ${exec.motivo_parada}`}
               </div>
             )}
           </div>
