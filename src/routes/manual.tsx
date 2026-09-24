@@ -282,7 +282,7 @@ function ManualPage() {
                 O sistema <strong>nunca cria um segundo card</strong> pro mesmo telefone. Quando um cliente que já é lead preenche um formulário de novo:
                 <ul className="list-disc pl-4 mt-1 space-y-0.5">
                   <li>Se ele <strong>já está com um corretor</strong>, continua com esse corretor. O corretor recebe uma notificação ("seu lead se cadastrou de novo numa campanha") e o card ganha o selo vermelho <strong>SEGUNDO CADASTRO</strong> com a data — é sinal de interesse forte.</li>
-                  <li>Se ele estava <strong>sem corretor</strong> (rebatida/bolsão), entra na roleta na hora; se não tiver ninguém disponível, fica na rebatida e dono/gerente são avisados.</li>
+                  <li>Se ele estava <strong>sem corretor</strong> (rebatida/bolsão), entra na roleta na hora. Se a roleta estiver fechada (domingo, fim do expediente, ou ninguém com turno ativo ainda), dono/gerente são avisados e o lead <strong>entra sozinho na roleta assim que ela abrir</strong> — não fica esquecido no meio das rebatidas. O histórico do card registra quando isso aconteceu. Exceção: lead descadastrado ou com descarte aguardando aprovação não volta sozinho.</li>
                 </ul>
                 No card, "Desde dd/mm/aa" continua mostrando a data do <strong>primeiro</strong> cadastro.
               </Callout>
