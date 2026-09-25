@@ -349,6 +349,13 @@ function ManualPage() {
               <p>Acessível de dentro de qualquer conversa digitando <strong>/</strong>, como descrito em <a href="#conversas">Conversas</a>.</p>
             </Section>
 
+            <Section id="campanhas" title="Campanhas" roles={["todos"]} lede="Uma tela com cada anúncio que já trouxe leads: a imagem do criativo e quantos leads chegaram.">
+              <p>Em <em>Campanhas</em> no menu, cada cartão é uma campanha (o nome que vem do anúncio, ex.: "[CN 54] [CENARIUM]"), com o total de leads, quantos chegaram nos últimos 7 e 30 dias e quando chegou o último. Por padrão aparecem só as que trouxeram lead nos últimos 30 dias — clique em <strong>Todas</strong> pra ver as antigas. A busca filtra pelo nome.</p>
+              <Callout title="Colocar a imagem do criativo (dono e gerente)">
+                Clique no lápis do cartão e cole o link da imagem no Google Drive. No Drive: botão direito na imagem → <strong>Compartilhar</strong> → <strong>"Qualquer pessoa com o link"</strong> → <strong>Copiar link</strong>. Se o arquivo não estiver compartilhado assim, a prévia não aparece. Link de <strong>pasta</strong> também funciona, mas vira só um botão "Abrir no Drive", sem prévia. Dá pra cadastrar uma campanha antes do primeiro lead chegar em <strong>Nova Campanha</strong> — escreva o nome exatamente como vem no anúncio.
+              </Callout>
+            </Section>
+
             <Section id="followups" title="Follow-ups automáticos" roles={["todos"]} lede="Cada corretor monta uma sequência de mensagens de WhatsApp que o sistema envia sozinho pro lead — mensagem inicial + acompanhamentos.">
               <p><strong>Criar um fluxo:</strong> em <em>Follow-ups</em> no menu, clique em <strong>Novo Fluxo</strong>, dê um nome e adicione os passos. Cada passo tem um momento ("assim que iniciar", "2 horas depois", "1 dia depois"... ou uma <strong>data e hora específica</strong> do calendário, se preferir escolher exatamente quando aquele passo sai) e a mensagem. Dá pra usar as tags <strong>{"{nome}"}</strong>, <strong>{"{corretor}"}</strong>, <strong>{"{origem}"}</strong> e <strong>{"{bairro}"}</strong>, que o sistema troca pelos dados do lead na hora do envio.</p>
               <Callout title="Fluxo Geral: entra sozinho, sem precisar clicar em nada">

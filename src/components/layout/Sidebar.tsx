@@ -19,6 +19,7 @@ import {
   GraduationCap,
   BookOpen,
   Repeat,
+  Megaphone,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
@@ -197,6 +198,7 @@ export function Sidebar({ collapsed, onClose }: { collapsed: boolean; onClose?: 
   }
 
   main.push({ to: "/imoveis", label: "Imóveis", icon: Home });
+  main.push({ to: "/campanhas", label: "Campanhas", icon: Megaphone });
   main.push({ to: "/agenda", label: "Tarefas", icon: CalendarIcon });
 
   if (can('view_roleta')) {
