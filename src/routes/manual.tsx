@@ -69,6 +69,7 @@ const NAV_GROUPS: { title: string; items: { id: string; label: string }[] }[] = 
     items: [
       { id: "imoveis", label: "Imóveis" },
       { id: "templates", label: "Mensagens Prontas" },
+      { id: "campanhas", label: "Campanhas" },
       { id: "followups", label: "Follow-ups automáticos" },
       { id: "notificacoes", label: "Notificações" },
       { id: "configuracoes", label: "Configurações" },
