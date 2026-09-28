@@ -3,7 +3,6 @@ import { Outlet, Link, createRootRoute, HeadContent, Scripts } from "@tanstack/r
 import { Toaster } from "sonner";
 import { AuthProvider } from "@/context/AuthContext";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useFollowUpAlerts } from "@/hooks/useFollowUpAlerts";
 import { VisitaAlertProvider } from "@/components/analytics/VisitaAlertProvider";
 import { LeadNovoAlertProvider } from "@/components/leads/LeadNovoAlertProvider";
 import { AnaliseCreditoAlertProvider } from "@/components/leads/AnaliseCreditoAlertProvider";
@@ -87,7 +86,7 @@ function RootShell({ children }: { children: React.ReactNode }) {
 }
 
 function AppHooks() {
-  useFollowUpAlerts();
+  // Aviso vermelho "Follow-up Pendente: o horário agendado já passou" removido a pedido do dono (28/09).
   return null;
 }
 
