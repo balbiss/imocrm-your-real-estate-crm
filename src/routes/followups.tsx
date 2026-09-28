@@ -21,17 +21,25 @@ export const Route = createFileRoute("/followups")({
   component: FollowupsPage,
 });
 
-const ATRASOS = [
-  { label: "Imediatamente", min: 0 },
-  { label: "30 minutos depois", min: 30 },
-  { label: "1 hora depois", min: 60 },
-  { label: "2 horas depois", min: 120 },
-  { label: "4 horas depois", min: 240 },
-  { label: "1 dia depois", min: 1440 },
-  { label: "2 dias depois", min: 2880 },
-  { label: "3 dias depois", min: 4320 },
-  { label: "7 dias depois", min: 10080 },
+// Regras do dono (28/09): a 1ª mensagem sai na hora; da 2ª em diante só nas
+// levas da manhã (a partir de 9h30) e das 16h. Por isso não existem mais
+// opções em minutos/horas -- elas não saíam no tempo escrito e confundiam.
+// "leva" = base_atraso 'proxima_leva' no banco; dias = passo_anterior + minutos.
+const ATRASOS_SEGUINTES = [
+  { valor: "leva", label: "Na próxima leva", ajuda: "Se a mensagem anterior saiu de manhã, esta sai às 16h do mesmo dia. Se saiu à tarde, sai na manhã do próximo dia útil." },
+  { valor: "1440", label: "1 dia depois", ajuda: "Sai no dia seguinte, na mesma leva (manhã ou 16h) em que a anterior saiu." },
+  { valor: "2880", label: "2 dias depois", ajuda: "Sai 2 dias depois, na mesma leva (manhã ou 16h) em que a anterior saiu." },
+  { valor: "4320", label: "3 dias depois", ajuda: "Sai 3 dias depois, na mesma leva (manhã ou 16h) em que a anterior saiu." },
+  { valor: "10080", label: "7 dias depois", ajuda: "Sai 7 dias depois, na mesma leva (manhã ou 16h) em que a anterior saiu." },
 ];
+
+function valorAtraso(p: { base_atraso?: string | null; atraso_minutos: number }) {
+  // menos de 1 dia (inclusive etapa que era a 1ª e foi movida pra baixo) é
+  // salvo como próxima leva -- mostra igual ao que vai ser gravado
+  if (p.base_atraso === "proxima_leva" || p.atraso_minutos < 1440) return "leva";
+  const v = String(p.atraso_minutos);
+  return ATRASOS_SEGUINTES.some((a) => a.valor === v) ? v : "1440";
+}
 
 const VARIAVEIS = ["{nome}", "{corretor}", "{origem}", "{bairro}"];
 // Só fazem sentido em fluxo de campanha (dependem de um imóvel cadastrado
@@ -43,6 +51,7 @@ type AnexoTipo = "imagem" | "video" | "documento";
 type PassoForm = {
   conteudo: string;
   atraso_minutos: number;
+  base_atraso: "inscricao" | "passo_anterior" | "proxima_leva";
   so_horario_comercial: boolean;
   data_hora_fixa: string | null;
   anexo_url: string | null;
@@ -64,29 +73,10 @@ function IconeAnexo({ tipo, className }: { tipo: string | null; className?: stri
   return <FileIcon className={className} />;
 }
 
-function atrasoLabel(min: number, primeiro: boolean, dataHoraFixa?: string | null) {
-  if (dataHoraFixa) {
-    const d = new Date(dataHoraFixa);
-    return "Em " + d.toLocaleDateString("pt-BR") + " às " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-  }
-  const found = ATRASOS.find((a) => a.min === min);
-  const base = found ? found.label : `${min} min depois`;
-  if (min === 0) return primeiro ? "Assim que iniciar" : "Logo após o passo anterior";
-  return primeiro ? base.replace("depois", "após iniciar") : base + " (do passo anterior)";
-}
-
-// Converte um valor de <input type="datetime-local"> (hora local do
-// navegador, sem timezone) pro ISO em UTC que o banco espera, e vice-versa.
-function datetimeLocalToIso(v: string): string | null {
-  if (!v) return null;
-  const d = new Date(v);
-  return isNaN(d.getTime()) ? null : d.toISOString();
-}
-function isoToDatetimeLocal(iso: string | null | undefined): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+function atrasoLabel(p: { ordem: number; base_atraso?: string | null; atraso_minutos: number }) {
+  if (p.ordem === 1) return "Na hora";
+  const found = ATRASOS_SEGUINTES.find((a) => a.valor === valorAtraso(p));
+  return found ? found.label : "1 dia depois";
 }
 
 function FollowupsPage() {
@@ -139,7 +129,7 @@ function FollowupsPage() {
     setEGeral(false);
     setCampanha("");
     setAoEsgotar("nada");
-    setPassos([{ conteudo: "", atraso_minutos: 0, so_horario_comercial: true, data_hora_fixa: null, anexo_url: null, anexo_tipo: null, anexo_nome: null, anexo_mimetype: null, anexo_novo: null }]);
+    setPassos([{ conteudo: "", atraso_minutos: 0, base_atraso: "inscricao", so_horario_comercial: true, data_hora_fixa: null, anexo_url: null, anexo_tipo: null, anexo_nome: null, anexo_mimetype: null, anexo_novo: null }]);
     setIsOpen(true);
   }
 
@@ -154,6 +144,7 @@ function FollowupsPage() {
       (f.followup_passos || []).map((p: any) => ({
         conteudo: p.conteudo || "",
         atraso_minutos: p.atraso_minutos ?? 0,
+        base_atraso: p.base_atraso ?? "passo_anterior",
         so_horario_comercial: p.so_horario_comercial ?? true,
         data_hora_fixa: p.data_hora_fixa ?? null,
         anexo_url: p.anexo_url ?? null,
@@ -246,11 +237,13 @@ function FollowupsPage() {
       const rows = passosComAnexo.map((p, i) => ({
         fluxo_id: fluxoId,
         ordem: i + 1,
-        atraso_minutos: p.atraso_minutos,
-        base_atraso: i === 0 ? "inscricao" : "passo_anterior",
+        // 1ª mensagem: sempre na hora. Da 2ª em diante: próxima leva ou N dias.
+        // (etapa movida de 1ª pra baixo fica com 0 min -> vira próxima leva, nunca colada na anterior)
+        atraso_minutos: i === 0 || p.base_atraso === "proxima_leva" || p.atraso_minutos < 1440 ? 0 : p.atraso_minutos,
+        base_atraso: i === 0 ? "inscricao" : p.base_atraso === "proxima_leva" || p.atraso_minutos < 1440 ? "proxima_leva" : "passo_anterior",
         conteudo: p.conteudo.trim(),
-        so_horario_comercial: p.so_horario_comercial,
-        data_hora_fixa: p.data_hora_fixa || null,
+        so_horario_comercial: true,
+        data_hora_fixa: null,
         anexo_url: p.anexo_url || null,
         anexo_tipo: p.anexo_tipo || null,
         anexo_nome: p.anexo_nome || null,
@@ -302,6 +295,9 @@ function FollowupsPage() {
               Monte uma sequência de mensagens de WhatsApp. Marque um fluxo como <strong>Geral</strong> e
               <strong> Ativo</strong> pra todo lead que cair pra você entrar nele sozinho — ou abra o card
               de um lead específico e clique em <strong>Iniciar follow-up</strong> pra rodar manualmente.
+            </p>
+            <p className="text-saas-xs text-muted-foreground mt-1">
+              A 1ª mensagem sai na hora; as seguintes saem na leva da manhã (a partir de 9h30) ou das 16h.
             </p>
           </div>
           <Button onClick={abrirNovo} className="h-9 text-[11px] font-bold uppercase tracking-wider px-6">
@@ -372,7 +368,7 @@ function FollowupsPage() {
                       <div key={p.id} className="text-saas-xs text-slate-600 bg-slate-50 rounded-md px-2 py-1.5 border border-slate-100 flex items-start gap-1.5">
                         {p.anexo_tipo && <IconeAnexo tipo={p.anexo_tipo} className="h-3 w-3 mt-0.5 text-fuchsia-500 shrink-0" />}
                         <span>
-                          <span className="font-bold text-slate-400 mr-1.5">{atrasoLabel(p.atraso_minutos, p.ordem === 1, p.data_hora_fixa)}:</span>
+                          <span className="font-bold text-slate-400 mr-1.5">{atrasoLabel(p)}:</span>
                           <span className="line-clamp-2">{p.conteudo || <em className="text-slate-400">(sem texto, só o anexo)</em>}</span>
                         </span>
                       </div>
@@ -488,6 +484,22 @@ function FollowupsPage() {
                   </div>
                 </div>
 
+                <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-[11px] text-blue-900 space-y-1.5">
+                  <p className="font-bold">Como os horários funcionam</p>
+                  <ul className="list-disc pl-4 space-y-0.5">
+                    <li>A <strong>1ª mensagem</strong> sai na hora em que o lead chega pra você.</li>
+                    <li>
+                      Da <strong>2ª em diante</strong>, as mensagens saem só em duas levas por dia: <strong>de manhã</strong>{" "}
+                      (a partir de 9h30) e <strong>às 16h</strong>. Não existe mais "30 minutos" ou "2 horas depois".
+                    </li>
+                    <li><strong>Sábado</strong> só tem a leva da manhã (até 15h). <strong>Domingo</strong> não sai nada — fica pra segunda de manhã.</li>
+                    <li>Se o cliente responder ou você mandar mensagem pra ele, o follow-up para sozinho.</li>
+                  </ul>
+                  <p className="text-blue-900/70">
+                    Exemplo: lead chegou às 11h → 1ª mensagem às 11h → "Na próxima leva" sai às 16h → "1 dia depois" sai às 16h do dia seguinte.
+                  </p>
+                </div>
+
                 {passos.map((p, idx) => (
                   <div key={idx} className="rounded-lg border border-slate-200 p-3 space-y-2 bg-slate-50/50">
                     <div className="flex items-center justify-between gap-2">
@@ -504,38 +516,35 @@ function FollowupsPage() {
                         </Button>
                       </div>
                     </div>
-                    <Select
-                      value={p.data_hora_fixa ? "fixa" : String(p.atraso_minutos)}
-                      onValueChange={(v) => {
-                        if (v === "fixa") setPasso(idx, { data_hora_fixa: new Date(Date.now() + 60 * 60000).toISOString(), so_horario_comercial: false });
-                        else setPasso(idx, { atraso_minutos: Number(v), data_hora_fixa: null });
-                      }}
-                    >
-                      <SelectTrigger className="h-8 text-saas-xs border-slate-200 bg-white">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {ATRASOS.map((a) => (
-                          <SelectItem key={a.min} value={String(a.min)} className="text-saas-xs">
-                            {idx === 0
-                              ? a.min === 0 ? "Assim que iniciar" : a.label.replace("depois", "após iniciar")
-                              : a.min === 0 ? "Logo após o passo anterior" : a.label}
-                          </SelectItem>
-                        ))}
-                        <SelectItem value="fixa" className="text-saas-xs">Data e hora específica…</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {p.data_hora_fixa && (
+                    {idx === 0 ? (
+                      <div className="rounded-md bg-emerald-50 border border-emerald-100 px-2.5 py-2">
+                        <p className="text-saas-xs font-bold text-emerald-700">Quando sai: na hora</p>
+                        <p className="text-[10px] text-emerald-700/80">
+                          Assim que o lead chega pra você (roleta, transferência ou rebatida), entre 8h e 20h, de segunda a sábado.
+                        </p>
+                      </div>
+                    ) : (
                       <div className="space-y-1">
-                        <Input
-                          type="datetime-local"
-                          value={isoToDatetimeLocal(p.data_hora_fixa)}
-                          onChange={(e) => setPasso(idx, { data_hora_fixa: datetimeLocalToIso(e.target.value) })}
-                          className="h-8 text-saas-xs border-slate-200 bg-white"
-                        />
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Quando sai</label>
+                        <Select
+                          value={valorAtraso(p)}
+                          onValueChange={(v) =>
+                            setPasso(idx, v === "leva"
+                              ? { base_atraso: "proxima_leva", atraso_minutos: 0 }
+                              : { base_atraso: "passo_anterior", atraso_minutos: Number(v) })
+                          }
+                        >
+                          <SelectTrigger className="h-8 text-saas-xs border-slate-200 bg-white">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {ATRASOS_SEGUINTES.map((a) => (
+                              <SelectItem key={a.valor} value={a.valor} className="text-saas-xs">{a.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                         <p className="text-[10px] text-muted-foreground">
-                          Envia exatamente nessa data/hora — vale só pra quem entrar neste fluxo antes desse momento. Se o fluxo for
-                          reaproveitado depois que essa data já passou, esse passo é enviado logo no próximo ciclo do motor (a cada 10 min).
+                          {ATRASOS_SEGUINTES.find((a) => a.valor === valorAtraso(p))?.ajuda}
                         </p>
                       </div>
                     )}
@@ -578,17 +587,10 @@ function FollowupsPage() {
                         />
                       </label>
                     )}
-
-                    {!p.data_hora_fixa && (
-                      <label className="flex items-center gap-2 text-[11px] text-slate-500">
-                        <Switch checked={p.so_horario_comercial} onCheckedChange={(v) => setPasso(idx, { so_horario_comercial: v })} />
-                        Só em horário comercial (Seg–Sáb, 8h–20h)
-                      </label>
-                    )}
                   </div>
                 ))}
 
-                <Button type="button" variant="outline" size="sm" className="w-full text-[11px]" onClick={() => setPassos((prev) => [...prev, { conteudo: "", atraso_minutos: 1440, so_horario_comercial: true, data_hora_fixa: null, anexo_url: null, anexo_tipo: null, anexo_nome: null, anexo_mimetype: null, anexo_novo: null }])}>
+                <Button type="button" variant="outline" size="sm" className="w-full text-[11px]" onClick={() => setPassos((prev) => [...prev, { conteudo: "", atraso_minutos: 0, base_atraso: "proxima_leva", so_horario_comercial: true, data_hora_fixa: null, anexo_url: null, anexo_tipo: null, anexo_nome: null, anexo_mimetype: null, anexo_novo: null }])}>
                   <Plus className="h-3.5 w-3.5 mr-1" /> Adicionar passo
                 </Button>
               </div>
