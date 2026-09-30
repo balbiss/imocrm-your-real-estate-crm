@@ -292,6 +292,8 @@ function ManualPage() {
 
             <Section id="agenda" title="Agenda" roles={["todos"]} lede="Visitas, ligações combinadas e follow-ups aparecem em formato de calendário, cruzados com os leads que os geraram.">
               <p>Compromissos de leads descartados não aparecem mais na Agenda, para evitar lembrete de uma visita que não vai mais acontecer.</p>
+              <p><strong>Todo lead com corretor tem um próximo contato.</strong> Quando o lead chega pra você (roleta, transferência, rebatida ou recadastro) sem data marcada, o sistema já cria uma tarefa pra hoje. Quando o follow-up automático termina (cliente respondeu, você assumiu a conversa ou as mensagens acabaram), o card volta pra TAREFAS com próximo contato pra hoje. Lead parado sem nada marcado aparece em <strong>Atrasadas</strong> desde o dia em que parou.</p>
+              <p>Leads que estão no <strong>follow-up automático</strong> não aparecem na lista de tarefas — quem está cuidando deles é o robô. Visitas agendadas continuam aparecendo normalmente.</p>
             </Section>
 
             <Section id="clientes" title="Base de Clientes" roles={["dono", "corretor"]} lede="Lista completa de leads e clientes já atendidos, com filtros por status, corretor e período — útil para retomar contato com quem esfriou.">

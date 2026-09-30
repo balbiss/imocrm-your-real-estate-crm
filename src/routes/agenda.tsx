@@ -78,7 +78,7 @@ function AgendaPage() {
 
       let query = supabase
         .from("leads")
-        .select("*, corretor:perfis!leads_corretor_id_fkey(nome)")
+        .select("*, corretor:perfis!leads_corretor_id_fkey(nome), coluna:colunas_kanban!leads_coluna_kanban_id_fkey(nome)")
         .eq("imobiliaria_id", profile.imobiliaria_id)
         .is("descartado_em", null)
         .eq("descarte_pendente_aprovacao", false)
@@ -154,7 +154,12 @@ function AgendaPage() {
 
     compromissosRaw.forEach(lead => {
       const isFavorito = !!lead.favorito;
-      if (lead.lembrete_follow_up) {
+      // Lead no follow-up automático é trabalho do robô, não do corretor (pedido
+      // do dono 30/09: "follow ups automáticos nem têm que estar aqui em
+      // tarefa"). Quando o follow-up termina o card volta pra TAREFAS com
+      // próximo contato pra hoje e aparece aqui normalmente. Visita continua.
+      const noFollowupAutomatico = (lead as any).coluna?.nome === "FOLLOW-UP AUTOMÁTICO";
+      if (lead.lembrete_follow_up && !noFollowupAutomatico) {
         events.push({
           id: `${lead.id}-followup`,
           lead_id: lead.id,
