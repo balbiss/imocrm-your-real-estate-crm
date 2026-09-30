@@ -133,22 +133,30 @@ async function handleWahaStatus(sessionName, payload) {
 // (implementacao em ../lib/normalizeWhatsapp.js -- funcoes puras, testaveis)
 
 // ===================== LOOKUPS DE INSTANCIA =====================
+// O mesmo número pode estar em mais de uma conta (celular da empresa que
+// passou de um corretor pro outro sem desconectar o antigo). Antes, com 2
+// linhas, o maybeSingle() devolvia erro/null: a mídia não era baixada ("Arquivo
+// não suportado ou vazio") e contato novo não virava lead -- 90% das mídias da
+// Barbara perdidas (30/09). Agora vale a conexão ativa mais recente, que é
+// quem está com o celular.
 async function getInstanceByPhone(phoneNumber) {
   if (!phoneNumber) return null;
   const { data } = await supabaseAdmin
     .from("whatsapp_instances")
-    .select("*, perfis!inner(imobiliaria_id)")
+    .select("*, perfis!inner(imobiliaria_id, role, nome, bloqueado)")
     .eq("phone_number", phoneNumber)
     .eq("provider", "baileys")
-    .maybeSingle();
-  return data || null;
+    .order("connected", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(1);
+  return data?.[0] || null;
 }
 
 async function getInstanceBySession(sessionName) {
   if (!sessionName) return null;
   const { data } = await supabaseAdmin
     .from("whatsapp_instances")
-    .select("*, perfis!inner(imobiliaria_id)")
+    .select("*, perfis!inner(imobiliaria_id, role, nome, bloqueado)")
     .eq("session_name", sessionName)
     .eq("provider", "waha")
     .maybeSingle();
@@ -370,10 +378,21 @@ async function criarLeadDoWhatsapp(contactPhone, instance, imobiliariaId, pushNa
     if (existente) return existente;
   }
 
-  const { data: rodizio } = await supabaseAdmin.rpc("get_next_corretor_rodizio", {
-    p_imobiliaria_id: imobiliariaId,
-  });
-  const corretorId = rodizio?.[0]?.corretor_id || null;
+  // Pedido do dono (30/09): quem chama direto no WhatsApp de um corretor (ex.:
+  // anúncio "clique pro WhatsApp" que abre o número dele) é lead DESSE
+  // corretor -- antes ia pra roleta e caía com outro. Exceção por enquanto:
+  // WhatsApp do próprio dono da imobiliária continua indo pra roleta
+  // (pendente de confirmação do dono), e conta bloqueada também.
+  const donoDoWhatsapp = instance?.perfis;
+  let corretorId = null;
+  if (instance?.user_id && donoDoWhatsapp && donoDoWhatsapp.role !== "dono" && !donoDoWhatsapp.bloqueado) {
+    corretorId = instance.user_id;
+  } else {
+    const { data: rodizio } = await supabaseAdmin.rpc("get_next_corretor_rodizio", {
+      p_imobiliaria_id: imobiliariaId,
+    });
+    corretorId = rodizio?.[0]?.corretor_id || null;
+  }
 
   const agora = new Date().toISOString();
   let colunaConversando = null;
@@ -400,6 +419,7 @@ async function criarLeadDoWhatsapp(contactPhone, instance, imobiliariaId, pushNa
       status: corretorId ? "tarefas" : "novo",
       ...(colunaConversando ? { coluna_kanban_id: colunaConversando } : {}),
       lembrete_follow_up: corretorId ? agora : null,
+      ...(corretorId ? { data_atribuicao: agora } : {}),
     })
     .select("id, imobiliaria_id, corretor_id, nome, telefone, status")
     .single();
@@ -407,6 +427,18 @@ async function criarLeadDoWhatsapp(contactPhone, instance, imobiliariaId, pushNa
   if (error) {
     console.error("Erro ao criar lead automatico do WhatsApp:", error);
     return null;
+  }
+
+  if (corretorId) {
+    const direto = corretorId === instance?.user_id;
+    await supabaseAdmin.from("leads_interacoes").insert({
+      lead_id: novoLead.id,
+      autor_id: corretorId,
+      tipo: "auto",
+      conteudo: direto
+        ? `Lead criado automaticamente: chamou direto no WhatsApp de ${donoDoWhatsapp?.nome || "corretor"} e ficou com ele(a).`
+        : "Lead criado automaticamente pelo WhatsApp e entregue pela roleta.",
+    });
   }
   return novoLead;
 }

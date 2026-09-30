@@ -40,6 +40,23 @@ whatsappRouter.post("/connect", async (req, res) => {
     }
     const provider = req.body?.provider === "baileys" ? "baileys" : DEFAULT_PROVIDER;
 
+    // Mesmo número em duas contas = mesma sessão no baileys-api (é chaveada
+    // pelo número) e o webhook não sabe de quem é a mensagem: mídia não era
+    // baixada e contato novo não virava lead (caso real 30/09: Barbara/Michael
+    // e Mariaan/Farah). Bloqueia conectar um número que já está em outra conta.
+    const { data: outraConta } = await supabaseAdmin
+      .from("whatsapp_instances")
+      .select("user_id, perfis!inner(nome)")
+      .eq("phone_number", phoneNumber)
+      .neq("user_id", req.userId)
+      .limit(1)
+      .maybeSingle();
+    if (outraConta) {
+      return res.status(409).json({
+        error: `Esse número já está conectado na conta de ${outraConta.perfis?.nome || "outro usuário"}. Desconecte ele naquela conta primeiro (Integrações → Desconectar) ou fale com o suporte.`,
+      });
+    }
+
     // Trocar de provider sem apagar a instancia antes: derruba a conexao
     // antiga (engine que estava em uso) pra nao ficar sessao orfã rodando.
     const anterior = await getInstance(req.userId);
@@ -139,9 +156,27 @@ whatsappRouter.get("/avatar", async (req, res) => {
   }
 });
 
+// Número conectado também em OUTRA conta (mesma sessão no baileys-api): quem
+// desconecta só se desvincula -- derrubar a sessão tiraria do ar o WhatsApp
+// da outra pessoa junto.
+async function numeroCompartilhado(instance) {
+  if (!instance?.phone_number || instance.provider !== "baileys") return false;
+  const { count } = await supabaseAdmin
+    .from("whatsapp_instances")
+    .select("id", { count: "exact", head: true })
+    .eq("phone_number", instance.phone_number)
+    .eq("provider", "baileys")
+    .neq("user_id", instance.user_id);
+  return (count || 0) > 0;
+}
+
 whatsappRouter.post("/disconnect", async (req, res) => {
   try {
     const instance = await getInstance(req.userId);
+    if (instance && (await numeroCompartilhado(instance))) {
+      await supabaseAdmin.from("whatsapp_instances").delete().eq("user_id", req.userId);
+      return res.json({ success: true, desvinculado: true });
+    }
     if (instance) {
       await providerFor(instance)
         .disconnect()
@@ -163,7 +198,7 @@ whatsappRouter.post("/disconnect", async (req, res) => {
 whatsappRouter.delete("/instance", async (req, res) => {
   try {
     const instance = await getInstance(req.userId);
-    if (instance) {
+    if (instance && !(await numeroCompartilhado(instance))) {
       await providerFor(instance)
         .remove()
         .catch((e) =>
