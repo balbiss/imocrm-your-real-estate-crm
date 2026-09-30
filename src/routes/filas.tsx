@@ -193,7 +193,8 @@ function FilasPage() {
       const { data, error } = await supabase
         .from("perfis")
         .select("id, nome")
-        .eq("imobiliaria_id", profile.imobiliaria_id);
+        .eq("imobiliaria_id", profile.imobiliaria_id)
+        .is("removido_em" as any, null);
       if (error) throw error;
       return data;
     },

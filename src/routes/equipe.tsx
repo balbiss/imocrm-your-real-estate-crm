@@ -70,7 +70,8 @@ function TeamPage() {
         body: { imobiliaria_id: profile.imobiliaria_id },
       });
       if (membersError) throw membersError;
-      const members = (membersData || []) as any[];
+      // Quem foi removido da equipe (removido_em) não aparece mais aqui.
+      const members = ((membersData || []) as any[]).filter((m) => !m.removido_em);
 
       // Métricas por corretor calculadas no Postgres (GROUP BY), não mais
       // baixando a tabela leads inteira pro navegador — com a base na casa
@@ -151,23 +152,21 @@ function TeamPage() {
     }
   });
 
+  // Remover = desligar sem apagar história (a exclusão definitiva nunca dava
+  // certo -- o perfil está ligado a mensagens/histórico -- e falhava com
+  // "Edge Function returned a non-2xx", relato 30/09). Ver remover_membro()
+  // na migration 20260930000000.
   const removeMemberMutation = useMutation({
-    mutationFn: async ({ id, hardDelete }: { id: string, hardDelete?: boolean }) => {
-      if (hardDelete) {
-        // Exclusão definitiva: usar Edge Function para garantir a deleção no Auth
-        const { error } = await supabase.functions.invoke("delete-member", {
-          body: { id },
-        });
-        if (error) throw error;
-      } else {
-        // Soft delete: apenas remove o acesso
-        const { error } = await supabase.from("perfis").update({ imobiliaria_id: null }).eq("id", id);
-        if (error) throw error;
-      }
+    mutationFn: async ({ id }: { id: string }) => {
+      const { data, error } = await supabase.rpc("remover_membro" as any, { p_id: id });
+      if (error) throw error;
+      return data as any;
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["team-list"] });
-      toast.success(variables.hardDelete ? "Membro excluído definitivamente do banco de dados!" : "Acesso do membro removido com sucesso!");
+      queryClient.invalidateQueries({ queryKey: ["fila-atendimento"] });
+      const leads = data?.leads_para_rebatida ?? 0;
+      toast.success(`${data?.nome || "Membro"} removido(a) da equipe${leads ? ` — ${leads} lead(s) foram pra Rebatida` : ""}.`);
     },
     onError: (error: any) => {
       toast.error("Erro ao remover membro: " + error.message);
@@ -345,30 +344,16 @@ function TeamPage() {
                             {profile?.role === "dono" && <DropdownMenuSeparator />}
                             {profile?.role === "dono" && (
                             <DropdownMenuItem
-                              className="text-xs text-orange-600 focus:bg-orange-50 focus:text-orange-700 cursor-pointer font-bold"
-                              onClick={() => {
-                                setTimeout(() => {
-                                  if (confirm(`DESVINCULAR: Tem certeza que deseja remover o acesso de ${member.nome}? (O histórico de vendas será mantido)`)) {
-                                    removeMemberMutation.mutate({ id: member.id, hardDelete: false });
-                                  }
-                                }, 100);
-                              }}
-                            >
-                              Remover Acesso (Seguro)
-                            </DropdownMenuItem>
-                            )}
-                            {profile?.role === "dono" && (
-                            <DropdownMenuItem
                               className="text-xs text-red-600 focus:bg-red-50 focus:text-red-700 cursor-pointer font-bold"
                               onClick={() => {
                                 setTimeout(() => {
-                                  if (confirm(`EXCLUIR DO BANCO: Esta ação apagará permanentemente o perfil de ${member.nome} e o removerá de todos os leads antigos. Tem certeza absoluta?`)) {
-                                    removeMemberMutation.mutate({ id: member.id, hardDelete: true });
+                                  if (confirm(`REMOVER DA EQUIPE: ${member.nome} perde o acesso ao CRM, sai da roleta, o WhatsApp dele(a) é desvinculado e os leads que estiverem com ele(a) vão pra Rebatida. O histórico dos cards é mantido. Confirmar?`)) {
+                                    removeMemberMutation.mutate({ id: member.id });
                                   }
                                 }, 100);
                               }}
                             >
-                              Excluir Definitivamente
+                              Remover da equipe
                             </DropdownMenuItem>
                             )}
                           </DropdownMenuContent>

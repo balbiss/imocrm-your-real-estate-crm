@@ -171,6 +171,7 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
         .from("perfis")
         .select("id, nome")
         .eq("imobiliaria_id", lead.imobiliaria_id)
+        .is("removido_em" as any, null) // removido da equipe não recebe transferência
         .order("nome", { ascending: true });
       if (error) throw error;
       return data;

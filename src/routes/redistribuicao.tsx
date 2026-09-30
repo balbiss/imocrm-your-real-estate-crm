@@ -261,7 +261,8 @@ function RedistributionPage() {
         .from("perfis")
         .select("id, nome")
         .eq("imobiliaria_id", profile.imobiliaria_id)
-        .eq("status_roleta", true);
+        .eq("status_roleta", true)
+        .is("removido_em" as any, null);
       if (error) throw error;
       return data;
     },

@@ -311,6 +311,7 @@ function ManualPage() {
 
             <Section id="equipe" title="Equipe" roles={["dono", "gerente"]} lede="Cadastro e gestão de quem trabalha na imobiliária dentro do sistema.">
               <p><strong>Convidar membro</strong> envia convite por e-mail definindo se a pessoa entra como corretor ou gerente. <strong>Ativar/desativar plantão</strong> tira temporariamente um corretor da fila de recebimento de leads novos, sem excluir o cadastro. <strong>Métricas por corretor</strong> mostram leads recebidos, vendas fechadas e SLA médio, lado a lado.</p>
+              <p><strong>Remover da equipe</strong> (menu "⋮" do membro, só o dono): a pessoa perde o acesso ao CRM, sai da roleta e da escala, o WhatsApp dela é desvinculado da conta e os leads que estiverem com ela vão pra <strong>Rebatida</strong>. Ela some da Equipe e das listas de transferência, mas o nome continua aparecendo no histórico dos cards e nos relatórios antigos. Pra afastamento temporário (férias), use <strong>Bloquear Acesso</strong> em vez de remover.</p>
             </Section>
 
             <Section id="roleta" title="Rodízio e Roleta" roles={["todos"]} lede="Define a ordem em que os corretores recebem os próximos leads novos.">

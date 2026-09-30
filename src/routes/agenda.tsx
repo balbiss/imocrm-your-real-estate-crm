@@ -139,6 +139,7 @@ function AgendaPage() {
         .select("id, nome")
         .eq("imobiliaria_id", profile!.imobiliaria_id)
         .eq("role", "corretor")
+        .is("removido_em" as any, null)
         .order("nome");
       if (error) throw error;
       return data;
