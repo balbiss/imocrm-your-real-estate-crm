@@ -181,3 +181,32 @@ test("baileys: @lid sem remoteJidAlt -> descarta", () => {
     null
   );
 });
+
+test("baileys: aviso de mensagens temporarias (protocolMessage) -> descarta", () => {
+  // caso real 29/09 (lead "Nael"): virava card novo sem mensagem nenhuma
+  const n = normalizeBaileysMessage({
+    key: { remoteJid: "163526752608370@lid", remoteJidAlt: "5512981764676@s.whatsapp.net", id: "P1", fromMe: false },
+    pushName: "Nael",
+    message: {
+      protocolMessage: { type: "EPHEMERAL_SETTING", ephemeralExpiration: 604800 },
+      messageContextInfo: { deviceListMetadataVersion: 2 },
+    },
+  });
+  assert.equal(n, null);
+});
+
+test("baileys: mensagem vazia (so messageContextInfo) -> descarta", () => {
+  const n = normalizeBaileysMessage({
+    key: { remoteJid: "5512982103942@s.whatsapp.net", id: "P2", fromMe: false },
+    message: { messageContextInfo: { deviceListMetadataVersion: 2 } },
+  });
+  assert.equal(n, null);
+});
+
+test("baileys: texto com senderKeyDistributionMessage junto continua valendo", () => {
+  const n = normalizeBaileysMessage({
+    key: { remoteJid: "5512982103942@s.whatsapp.net", id: "P3", fromMe: false },
+    message: { senderKeyDistributionMessage: {}, extendedTextMessage: { text: "Oi, vi o anúncio" } },
+  });
+  assert.equal(n.text, "Oi, vi o anúncio");
+});

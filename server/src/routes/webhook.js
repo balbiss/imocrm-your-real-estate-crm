@@ -297,11 +297,18 @@ async function processInboundMessage(normalized, instance) {
     .update({ ultima_acao_at: new Date().toISOString() })
     .eq("id", lead.id);
 
-  if (leadDetail?.corretor_id) {
+  // Só avisa quando o CLIENTE manda -- mensagem que o próprio corretor mandou
+  // pelo celular também passa por aqui (fromMe) e virava notificação pra ele
+  // mesmo (relato do dono 30/09). Anexo mostra o tipo, não o link cru.
+  if (!fromMe && leadDetail?.corretor_id) {
     const nomeExibicao = leadDetail.nome || leadDetail.telefone || "Novo lead";
+    const ROTULO_ANEXO = { audio: "🎤 Áudio", image: "📷 Foto", video: "🎥 Vídeo", document: "📄 Documento", sticker: "Figurinha" };
+    const corpo = text.startsWith("[Anexo]:")
+      ? [ROTULO_ANEXO[tipo] || "📎 Arquivo", text.split("\n").slice(1).join(" ").trim()].filter(Boolean).join(" · ")
+      : text;
     sendPushToUser(leadDetail.corretor_id, {
       title: nomeExibicao,
-      body: text.length > 120 ? `${text.slice(0, 117)}...` : text,
+      body: corpo.length > 120 ? `${corpo.slice(0, 117)}...` : corpo,
       tag: lead.id,
       url: "/conversas",
     }).catch((e) => console.error("Erro ao enviar push:", e));

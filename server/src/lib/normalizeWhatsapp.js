@@ -42,6 +42,17 @@ export function normalizeBaileysMessage(msg) {
     : null;
 
   const message = msg?.message || {};
+
+  // Aviso técnico do WhatsApp, não é mensagem de ninguém: "mensagens
+  // temporárias ativadas" (protocolMessage EPHEMERAL_SETTING), troca de
+  // chave, mensagem vazia. Antes virava card novo com "📎 Arquivo não
+  // suportado ou vazio" (casos reais Nael/Joelma 29/09) e encerrava o
+  // follow-up como "cliente respondeu". Mesmo filtro que o WAHA já tinha.
+  const chavesReais = Object.keys(message).filter(
+    (k) => k !== "messageContextInfo" && k !== "senderKeyDistributionMessage"
+  );
+  if (!reactionMessage && (chavesReais.length === 0 || message.protocolMessage)) return null;
+
   let media = null;
   if (message.imageMessage) media = { tipo: "image", info: message.imageMessage };
   else if (message.audioMessage) media = { tipo: "audio", info: message.audioMessage };
