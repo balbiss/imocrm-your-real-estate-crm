@@ -31,6 +31,7 @@ import { format } from "date-fns";
 import { useAuth } from "@/context/AuthContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { LeadDetailsModal } from "@/components/leads/LeadDetailsModal";
+import { PainelAnalitico } from "@/components/dashboard/PainelAnalitico";
 import { Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/dashboard")({
@@ -50,6 +51,23 @@ function mesAtualRange() {
   const fim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
   const toISODate = (d: Date) => d.toISOString().split("T")[0];
   return { inicio: toISODate(inicio), fim: toISODate(fim) };
+}
+
+// Atalhos de período do topo (Hoje / 7 dias / Este mês / Mês passado).
+function atalhosPeriodo() {
+  const hoje = new Date();
+  const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const d7 = new Date(hoje); d7.setDate(hoje.getDate() - 6);
+  const iniMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+  const fimMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
+  const iniAnt = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+  const fimAnt = new Date(hoje.getFullYear(), hoje.getMonth(), 0);
+  return [
+    { rotulo: "Hoje", inicio: iso(hoje), fim: iso(hoje) },
+    { rotulo: "7 dias", inicio: iso(d7), fim: iso(hoje) },
+    { rotulo: "Este mês", inicio: iso(iniMes), fim: iso(fimMes) },
+    { rotulo: "Mês passado", inicio: iso(iniAnt), fim: iso(fimAnt) },
+  ];
 }
 
 // Início/fim do dia de hoje (hora local do navegador) -- os widgets "no dia"
@@ -145,7 +163,7 @@ function DashboardPage() {
       const [totalRes, newRes, progressRes, concludedRes, overdueRes, campanhaRes] = await Promise.all([
         base().gte("created_at", inicioIso).lt("created_at", fimExclusivoIso),
         base().eq("status", "novo").gte("created_at", inicioIso).lt("created_at", fimExclusivoIso),
-        base().eq("status", "em_atendimento"),
+        base().in("status", ["tarefas", "agendado", "visitou", "cobrar_doc", "pendente", "aprovado"]),
         base().eq("status", "venda_concluida").gte("data_fechamento", inicioIso).lt("data_fechamento", fimExclusivoIso),
         base().lte("lembrete_follow_up", new Date().toISOString()).is("data_fechamento", null),
         // Gráfico de Campanhas (pedido do dono, 11/09) -- segue o MESMO
@@ -156,12 +174,11 @@ function DashboardPage() {
             .from("leads")
             .select("id, nome, telefone, origem, created_at")
             .eq("imobiliaria_id", profile.imobiliaria_id)
-            .not("corretor_id", "is", null)
-            .is("descartado_em", null)
-            .eq("descarte_pendente_aprovacao", false)
             .gte("created_at", inicioIso)
             .lt("created_at", fimExclusivoIso);
-          if (role === "corretor") q = q.eq("corretor_id", user?.id);
+          if (role === "corretor") {
+            q = q.eq("corretor_id", user?.id).is("descartado_em", null).eq("descarte_pendente_aprovacao", false);
+          }
           return q;
         })(),
       ]);
@@ -171,13 +188,12 @@ function DashboardPage() {
 
       const porCampanhaMap: Record<string, LeadMini[]> = {};
       (campanhaRes.data || []).forEach((l: any) => {
-        const key = l.origem || "Outros";
+        const key = l.origem?.trim() || "Sem origem";
         (porCampanhaMap[key] ||= []).push({ id: l.id, nome: l.nome, telefone: l.telefone, origem: l.origem, quando: l.created_at });
       });
       const porCampanha = Object.entries(porCampanhaMap)
         .map(([campanha, leads]) => ({ campanha, total: leads.length, leads }))
-        .sort((a, b) => b.total - a.total)
-        .slice(0, 8);
+        .sort((a, b) => b.total - a.total);
 
       return {
         totalLeads: totalRes.count || 0,
@@ -376,16 +392,21 @@ function DashboardPage() {
                 className="h-8 text-xs w-[140px]"
               />
             </div>
-            {!isMesAtual && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 text-[11px] font-bold uppercase tracking-wider px-3"
-                onClick={() => { setDataInicio(mesAtual.inicio); setDataFim(mesAtual.fim); }}
-              >
-                Mês Atual
-              </Button>
-            )}
+            <div className="flex rounded-md border border-slate-200 bg-white p-0.5 h-8">
+              {atalhosPeriodo().map((a) => {
+                const ativo = dataInicio === a.inicio && dataFim === a.fim;
+                return (
+                  <button
+                    key={a.rotulo}
+                    type="button"
+                    onClick={() => { setDataInicio(a.inicio); setDataFim(a.fim); }}
+                    className={`px-2.5 rounded text-[10.5px] font-bold uppercase tracking-wide transition-colors ${ativo ? "bg-slate-900 text-white" : "text-slate-500 hover:text-slate-800"}`}
+                  >
+                    {a.rotulo}
+                  </button>
+                );
+              })}
+            </div>
             <Link to="/leads">
               <Button size="sm" className="h-8 text-[11px] font-bold uppercase tracking-wider px-4">
                 <PlusCircle className="mr-1.5 h-3.5 w-3.5" /> Adicionar Lead
@@ -394,7 +415,17 @@ function DashboardPage() {
           </div>
         </div>
 
-        {/* MÉTRICAS PRINCIPAIS (período selecionado acima) */}
+        {/* Dono/gerente: painel analítico (pedido do dono 01/10). Corretor: os 4 cartões de sempre. */}
+        {isManager && (
+          <PainelAnalitico
+            dataInicio={dataInicio}
+            dataFim={dataFim}
+            onAbrirCampanha={(origem) => setCampanhaSelecionada(origem)}
+          />
+        )}
+
+        {/* MÉTRICAS PRINCIPAIS do corretor (período selecionado acima) */}
+        {!isManager && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {[
             { title: "Total de Leads", value: dashboardData?.totalLeads || 0, icon: Users, color: "text-primary", bg: "bg-primary/5" },
@@ -419,6 +450,7 @@ function DashboardPage() {
             </Card>
           ))}
         </div>
+        )}
 
         <div className="flex items-center gap-2">
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -467,7 +499,7 @@ function DashboardPage() {
 
         {/* GRÁFICOS */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          <Card className="lg:col-span-7 border-none shadow-soft bg-white overflow-hidden">
+          <Card className={`${isManager ? "lg:col-span-12" : "lg:col-span-7"} border-none shadow-soft bg-white overflow-hidden`}>
             <CardHeader className="py-4 px-5 border-b border-slate-50">
               <CardTitle className="text-sm font-bold">Horários dos Cadastros</CardTitle>
               <CardDescription className="text-saas-xs">Leads que entraram hoje, por hora — clique numa barra pra ver quem foi.</CardDescription>
@@ -494,6 +526,7 @@ function DashboardPage() {
             </CardContent>
           </Card>
 
+          {!isManager && (
           <Card className="lg:col-span-5 border-none shadow-soft bg-white overflow-hidden">
             <CardHeader className="py-4 px-5 border-b border-slate-50">
               <CardTitle className="text-sm font-bold">Campanhas</CardTitle>
@@ -503,7 +536,7 @@ function DashboardPage() {
               {(!dashboardData?.porCampanha || dashboardData.porCampanha.length === 0) && (
                 <p className="text-saas-xs text-slate-400 py-6 text-center">Sem leads no período.</p>
               )}
-              {dashboardData?.porCampanha.map((c, i) => (
+              {dashboardData?.porCampanha.slice(0, 8).map((c, i) => (
                 <button
                   key={c.campanha}
                   onClick={() => setCampanhaSelecionada(c.campanha)}
@@ -522,6 +555,7 @@ function DashboardPage() {
               ))}
             </CardContent>
           </Card>
+          )}
         </div>
 
         {/* REBATIDAS POR CORRETOR NO DIA -- só faz sentido comparar entre corretores pra quem gerencia */}
