@@ -892,15 +892,26 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
                         <Input
                           type="date"
                           value={lead.data_visita ? format(new Date(lead.data_visita), "yyyy-MM-dd") : ""}
-                          onChange={(e) => handleUpdateField("data_visita", new Date(`${e.target.value}T${lead.data_visita ? format(new Date(lead.data_visita), "HH:mm") : "09:00"}`).toISOString())}
+                          onChange={(e) => {
+                            // Campo apagado no celular: não grava data inválida (antes quebrava);
+                            // pra tirar o compromisso existe o "Remover compromisso" abaixo.
+                            if (!e.target.value) return;
+                            handleUpdateField("data_visita", new Date(`${e.target.value}T${lead.data_visita ? format(new Date(lead.data_visita), "HH:mm") : "09:00"}`).toISOString());
+                          }}
                           className="flex-1 h-10 text-sm border-primary/20 bg-primary/5 font-bold"
                         />
+                        {/* Horário só depois de escolher a data -- antes mexer só no horário
+                            criava uma visita pra HOJE sem a corretora querer (relato 30/09). */}
                         <Select
-                          value={lead.data_visita ? format(new Date(lead.data_visita), "HH:mm") : "09:00"}
-                          onValueChange={(v) => handleUpdateField("data_visita", new Date(`${lead.data_visita ? format(new Date(lead.data_visita), "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd")}T${v}`).toISOString())}
+                          value={lead.data_visita ? format(new Date(lead.data_visita), "HH:mm") : undefined}
+                          disabled={!lead.data_visita}
+                          onValueChange={(v) => {
+                            if (!lead.data_visita) return;
+                            handleUpdateField("data_visita", new Date(`${format(new Date(lead.data_visita), "yyyy-MM-dd")}T${v}`).toISOString());
+                          }}
                         >
                           <SelectTrigger className="w-[90px] h-10 text-xs font-bold border-primary/20 bg-primary/5">
-                            <SelectValue />
+                            <SelectValue placeholder="--:--" />
                           </SelectTrigger>
                           <SelectContent>
                             {Array.from({length: 30}).map((_, i) => { const totalMin = i * 30; const h = `${(7 + Math.floor(totalMin / 60)).toString().padStart(2, '0')}:${(totalMin % 60).toString().padStart(2, '0')}`; return <SelectItem key={h} value={h}>{h}</SelectItem> })}
@@ -924,6 +935,27 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
                               <SelectItem value="FURO" className="font-bold text-orange-600">Furou (Não compareceu)</SelectItem>
                             </SelectContent>
                           </Select>
+                          {/* Pedido do dono (30/09): no celular a corretora tocava sem querer na
+                              data e não tinha como apagar -- só "Desmarcou", e a visita
+                              continuava no card e na agenda. */}
+                          <button
+                            type="button"
+                            className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-bold text-red-600 hover:text-red-700 hover:underline"
+                            onClick={() => {
+                              if (!confirm("Remover este compromisso? A data some do card e da agenda.")) return;
+                              updateMutation.mutate({
+                                updates: {
+                                  data_visita: null,
+                                  status_visita: "AGENDADA",
+                                  alerta_visita_2h_ciente: false,
+                                  alerta_visita_17h_ciente: false,
+                                },
+                                descricao: `Compromisso (${lead.tipo_visita || "VISITA"}) de ${format(new Date(lead.data_visita!), "dd/MM/yyyy 'às' HH:mm")} removido do card.`,
+                              });
+                            }}
+                          >
+                            <XCircle className="h-3 w-3" /> Remover compromisso
+                          </button>
                         </div>
                       )}
                     </div>

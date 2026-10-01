@@ -293,6 +293,7 @@ function ManualPage() {
             <Section id="agenda" title="Agenda" roles={["todos"]} lede="Visitas, ligações combinadas e follow-ups aparecem em formato de calendário, cruzados com os leads que os geraram.">
               <p>Compromissos de leads descartados não aparecem mais na Agenda, para evitar lembrete de uma visita que não vai mais acontecer.</p>
               <p><strong>Todo lead com corretor tem um próximo contato.</strong> Quando o lead chega pra você (roleta, transferência, rebatida ou recadastro) sem data marcada, o sistema já cria uma tarefa pra hoje. Quando o follow-up automático termina (cliente respondeu, você assumiu a conversa ou as mensagens acabaram), o card volta pra TAREFAS com próximo contato pra hoje. Lead parado sem nada marcado aparece em <strong>Atrasadas</strong> desde o dia em que parou.</p>
+              <p><strong>Marcou visita/FID sem querer?</strong> No card, embaixo do status do compromisso, clique em <strong>Remover compromisso</strong> — a data some do card e da agenda (fica registrado no histórico). O horário só pode ser escolhido depois da data, pra ninguém criar visita "pra hoje" sem querer.</p>
               <p>Leads que estão no <strong>follow-up automático</strong> não aparecem na lista de tarefas — quem está cuidando deles é o robô. Visitas agendadas continuam aparecendo normalmente.</p>
             </Section>
 
@@ -372,7 +373,7 @@ function ManualPage() {
               <p><strong>Ligar num lead:</strong> abra o card do lead, vá na aba <strong>Follow-up</strong>, escolha o fluxo e clique em <strong>Iniciar follow-up</strong>. A aba mostra em que passo está, o que já foi enviado e se o cliente respondeu. Botões de <strong>Pausar</strong>, <strong>Retomar</strong>, <strong>Encerrar</strong> e <strong>Trocar fluxo</strong> ficam ali.</p>
               <p>As mensagens automáticas aparecem no <strong>Chat WhatsApp</strong> com o selo <strong>🤖 Follow-up</strong> e um fundo roxo — pra você bater o olho e saber que não foi você que mandou. E cada passo dado pelo fluxo fica registrado no <strong>Histórico</strong> do card (início, resposta do cliente, encerramento).</p>
               <Callout title="O follow-up para sozinho na hora certa">
-                Assim que o cliente responde qualquer coisa, ou assim que você manda uma mensagem manual pelo Chat, a sequência para automaticamente — quem assume a conversa é você. Também para se o lead for descartado, vendido ou passar pra outro corretor. A 1ª mensagem respeita o horário comercial (Seg–Sáb, 8h–20h).
+                Assim que o cliente responde qualquer coisa, assim que você manda uma mensagem manual pelo Chat, ou assim que você <strong>tira o card da coluna Follow-up Automático</strong> (move de coluna, muda a cadência de chamada), a sequência para automaticamente — quem assume a conversa é você. Também para se o lead for descartado, vendido ou passar pra outro corretor. A 1ª mensagem respeita o horário comercial (Seg–Sáb, 8h–20h).
               </Callout>
               <Callout title="Horários de envio: 1ª mensagem na hora, as outras às 10h e às 16h">
                 <ul className="list-disc pl-4 mt-1 space-y-0.5">
