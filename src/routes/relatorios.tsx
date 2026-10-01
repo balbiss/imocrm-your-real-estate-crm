@@ -30,6 +30,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { LeadDetailsModal } from "@/components/leads/LeadDetailsModal";
+import { FiltroCampanhas } from "@/components/relatorios/FiltroCampanhas";
 import { normalizarCidade, dedupCidades } from "@/lib/utils";
 
 import { useNavigate } from "@tanstack/react-router";
@@ -53,7 +54,13 @@ function ReportsPage() {
   const mesAtual = new Date().toISOString().slice(0, 7);
   const [mesFiltro, setMesFiltro] = React.useState<string>(mesAtual);
   const [corretorFiltroRel, setCorretorFiltroRel] = React.useState<string>("todos");
-  const [origemFiltroRel, setOrigemFiltroRel] = React.useState<string>("todas");
+  // Filtro de campanha com várias ao mesmo tempo (pedido do dono, 02/10:
+  // ex. marcar todas as campanhas do Cenarium). Lista vazia = todas.
+  const [campanhasSel, setCampanhasSel] = React.useState<string[]>([]);
+  const passaCampanha = React.useCallback(
+    (l: any) => campanhasSel.length === 0 || campanhasSel.includes(l.origem || "Outros"),
+    [campanhasSel]
+  );
   const [cidadeFiltroRel, setCidadeFiltroRel] = React.useState<string>("todas");
   // Filtro de período personalizado (17/08, pedido do dono): por padrão o
   // relatório mostra o mês corrente (mesFiltro, também usado pelo gasto de
@@ -199,7 +206,7 @@ function ReportsPage() {
     const leads = raw.leads.filter((l: any) => {
       if (!dentroDoPeriodo(l.created_at)) return false;
       if (corretorFiltroRel !== "todos" && l.corretor_id !== corretorFiltroRel) return false;
-      if (origemFiltroRel !== "todas" && (l.origem || "Outros") !== origemFiltroRel) return false;
+      if (!passaCampanha(l)) return false;
       if (cidadeFiltroRel !== "todas" && normalizarCidade(l.bairro_interesse) !== normalizarCidade(cidadeFiltroRel)) return false;
       return true;
     });
@@ -259,7 +266,7 @@ function ReportsPage() {
     const leadsFechadosNoMes = raw.leads.filter((l: any) => {
       if (!dentroDoPeriodo(l.data_fechamento)) return false;
       if (corretorFiltroRel !== "todos" && l.corretor_id !== corretorFiltroRel) return false;
-      if (origemFiltroRel !== "todas" && (l.origem || "Outros") !== origemFiltroRel) return false;
+      if (!passaCampanha(l)) return false;
       if (cidadeFiltroRel !== "todas" && normalizarCidade(l.bairro_interesse) !== normalizarCidade(cidadeFiltroRel)) return false;
       return true;
     });
@@ -369,7 +376,10 @@ function ReportsPage() {
     // conversão em % por origem/anúncio -- mesmas colunas do kanban já
     // resolvidas acima, só agrupando por origem em vez de por corretor.
     // % é sobre o total de leads daquela campanha no período filtrado.
-    const campanhaPerformance = origensDisponiveis.map((origem) => {
+    // Com 2+ campanhas marcadas, a tabela compara só as escolhidas; com 0 ou 1
+    // continua mostrando todas (ver comentário de leadsPorCampanha acima).
+    const origensDaTabela = campanhasSel.length >= 2 ? origensDisponiveis.filter((o) => campanhasSel.includes(o)) : origensDisponiveis;
+    const campanhaPerformance = origensDaTabela.map((origem) => {
       const leadsOrigem = leadsPorCampanha.filter((l: any) => (l.origem || "Outros") === origem);
       const total = leadsOrigem.length;
       const vendasOrigem = leadsFechadosNoMesPorCampanha.filter((l: any) => (l.origem || "Outros") === origem).length;
@@ -425,7 +435,7 @@ function ReportsPage() {
       descartadosNoPeriodo,
       descadastradosNoPeriodo,
     };
-  }, [raw, mesFiltro, corretorFiltroRel, origemFiltroRel, cidadeFiltroRel, dentroDoPeriodo, gastosCampanha, ordenarRankingPor]);
+  }, [raw, mesFiltro, corretorFiltroRel, passaCampanha, campanhasSel, cidadeFiltroRel, dentroDoPeriodo, gastosCampanha, ordenarRankingPor]);
 
   if (isLoading || !profile) {
     return (
@@ -509,17 +519,7 @@ function ReportsPage() {
                 </SelectContent>
               </Select>
             )}
-            <Select value={origemFiltroRel} onValueChange={setOrigemFiltroRel}>
-              <SelectTrigger className="h-8 w-[180px] text-[11px] font-bold">
-                <SelectValue placeholder="Campanha" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todas">Todas as campanhas</SelectItem>
-                {origensDisponiveis.map((o) => (
-                  <SelectItem key={o} value={o} className="truncate">{o}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <FiltroCampanhas opcoes={origensDisponiveis} selecionadas={campanhasSel} onChange={setCampanhasSel} />
           </div>
         </div>
 
