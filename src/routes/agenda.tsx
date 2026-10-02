@@ -12,6 +12,8 @@ import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addMonths, su
 import { ptBR } from "date-fns/locale";
 import { LeadDetailsModal } from "@/components/leads/LeadDetailsModal";
 import { ScheduleTaskModal } from "@/components/leads/ScheduleTaskModal";
+import { CompromissoDialog, TIPO_COMPROMISSO_LABEL, type Compromisso } from "@/components/agenda/CompromissoDialog";
+import { Users } from "lucide-react";
 import { Plus } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAuth } from "@/context/AuthContext";
@@ -26,7 +28,7 @@ export const Route = createFileRoute("/agenda")({
   component: AgendaPage,
 });
 
-type EventType = "follow_up" | "visita" | "fid";
+type EventType = "follow_up" | "visita" | "fid" | "compromisso";
 
 type CalendarEvent = {
   id: string;
@@ -41,6 +43,7 @@ type CalendarEvent = {
   local?: string;
   status_visita?: string;
   favorito: boolean;
+  compromisso?: Compromisso; // só pra type === "compromisso" (reunião/treinamento da equipe)
 };
 
 function AgendaPage() {
@@ -53,6 +56,9 @@ function AgendaPage() {
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState<"atrasadas" | "aFazer" | "visitas" | "futuras" | "favoritos">("aFazer");
   const [corretorFilter, setCorretorFilter] = useState<string>("todos");
+  const [compromissoAberto, setCompromissoAberto] = useState<Compromisso | null>(null);
+  const [compromissoDialogOpen, setCompromissoDialogOpen] = useState(false);
+  const abrirCompromisso = (c: Compromisso | null) => { setCompromissoAberto(c); setCompromissoDialogOpen(true); };
 
   // Chave de cache compartilhada com todas as outras páginas (ver
   // [[project_crm_oka]]) -- antes cada página tinha sua própria chave
@@ -114,9 +120,45 @@ function AgendaPage() {
     enabled: !!profile?.imobiliaria_id,
   });
 
+  // Compromissos da equipe que não são de lead (reunião, treinamento) --
+  // pedido do dono 02/10: todos criam e aparecem pra todos.
+  const { data: compromissosEquipe } = useQuery({
+    queryKey: ["compromissos-equipe", profile?.imobiliaria_id],
+    queryFn: async () => {
+      const desde = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+      const { data, error } = await supabase
+        .from("compromissos_equipe" as any)
+        .select("id, titulo, tipo, inicio, fim, local, observacao, criado_por, criador:perfis!compromissos_equipe_criado_por_fkey(nome)")
+        .is("cancelado_em", null)
+        .gte("inicio", desde)
+        .order("inicio");
+      if (error) throw error;
+      return (data || []) as unknown as Compromisso[];
+    },
+    enabled: !!profile?.imobiliaria_id,
+  });
+
+  const eventosCompromisso: CalendarEvent[] = React.useMemo(
+    () =>
+      (compromissosEquipe || []).map((c) => ({
+        id: `comp-${c.id}`,
+        lead_id: "",
+        nome: c.titulo,
+        status: "",
+        telefone: "",
+        date: new Date(c.inicio),
+        type: "compromisso" as const,
+        corretor_nome: c.criador?.nome || "",
+        local: c.local || undefined,
+        favorito: false,
+        compromisso: c,
+      })),
+    [compromissosEquipe]
+  );
+
   const calendarEvents: CalendarEvent[] = React.useMemo(() => {
-    if (!agendaVisitas) return [];
-    return agendaVisitas.map((v: any) => ({
+    if (!agendaVisitas) return eventosCompromisso;
+    return [...eventosCompromisso, ...agendaVisitas.map((v: any) => ({
       id: `${v.lead_id}-visita`,
       lead_id: v.lead_id,
       nome: v.nome,
@@ -128,8 +170,8 @@ function AgendaPage() {
       corretor_nome: v.corretor_nome || "Sem Corretor",
       status_visita: v.status_visita || "AGENDADA",
       favorito: !!v.favorito,
-    }));
-  }, [agendaVisitas]);
+    }))];
+  }, [agendaVisitas, eventosCompromisso]);
 
   const { data: corretores } = useQuery({
     queryKey: ["corretores-agenda", profile?.imobiliaria_id],
@@ -198,9 +240,10 @@ function AgendaPage() {
   // Filtro por corretor (só visível pra dono/gerente — corretor já só ve as
   // próprias tarefas, filtradas direto na query acima).
   const filteredEvents: CalendarEvent[] = React.useMemo(() => {
-    if (corretorFilter === "todos") return allEvents;
-    return allEvents.filter((e) => e.corretor_id === corretorFilter);
-  }, [allEvents, corretorFilter]);
+    const doLead = corretorFilter === "todos" ? allEvents : allEvents.filter((e) => e.corretor_id === corretorFilter);
+    // Compromisso da equipe é de todo mundo: aparece com qualquer filtro.
+    return [...doLead, ...eventosCompromisso].sort((a, b) => a.date.getTime() - b.date.getTime());
+  }, [allEvents, corretorFilter, eventosCompromisso]);
 
   // Lógica de categorização das tarefas
   const { atrasadas, aFazer, visitas, futuras, favoritos } = React.useMemo(() => {
@@ -213,6 +256,7 @@ function AgendaPage() {
 
     const filterAtrasadas = filteredEvents.filter(e => {
       if (e.date >= todayStart) return false;
+      if (e.type === 'compromisso') return false; // já aconteceu, não é pendência
       if (e.type === 'visita' || e.type === 'fid') {
         return e.status_visita !== 'REALIZADA' && e.status_visita !== 'DESMARCADA';
       }
@@ -288,9 +332,16 @@ function AgendaPage() {
                 </TabsTrigger>
               </TabsList>
             </div>
-            
+
             <div className="flex items-center gap-3">
-              <Button 
+              <Button
+                variant="outline"
+                className="font-bold shadow-sm h-10 px-4 uppercase text-[11px] tracking-wider border-amber-200 text-amber-700 hover:bg-amber-50"
+                onClick={() => abrirCompromisso(null)}
+              >
+                <Users className="h-4 w-4 mr-2" /> Novo compromisso
+              </Button>
+              <Button
                 className="bg-primary font-bold shadow-sm h-10 px-6 uppercase text-[11px] tracking-wider"
                 onClick={() => setIsScheduleModalOpen(true)}
               >
@@ -322,6 +373,7 @@ function AgendaPage() {
                 <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-green-500"></div>FID</div>
                 <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-slate-300"></div>Follow-up</div>
                 <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-purple-500"></div>Desmarcado</div>
+                <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-amber-500"></div>Compromisso da equipe</div>
               </div>
             </div>
 
@@ -343,8 +395,8 @@ function AgendaPage() {
                   const isTodayDate = isToday(day);
 
                   return (
-                    <div 
-                      key={day.toISOString()} 
+                    <div
+                      key={day.toISOString()}
                       className={`border-r border-b border-slate-200 p-1 md:p-1.5 flex flex-col transition-colors min-h-0 ${!isCurrentMonth ? "bg-slate-50/80" : "bg-white"} ${idx % 7 === 6 ? "border-r-0" : ""} hover:bg-slate-50`}
                     >
                       <div className="flex justify-end items-center mb-1">
@@ -359,22 +411,26 @@ function AgendaPage() {
                             dotColor = event.status_visita === 'DESMARCADA' || event.status_visita === 'REAGENDADA' ? 'bg-purple-500' : 'bg-blue-500';
                           } else if (event.type === 'fid') {
                             dotColor = event.status_visita === 'DESMARCADA' || event.status_visita === 'REAGENDADA' ? 'bg-purple-500' : 'bg-green-500';
+                          } else if (event.type === 'compromisso') {
+                            dotColor = 'bg-amber-500';
                           }
-                          
+                          const ehCompromisso = event.type === 'compromisso';
+
                           return (
                             <div
                               key={event.id}
                               onClick={() => {
+                                if (ehCompromisso) return abrirCompromisso(event.compromisso!);
                                 setSelectedLeadId(event.lead_id);
                                 setIsModalOpen(true);
                               }}
-                              className="flex items-center gap-1.5 text-[9px] md:text-[10px] p-0.5 rounded hover:bg-slate-100 cursor-pointer font-bold text-slate-600 transition-colors"
-                              title={`${event.corretor_nome} - ${event.type === 'fid' ? 'FID' : 'Visita'} - ${event.nome}`}
+                              className={`flex items-center gap-1.5 text-[9px] md:text-[10px] p-0.5 rounded cursor-pointer font-bold transition-colors ${ehCompromisso ? "bg-amber-50 text-amber-800 hover:bg-amber-100" : "text-slate-600 hover:bg-slate-100"}`}
+                              title={ehCompromisso ? `${TIPO_COMPROMISSO_LABEL[event.compromisso!.tipo]} - ${event.nome}${event.local ? " - " + event.local : ""}` : `${event.corretor_nome} - ${event.type === 'fid' ? 'FID' : 'Visita'} - ${event.nome}`}
                             >
                               <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${dotColor}`} />
                               <span className="opacity-70 flex-shrink-0">{format(event.date, "HH:mm")}</span>
                               <span className="truncate uppercase tracking-tight">
-                                {`${(event.corretor_nome || "").split(' ')[0]} - ${event.type === 'fid' ? 'FID' : 'Visita'} - ${event.nome.split(' ')[0]}`}
+                                {ehCompromisso ? event.nome : `${(event.corretor_nome || "").split(' ')[0]} - ${event.type === 'fid' ? 'FID' : 'Visita'} - ${event.nome.split(' ')[0]}`}
                               </span>
                             </div>
                           );
@@ -392,7 +448,7 @@ function AgendaPage() {
               {/* Barra Lateral de Categorias */}
               <div className="md:col-span-1 flex flex-col gap-2 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm h-fit">
                 <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 px-2">Categorias</h3>
-                
+
                 {[
                   { id: "atrasadas", label: "Atrasadas", count: atrasadas.length, color: "text-red-500 bg-red-50 hover:bg-red-100/70 border-red-100", activeColor: "bg-red-500 text-white border-red-500 hover:bg-red-600", icon: AlertCircle },
                   { id: "aFazer", label: "A Fazer", count: aFazer.length, color: "text-blue-500 bg-blue-50 hover:bg-blue-100/70 border-blue-100", activeColor: "bg-blue-500 text-white border-blue-500 hover:bg-blue-600", icon: ListTodo },
@@ -477,11 +533,13 @@ function AgendaPage() {
                           let typeBadgeColor = "bg-slate-100 text-slate-700";
                           if (event.type === 'visita') typeBadgeColor = "bg-blue-50 text-blue-700 border-blue-100 border";
                           if (event.type === 'fid') typeBadgeColor = "bg-green-50 text-green-700 border-green-100 border";
+                          if (event.type === 'compromisso') typeBadgeColor = "bg-amber-50 text-amber-700 border-amber-200 border";
 
                           return (
                             <div
                               key={event.id}
                               onClick={() => {
+                                if (event.type === 'compromisso') return abrirCompromisso(event.compromisso!);
                                 setSelectedLeadId(event.lead_id);
                                 setIsModalOpen(true);
                               }}
@@ -492,7 +550,7 @@ function AgendaPage() {
                                   <div className="flex items-center gap-2 flex-wrap">
                                     <h4 className="text-sm font-black text-slate-800 truncate">{event.nome}</h4>
                                     <Badge className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md ${typeBadgeColor}`}>
-                                      {event.type === 'follow_up' ? 'Follow-up' : event.type === 'fid' ? 'FID' : 'Visita'}
+                                      {event.type === 'compromisso' ? TIPO_COMPROMISSO_LABEL[event.compromisso!.tipo] + " · equipe" : event.type === 'follow_up' ? 'Follow-up' : event.type === 'fid' ? 'FID' : 'Visita'}
                                     </Badge>
                                     {isVisita && event.status_visita && (
                                       <Badge variant="outline" className="text-[9px] font-bold px-1.5 py-0">
@@ -500,7 +558,7 @@ function AgendaPage() {
                                       </Badge>
                                     )}
                                   </div>
-                                  
+
                                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-400 font-medium">
                                     <span className="flex items-center gap-1.5">
                                       <CalendarIcon className="h-3.5 w-3.5" />
@@ -523,6 +581,7 @@ function AgendaPage() {
                               </div>
 
                               <div className="flex items-center gap-2 flex-shrink-0">
+                                {event.type !== 'compromisso' && (
                                 <Button
                                   variant="ghost"
                                   size="icon"
@@ -541,6 +600,7 @@ function AgendaPage() {
                                 >
                                   <Star className={`h-4.5 w-4.5 ${event.favorito ? "fill-yellow-400 text-yellow-500" : "text-slate-300"}`} />
                                 </Button>
+                                )}
                               </div>
                             </div>
                           );
@@ -555,12 +615,21 @@ function AgendaPage() {
         </Tabs>
       </div>
 
-      <ScheduleTaskModal 
+      <ScheduleTaskModal
         open={isScheduleModalOpen}
         onOpenChange={setIsScheduleModalOpen}
       />
 
-      <LeadDetailsModal 
+      <CompromissoDialog
+        open={compromissoDialogOpen}
+        onOpenChange={setCompromissoDialogOpen}
+        compromisso={compromissoAberto}
+        imobiliariaId={profile?.imobiliaria_id || undefined}
+        userId={user?.id}
+        podeEditarTodos={role === "dono" || role === "gerente"}
+      />
+
+      <LeadDetailsModal
         leadId={selectedLeadId}
         open={isModalOpen}
         onOpenChange={setIsModalOpen}

@@ -68,25 +68,6 @@ function fmtMin(min: number | null | undefined) {
   return `${(min / 1440).toFixed(1).replace(".", ",")} dias`;
 }
 
-// Período de comparação. Se o período começa no dia 1º (filtro "Este mês" /
-// "Mês passado"), compara com os MESMOS dias do mês anterior (1º a 1º, 1º a 15
-// com 1º a 15). Senão, a janela de mesmo tamanho logo antes do início.
-function periodoAnterior(inicio: string, fim: string) {
-  const di = new Date(`${inicio}T12:00:00`);
-  const df = new Date(`${fim}T12:00:00`);
-  const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  if (di.getDate() === 1 && df.getMonth() === di.getMonth() && df.getFullYear() === di.getFullYear()) {
-    const pi = new Date(di.getFullYear(), di.getMonth() - 1, 1, 12);
-    const ultimoDiaAnt = new Date(di.getFullYear(), di.getMonth(), 0, 12).getDate();
-    const pf = new Date(di.getFullYear(), di.getMonth() - 1, Math.min(df.getDate(), ultimoDiaAnt), 12);
-    return { inicio: iso(pi), fim: iso(pf) };
-  }
-  const dias = Math.round((df.getTime() - di.getTime()) / 86400000) + 1;
-  const pf = new Date(di.getTime() - 86400000);
-  const pi = new Date(pf.getTime() - (dias - 1) * 86400000);
-  return { inicio: iso(pi), fim: iso(pf) };
-}
-
 async function buscar(inicio: string, fim: string): Promise<Analitico> {
   const { data, error } = await supabase.rpc("get_dashboard_analitico" as any, { p_inicio: inicio, p_fim: fim });
   if (error) throw error;
@@ -102,25 +83,12 @@ export function PainelAnalitico({
   dataFim: string;
   onAbrirCampanha?: (origem: string) => void;
 }) {
-  // Período ainda em andamento (ex.: "Este mês" no dia 1º) compara só com o
-  // mesmo pedaço do período anterior -- senão 1 dia de outubro contra setembro
-  // inteiro dava "-97%" sem significar nada.
-  const hojeIso = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; })();
-  const fimEfetivo = dataFim > hojeIso ? (hojeIso < dataInicio ? dataInicio : hojeIso) : dataFim;
-  const anterior = periodoAnterior(dataInicio, fimEfetivo);
-
   const { data, isLoading, error } = useQuery({
     queryKey: ["dashboard-analitico", dataInicio, dataFim],
     queryFn: () => buscar(dataInicio, dataFim),
     staleTime: 60_000,
     refetchInterval: 120_000,
   });
-  const { data: dataAnt } = useQuery({
-    queryKey: ["dashboard-analitico", anterior.inicio, anterior.fim],
-    queryFn: () => buscar(anterior.inicio, anterior.fim),
-    staleTime: 5 * 60_000,
-  });
-
   if (error) {
     return (
       <Card className="border-none shadow-soft bg-white">
@@ -143,7 +111,6 @@ export function PainelAnalitico({
   }
 
   const r = data.resumo;
-  const ra = dataAnt?.resumo;
 
   return (
     <div className="space-y-6">
@@ -151,23 +118,17 @@ export function PainelAnalitico({
 
       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
         <Kpi icon={UserPlus} rotulo="Leads que entraram" valor={fmtInt(r.entraram)}
-          detalhe={r.recadastros ? `+ ${fmtInt(r.recadastros)} recadastros` : "no período"}
-          atual={r.entraram} anterior={ra?.entraram} />
+          detalhe={r.recadastros ? `+ ${fmtInt(r.recadastros)} recadastros` : "no período"} />
         <Kpi icon={MessageCircleReply} rotulo="Responderam" valor={`${pct(r.responderam, r.entraram)}%`}
-          detalhe={`${fmtInt(r.responderam)} de ${fmtInt(r.entraram)} leads`}
-          atual={pct(r.responderam, r.entraram)} anterior={ra ? pct(ra.responderam, ra.entraram) : undefined} pontos />
+          detalhe={`${fmtInt(r.responderam)} de ${fmtInt(r.entraram)} leads`} />
         <Kpi icon={FileCheck2} rotulo="Documentação / crédito" valor={fmtInt(r.documentacao)}
-          detalhe={`${pct(r.documentacao, r.entraram)}% dos que entraram`}
-          atual={r.documentacao} anterior={ra?.documentacao} />
+          detalhe={`${pct(r.documentacao, r.entraram)}% dos que entraram`} />
         <Kpi icon={BadgeCheck} rotulo="Crédito aprovado" valor={fmtInt(r.aprovados)}
-          detalhe={`${pct(r.aprovados, r.documentacao)}% da documentação`}
-          atual={r.aprovados} anterior={ra?.aprovados} />
+          detalhe={`${pct(r.aprovados, r.documentacao)}% da documentação`} />
         <Kpi icon={Handshake} rotulo="Vendas fechadas" valor={fmtInt(r.vendas_fechadas)}
-          detalhe={r.valor_vendido ? brl(Number(r.valor_vendido)) : "no período"}
-          atual={r.vendas_fechadas} anterior={ra?.vendas_fechadas} destaque />
+          detalhe={r.valor_vendido ? brl(Number(r.valor_vendido)) : "no período"} destaque />
         <Kpi icon={Clock} rotulo="1º contato (mediana)" valor={fmtMin(r.primeiro_contato_mediana_min)}
-          detalhe={r.pct_contato_5min != null ? `${r.pct_contato_5min}% em até 5 min` : "sem dados"}
-          atual={r.primeiro_contato_mediana_min ?? undefined} anterior={ra?.primeiro_contato_mediana_min ?? undefined} menorEMelhor />
+          detalhe={r.pct_contato_5min != null ? `${r.pct_contato_5min}% em até 5 min` : "sem dados"} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -226,20 +187,13 @@ function LeituraDoPeriodo({ alertas, resumo }: { alertas: Analitico["alertas"]; 
   );
 }
 
+// Pedido do dono (02/10): sem comparação com outra data -- só os números do
+// período escolhido, com o detalhe embaixo pra entender os leads.
 function Kpi({
-  icon: Icon, rotulo, valor, detalhe, atual, anterior, menorEMelhor, pontos, destaque,
+  icon: Icon, rotulo, valor, detalhe, destaque,
 }: {
-  icon: any; rotulo: string; valor: string; detalhe: string;
-  atual?: number; anterior?: number; menorEMelhor?: boolean; pontos?: boolean; destaque?: boolean;
+  icon: any; rotulo: string; valor: string; detalhe: string; destaque?: boolean;
 }) {
-  let delta: { texto: string; bom: boolean; sobe: boolean } | null = null;
-  if (atual != null && anterior != null && !(atual === 0 && anterior === 0)) {
-    const diff = pontos ? atual - anterior : anterior === 0 ? null : Math.round(((atual - anterior) / anterior) * 100);
-    if (diff != null && diff !== 0) {
-      const sobe = diff > 0;
-      delta = { texto: `${sobe ? "+" : ""}${diff}${pontos ? " p.p." : "%"}`, sobe, bom: menorEMelhor ? !sobe : sobe };
-    }
-  }
   return (
     <Card className={`border-none shadow-soft overflow-hidden ${destaque ? "bg-emerald-600 text-white" : "bg-white"}`}>
       <CardContent className="p-4">
@@ -248,20 +202,7 @@ function Kpi({
           <Icon className={`h-3.5 w-3.5 ${destaque ? "text-emerald-100" : "text-slate-300"}`} />
         </div>
         <div className={`mt-2 text-[26px] leading-none font-bold tabular-nums ${destaque ? "text-white" : "text-slate-900"}`}>{valor}</div>
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
-          <span className={`text-[11px] leading-snug ${destaque ? "text-emerald-50" : "text-slate-500"}`}>{detalhe}</span>
-          {delta && (
-            <span
-              title="Comparado ao mesmo intervalo do período anterior"
-              className={`shrink-0 inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
-                destaque ? "bg-white/20 text-white" : delta.bom ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-600"
-              }`}
-            >
-              {delta.sobe ? <ArrowUp className="h-2.5 w-2.5" /> : <ArrowDown className="h-2.5 w-2.5" />}
-              {delta.texto}
-            </span>
-          )}
-        </div>
+        <div className={`mt-2 text-[11px] leading-snug ${destaque ? "text-emerald-50" : "text-slate-500"}`}>{detalhe}</div>
       </CardContent>
     </Card>
   );
