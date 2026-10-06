@@ -52,6 +52,7 @@ function AgendaPage() {
   const { role, isLoading: loadingPerms } = usePermissions();
   const queryClient = useQueryClient();
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
+  const [diaSelecionado, setDiaSelecionado] = useState<Date>(new Date());
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
@@ -317,6 +318,23 @@ function AgendaPage() {
     };
   }, [filteredEvents]);
 
+  // Pedido do dono (06/10): ao lado do calendário, os agendamentos do dia
+  // clicado em ordem de horário (igual à V2). Visita/FID/compromisso vêm da
+  // agenda da imobiliária toda; as tarefas de contato seguem a mesma regra da
+  // Lista de Tarefas (corretor vê só as dele).
+  const agendaDoDia = React.useMemo(() => {
+    const agend = calendarEvents.filter((e) => isSameDay(e.date, diaSelecionado));
+    const tarefas = allEvents.filter((e) => e.type === "follow_up" && isSameDay(e.date, diaSelecionado));
+    const porHora = (a: CalendarEvent, b: CalendarEvent) => a.date.getTime() - b.date.getTime();
+    return { agend: agend.sort(porHora), tarefas: tarefas.sort(porHora) };
+  }, [calendarEvents, allEvents, diaSelecionado]);
+
+  const abrirEvento = (event: CalendarEvent) => {
+    if (event.type === "compromisso") return abrirCompromisso(event.compromisso!);
+    setSelectedLeadId(event.lead_id);
+    setIsModalOpen(true);
+  };
+
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(monthStart);
   const startDate = startOfWeek(monthStart);
@@ -381,7 +399,7 @@ function AgendaPage() {
                   <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-slate-900" onClick={prevMonth}>
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
-                  <Button variant="ghost" size="sm" className="h-8 text-[11px] font-bold uppercase tracking-wider text-slate-500 hover:text-slate-900" onClick={() => setCurrentMonth(new Date())}>
+                  <Button variant="ghost" size="sm" className="h-8 text-[11px] font-bold uppercase tracking-wider text-slate-500 hover:text-slate-900" onClick={() => { setCurrentMonth(new Date()); setDiaSelecionado(new Date()); }}>
                     Hoje
                   </Button>
                   <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-slate-900" onClick={nextMonth}>
@@ -398,7 +416,8 @@ function AgendaPage() {
               </div>
             </div>
 
-            <Card className="flex-1 border-slate-200 shadow-sm bg-white flex flex-col overflow-hidden rounded-2xl min-h-0">
+            <div className="flex-1 flex flex-col lg:flex-row gap-4 min-h-0 overflow-y-auto lg:overflow-visible">
+            <Card className="lg:flex-1 border-slate-200 shadow-sm bg-white flex flex-col overflow-hidden rounded-2xl min-h-[480px] lg:min-h-0">
               <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50/80">
                 {weekDays.map(day => (
                   <div key={day} className="py-3 text-center text-[10px] font-black uppercase tracking-widest text-slate-400">
@@ -414,11 +433,13 @@ function AgendaPage() {
                   const dayEvents = calendarEvents.filter(e => isSameDay(e.date, day));
                   const isCurrentMonth = isSameMonth(day, currentMonth);
                   const isTodayDate = isToday(day);
+                  const selecionado = isSameDay(day, diaSelecionado);
 
                   return (
                     <div
                       key={day.toISOString()}
-                      className={`border-r border-b border-slate-200 p-1 md:p-1.5 flex flex-col transition-colors min-h-0 ${!isCurrentMonth ? "bg-slate-50/80" : "bg-white"} ${idx % 7 === 6 ? "border-r-0" : ""} hover:bg-slate-50`}
+                      onClick={() => setDiaSelecionado(day)}
+                      className={`border-r border-b border-slate-200 p-1 md:p-1.5 flex flex-col transition-colors min-h-0 cursor-pointer ${selecionado ? "bg-primary/5 ring-2 ring-inset ring-primary/40" : !isCurrentMonth ? "bg-slate-50/80" : "bg-white"} ${idx % 7 === 6 ? "border-r-0" : ""} hover:bg-slate-50`}
                     >
                       <div className="flex justify-end items-center mb-1">
                         <span className={`text-[11px] font-bold w-6 h-6 flex items-center justify-center rounded-full ${isTodayDate ? "bg-primary text-white shadow-sm" : "text-slate-600"}`}>
@@ -440,11 +461,7 @@ function AgendaPage() {
                           return (
                             <div
                               key={event.id}
-                              onClick={() => {
-                                if (ehCompromisso) return abrirCompromisso(event.compromisso!);
-                                setSelectedLeadId(event.lead_id);
-                                setIsModalOpen(true);
-                              }}
+                              onClick={(ev) => { ev.stopPropagation(); abrirEvento(event); }}
                               className={`flex items-center gap-1.5 text-[9px] md:text-[10px] p-0.5 rounded cursor-pointer font-bold transition-colors ${ehCompromisso ? "bg-amber-50 text-amber-800 hover:bg-amber-100" : "text-slate-600 hover:bg-slate-100"}`}
                               title={ehCompromisso ? `${TIPO_COMPROMISSO_LABEL[event.compromisso!.tipo]} - ${event.nome}${event.local ? " - " + event.local : ""}` : `${event.corretor_nome} - ${event.type === 'fid' ? 'FID' : 'Visita'} - ${event.nome}`}
                             >
@@ -462,6 +479,64 @@ function AgendaPage() {
                 })}
               </div>
             </Card>
+
+            <Card className="lg:w-[340px] xl:w-[380px] shrink-0 border-slate-200 shadow-sm bg-white flex flex-col overflow-hidden rounded-2xl lg:min-h-0">
+              <CardHeader className="p-4 border-b bg-slate-50/50 flex-shrink-0 space-y-0.5">
+                <CardTitle className="text-xs font-bold text-slate-800 uppercase tracking-widest">
+                  {isToday(diaSelecionado) ? "Agenda de hoje" : "Agenda do dia"}
+                </CardTitle>
+                <p className="text-[11px] text-slate-500 capitalize">{format(diaSelecionado, "EEEE, d 'de' MMMM", { locale: ptBR })}</p>
+              </CardHeader>
+              <div className="flex-1 lg:min-h-0 overflow-y-auto">
+                <div className="p-4 space-y-5">
+                  {agendaDoDia.agend.length === 0 && agendaDoDia.tarefas.length === 0 && (
+                    <div className="flex flex-col items-center justify-center py-10 text-slate-400">
+                      <CheckSquare size={36} className="text-slate-200 mb-2" strokeWidth={1.5} />
+                      <p className="text-xs font-bold">Nada marcado neste dia.</p>
+                    </div>
+                  )}
+                  {[
+                    { titulo: "Visitas, FID e compromissos", lista: agendaDoDia.agend },
+                    { titulo: "Tarefas de contato", lista: agendaDoDia.tarefas },
+                  ].filter((g) => g.lista.length > 0).map((g) => (
+                    <div key={g.titulo}>
+                      <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">{g.titulo} ({g.lista.length})</div>
+                      <div className="space-y-1.5">
+                        {g.lista.map((event) => {
+                          let cor = "bg-slate-400";
+                          let tipo = "Tarefa";
+                          if (event.type === "visita") { cor = event.status_visita === "DESMARCADA" || event.status_visita === "REAGENDADA" ? "bg-purple-500" : "bg-blue-500"; tipo = "Visita"; }
+                          else if (event.type === "fid") { cor = event.status_visita === "DESMARCADA" || event.status_visita === "REAGENDADA" ? "bg-purple-500" : "bg-green-500"; tipo = "FID"; }
+                          else if (event.type === "compromisso") { cor = "bg-amber-500"; tipo = TIPO_COMPROMISSO_LABEL[event.compromisso!.tipo]; }
+                          return (
+                            <button
+                              key={event.id}
+                              type="button"
+                              onClick={() => abrirEvento(event)}
+                              className="w-full flex items-start gap-3 p-2.5 rounded-xl border border-slate-100 hover:border-slate-200 hover:bg-slate-50 text-left transition-colors"
+                            >
+                              <span className="text-xs font-black text-slate-700 tabular-nums w-11 shrink-0 pt-0.5">{format(event.date, "HH:mm")}</span>
+                              <div className={`w-1 self-stretch rounded-full shrink-0 ${cor}`} />
+                              <div className="min-w-0 flex-1">
+                                <div className="text-[13px] font-bold text-slate-800 truncate">{event.nome}</div>
+                                <div className="text-[10.5px] text-slate-500 truncate">
+                                  {tipo}
+                                  {(event.type === "visita" || event.type === "fid") && event.status_visita ? ` · ${event.status_visita.toLowerCase()}` : ""}
+                                  {event.type !== "compromisso" && role !== "corretor" && event.corretor_nome ? ` · ${event.corretor_nome}` : ""}
+                                  {event.type === "compromisso" && event.local ? ` · ${event.local}` : ""}
+                                </div>
+                                {event.motivoRobo && <div className="text-[10px] text-violet-600 font-semibold truncate">🤖 {event.motivoRobo}</div>}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </Card>
+            </div>
           </TabsContent>
 
           <TabsContent value="tarefas" className="flex-1 flex flex-col min-h-0 m-0 data-[state=inactive]:hidden">

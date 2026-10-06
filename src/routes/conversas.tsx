@@ -7,6 +7,24 @@ import { ptBR } from "date-fns/locale";
 // Pedido do dono: a lista de conversas não mostrava NENHUMA data (só um
 // contador tipo "há 3 dias" ali antes). Dentro da última semana mostra o dia
 // da semana ("segunda-feira"); mais antigo que isso mostra "20 de julho".
+// Pedido do dono (06/10): anexo aparecia na lista como "[Anexo]: https://..."
+// -- mostra o tipo (e a legenda, se tiver), igual ao WhatsApp.
+function previaMensagem(conteudo: string | null): string {
+  if (!conteudo) return "";
+  if (!conteudo.startsWith("[Anexo]:")) return conteudo;
+  const [primeira, ...resto] = conteudo.split("\n");
+  const url = primeira.replace("[Anexo]:", "").trim().toLowerCase().split("?")[0];
+  const ext = url.split(".").pop() || "";
+  let rotulo = "📎 Arquivo";
+  if (["ogg", "oga", "opus", "mp3", "m4a", "aac", "wav", "amr"].includes(ext)) rotulo = "🎤 Áudio";
+  else if (["jpg", "jpeg", "png", "gif", "heic"].includes(ext)) rotulo = "📷 Imagem";
+  else if (ext === "webp") rotulo = "🖼️ Figurinha";
+  else if (["mp4", "mov", "3gp", "webm", "mkv"].includes(ext)) rotulo = "🎥 Vídeo";
+  else if (ext === "pdf") rotulo = "📄 PDF";
+  const legenda = resto.join(" ").trim();
+  return legenda ? `${rotulo} · ${legenda}` : rotulo;
+}
+
 function formatarDataConversa(data: string): string {
   const d = new Date(data);
   if (isAfter(d, subDays(new Date(), 7))) {
@@ -226,7 +244,7 @@ function ConversasPage() {
                       <div className="flex items-center justify-between gap-2 mt-0.5">
                         <p className="text-xs text-slate-500 truncate">
                           {c.ultima_direcao === "outbound" ? "Você: " : ""}
-                          {c.ultima_mensagem}
+                          {previaMensagem(c.ultima_mensagem)}
                         </p>
                         {c.nao_lidas > 0 && (
                           <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-bold text-white shrink-0">
