@@ -38,6 +38,7 @@ export function AprovacoesVendaDialog({ open, onOpenChange, imobiliariaId }: Apr
           empreendimento,
           unidade,
           torre,
+          data_venda_informada,
           corretor:perfis!leads_corretor_id_fkey(nome),
           interacoes:leads_interacoes(conteudo, created_at, tipo)
         `)
@@ -46,7 +47,7 @@ export function AprovacoesVendaDialog({ open, onOpenChange, imobiliariaId }: Apr
 
       if (error) throw error;
 
-      return data.map(lead => {
+      return (data as any[]).map(lead => {
         const interacaoFechamento = lead.interacoes?.filter(i => i.tipo === 'fechamento')?.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
         return {
           ...lead,
@@ -61,7 +62,12 @@ export function AprovacoesVendaDialog({ open, onOpenChange, imobiliariaId }: Apr
     mutationFn: async (leadId: string) => {
       if (!user) throw new Error("Não autenticado");
 
-      const { data: leadAtual } = await supabase.from("leads").select("imobiliaria_id").eq("id", leadId).single();
+      const { data: leadAtual } = await supabase.from("leads").select("imobiliaria_id, data_venda_informada" as any).eq("id", leadId).single() as any;
+      // Pedido do dono (06/10): a venda conta na DATA DA VENDA informada pelo
+      // corretor, não no dia da aprovação (vendas antigas registradas agora).
+      const dataInf: string | null = leadAtual?.data_venda_informada || null;
+      const hoje = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+      const dataFechamento = dataInf && dataInf !== hoje ? `${dataInf}T12:00:00-03:00` : new Date().toISOString();
       const colunaVenda = leadAtual?.imobiliaria_id
         ? (await supabase
             .from("colunas_kanban")
@@ -77,7 +83,7 @@ export function AprovacoesVendaDialog({ open, onOpenChange, imobiliariaId }: Apr
           venda_pendente_aprovacao: false,
           status: 'venda_concluida',
           coluna_kanban_id: colunaVenda?.id || null,
-          data_fechamento: new Date().toISOString(),
+          data_fechamento: dataFechamento,
           // Venda aprovada não pode deixar rastro de follow-up/visita pendente
           // — senão o lead continua aparecendo como tarefa atrasada mesmo
           // já tendo comprado (bug real reportado pelo dono, 17/08).
@@ -92,7 +98,7 @@ export function AprovacoesVendaDialog({ open, onOpenChange, imobiliariaId }: Apr
         lead_id: leadId,
         autor_id: user.id,
         tipo: 'fechamento',
-        conteudo: `Venda APROVADA pela gerência!`,
+        conteudo: `Venda APROVADA pela gerência!${dataInf ? ` Data da venda: ${dataInf.split("-").reverse().join("/")}` : ""}`,
       });
     },
     onSuccess: () => {
@@ -116,7 +122,8 @@ export function AprovacoesVendaDialog({ open, onOpenChange, imobiliariaId }: Apr
           empreendimento: null,
           unidade: null,
           torre: null,
-        })
+          data_venda_informada: null,
+        } as any)
         .eq("id", leadId);
 
       if (error) throw error;
@@ -185,7 +192,11 @@ export function AprovacoesVendaDialog({ open, onOpenChange, imobiliariaId }: Apr
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-2 mb-3 text-[10px]">
+                    <div className="grid grid-cols-4 gap-2 mb-3 text-[10px]">
+                      <div className="bg-slate-50 rounded p-2 border border-slate-100">
+                        <p className="text-slate-400 font-bold uppercase">Data da venda</p>
+                        <p className="text-slate-700 font-semibold truncate">{lead.data_venda_informada ? lead.data_venda_informada.split("-").reverse().join("/") : "-"}</p>
+                      </div>
                       <div className="bg-slate-50 rounded p-2 border border-slate-100">
                         <p className="text-slate-400 font-bold uppercase">Empreendimento</p>
                         <p className="text-slate-700 font-semibold truncate">{lead.empreendimento || "-"}</p>

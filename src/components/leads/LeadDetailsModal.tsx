@@ -96,6 +96,10 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
   const [empreendimentoFechamento, setEmpreendimentoFechamento] = useState("");
   const [unidadeFechamento, setUnidadeFechamento] = useState("");
   const [torreFechamento, setTorreFechamento] = useState("");
+  // Pedido do dono (06/10): data real da venda — senão venda antiga registrada
+  // agora entra como venda do mês da aprovação.
+  const hojeLocal = () => format(new Date(), "yyyy-MM-dd");
+  const [dataVendaFechamento, setDataVendaFechamento] = useState(hojeLocal);
   const [followUpDate, setFollowUpDate] = useState("");
   const [followUpObs, setFollowUpObs] = useState("");
   const [mounted, setMounted] = useState(false);
@@ -504,22 +508,28 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      if (!dataVendaFechamento) { toast.error("Informe a data da venda."); return; }
+      if (dataVendaFechamento > hojeLocal()) { toast.error("A data da venda não pode ser no futuro."); return; }
+
       const valorNum = parseFloat(valorFechamento.replace(/[^\d,]/g, '').replace(',', '.'));
 
-      await supabase.from("leads").update({
+      const { error } = await supabase.from("leads").update({
         venda_pendente_aprovacao: true,
         valor_venda: valorNum,
         empreendimento: empreendimentoFechamento || null,
         unidade: unidadeFechamento || null,
         torre: torreFechamento || null,
+        data_venda_informada: dataVendaFechamento,
         ultima_acao_at: new Date().toISOString()
-      }).eq("id", leadId);
+      } as any).eq("id", leadId);
+      if (error) throw error;
 
+      const dataVendaBr = dataVendaFechamento.split("-").reverse().join("/");
       await supabase.from("leads_interacoes").insert({
         lead_id: leadId!,
         autor_id: user.id,
         tipo: 'fechamento',
-        conteudo: `Venda enviada para aprovação! Valor: R$ ${valorFechamento} · Empreendimento: ${empreendimentoFechamento || "-"} · Unidade: ${unidadeFechamento || "-"} · Torre: ${torreFechamento || "-"}${obsFechamento ? " · " + obsFechamento : ""}`,
+        conteudo: `Venda enviada para aprovação! Data da venda: ${dataVendaBr} · Valor: R$ ${valorFechamento} · Empreendimento: ${empreendimentoFechamento || "-"} · Unidade: ${unidadeFechamento || "-"} · Torre: ${torreFechamento || "-"}${obsFechamento ? " · " + obsFechamento : ""}`,
       });
 
       toast.success("Venda enviada para aprovação do gerente/dono!");
@@ -529,6 +539,7 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
       setEmpreendimentoFechamento("");
       setUnidadeFechamento("");
       setTorreFechamento("");
+      setDataVendaFechamento(hojeLocal());
       queryClient.invalidateQueries({ queryKey: ["lead", leadId] });
       queryClient.invalidateQueries({ queryKey: ["leads"] });
       queryClient.invalidateQueries({ queryKey: ["aprovacoes-pendentes-count"] });
@@ -1353,15 +1364,26 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label className="text-xs font-bold uppercase">Valor da Venda</Label>
-                <div className="relative">
-                  <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase">Valor da Venda</Label>
+                  <div className="relative">
+                    <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                    <Input
+                      placeholder="0,00"
+                      className="pl-9"
+                      value={valorFechamento}
+                      onChange={(e) => setValorFechamento(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase">Data da Venda</Label>
                   <Input
-                    placeholder="0,00"
-                    className="pl-9"
-                    value={valorFechamento}
-                    onChange={(e) => setValorFechamento(e.target.value)}
+                    type="date"
+                    max={hojeLocal()}
+                    value={dataVendaFechamento}
+                    onChange={(e) => setDataVendaFechamento(e.target.value)}
                   />
                 </div>
               </div>
@@ -1400,11 +1422,11 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
                 />
               </div>
               <p className="text-[10px] text-slate-400 font-medium">
-                A venda só é confirmada depois que o dono/gerente aprovar.
+                A venda só é confirmada depois que o dono/gerente aprovar. Ela conta nos relatórios no mês da <strong>data da venda</strong>.
               </p>
               <div className="flex gap-3 pt-4">
                 <Button variant="outline" className="flex-1" onClick={() => setShowFechamentoModal(false)}>Voltar</Button>
-                <Button className="flex-1 bg-green-600 hover:bg-green-700 font-bold" onClick={handleFechamento} disabled={!valorFechamento}>ENVIAR PARA APROVAÇÃO</Button>
+                <Button className="flex-1 bg-green-600 hover:bg-green-700 font-bold" onClick={handleFechamento} disabled={!valorFechamento || !dataVendaFechamento}>ENVIAR PARA APROVAÇÃO</Button>
               </div>
             </div>
           </DialogContent>
