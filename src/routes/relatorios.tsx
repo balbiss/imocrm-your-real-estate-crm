@@ -417,6 +417,13 @@ function ReportsPage() {
 
     return {
       totalLeads: leads.length,
+      // Pedido do dono (06/10): "32 leads no dia mas não entrou isso" -- a
+      // maioria tinha só chamado o WhatsApp do corretor. Separa as origens.
+      leadsCampanha: leads.filter((l: any) => {
+        const o = (l.origem || "").trim();
+        return o && !["WhatsApp", "Manual", "Site"].includes(o) && !/^importa/i.test(o);
+      }).length,
+      leadsWhatsapp: leads.filter((l: any) => (l.origem || "").trim() === "WhatsApp").length,
       converted: vendasDoMes,
       avgResponseTime: Math.round(avgResponseTime),
       originData,
@@ -532,6 +539,7 @@ function ReportsPage() {
               : format(new Date(`${mesFiltro}-02`), "MMMM 'de' yyyy", { locale: ptBR })}
             icon={<Users />}
             color="text-primary"
+            sub={stats ? `${stats.leadsCampanha} de campanha · ${stats.leadsWhatsapp} chamaram no WhatsApp${stats.totalLeads - stats.leadsCampanha - stats.leadsWhatsapp > 0 ? ` · ${stats.totalLeads - stats.leadsCampanha - stats.leadsWhatsapp} outros` : ""}` : undefined}
           />
           <StatCard title="SLA de Atendimento" value={`${stats?.avgResponseTime} min`} trend="Meta: 5min" icon={<Clock />} color="text-amber-500" />
           <StatCard title="Taxa de Conversão" value={`${((stats?.converted || 0) / (stats?.totalLeads || 1) * 100).toFixed(1)}%`} trend="No período filtrado" icon={<Target />} color="text-blue-500" />
@@ -960,7 +968,7 @@ function ReportsPage() {
   );
 }
 
-function StatCard({ title, value, trend, icon, color }: any) {
+function StatCard({ title, value, trend, icon, color, sub }: any) {
   return (
     <Card className="border-none shadow-soft bg-white hover:shadow-md transition-all">
       <CardContent className="p-4 flex items-center justify-between">
@@ -970,6 +978,7 @@ function StatCard({ title, value, trend, icon, color }: any) {
             <span className="text-xl font-bold text-slate-900">{value}</span>
             <span className="text-[9px] font-bold text-emerald-500">{trend}</span>
           </div>
+          {sub && <p className="text-[10px] text-slate-500">{sub}</p>}
         </div>
         <div className={`p-2.5 rounded-lg bg-slate-50 ${color}`}>
           {React.cloneElement(icon, { className: "h-4 w-4" })}

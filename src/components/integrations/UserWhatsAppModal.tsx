@@ -26,7 +26,7 @@ export function UserWhatsAppModal({ isOpen, onClose }: UserWhatsAppModalProps) {
 
     const poll = async () => {
       try {
-        const data = await getWhatsappStatus();
+        const data = await getWhatsappStatus({ renovarQr: true });
         if (cancelled) return;
 
         if (data.connected) {
@@ -37,7 +37,8 @@ export function UserWhatsAppModal({ isOpen, onClose }: UserWhatsAppModalProps) {
           return true;
         }
 
-        if (data.qrCode) setQrCode(data.qrCode);
+        // null = QR velho sendo renovado -> mostra "Aguardando geração" em vez do QR vencido
+        setQrCode(data.qrCode || null);
       } catch (e: any) {
         console.error("Erro ao consultar status do WhatsApp:", e);
       }

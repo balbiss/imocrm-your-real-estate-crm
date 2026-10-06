@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { FollowupDesempenho } from "./FollowupDesempenho";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
   AlertTriangle,
@@ -24,7 +25,7 @@ import {
 // numa chamada só. A comparação usa o período anterior de mesmo tamanho.
 
 type Resumo = {
-  entraram: number; recadastros: number; com_corretor: number; contatados: number; responderam: number;
+  entraram: number; recadastros: number; entraram_campanha?: number; entraram_whatsapp?: number; entraram_whatsapp_anuncio?: number; com_corretor: number; contatados: number; responderam: number;
   agendaram: number; visitaram: number; documentacao: number; aprovados: number; vendas_safra: number;
   primeiro_contato_mediana_min: number | null; pct_contato_5min: number | null;
   vendas_fechadas: number; valor_vendido: number; devolvidos: number; em_aberto_agora: number; sem_corretor_agora: number;
@@ -118,7 +119,9 @@ export function PainelAnalitico({
 
       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
         <Kpi icon={UserPlus} rotulo="Leads que entraram" valor={fmtInt(r.entraram)}
-          detalhe={r.recadastros ? `+ ${fmtInt(r.recadastros)} recadastros` : "no período"} />
+          detalhe={r.entraram_campanha != null
+            ? `${fmtInt(r.entraram_campanha)} de campanha · ${fmtInt(r.entraram_whatsapp)} chamaram no WhatsApp${r.entraram_whatsapp_anuncio ? ` (${fmtInt(r.entraram_whatsapp_anuncio)} por anúncio)` : ""}${r.recadastros ? ` · + ${fmtInt(r.recadastros)} recadastros` : ""}`
+            : r.recadastros ? `+ ${fmtInt(r.recadastros)} recadastros` : "no período"} />
         <Kpi icon={MessageCircleReply} rotulo="Responderam" valor={`${pct(r.responderam, r.entraram)}%`}
           detalhe={`${fmtInt(r.responderam)} de ${fmtInt(r.entraram)} leads`} />
         <Kpi icon={FileCheck2} rotulo="Documentação / crédito" valor={fmtInt(r.documentacao)}
@@ -133,7 +136,7 @@ export function PainelAnalitico({
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         <CaminhoDoLead funil={data.funil} />
-        <FollowupCard f={data.followup} />
+        <FollowupDesempenho dataInicio={dataInicio} dataFim={dataFim} isManager className="lg:col-span-5" />
       </div>
 
       <TabelaCorretores corretores={data.corretores} />
@@ -245,52 +248,6 @@ function CaminhoDoLead({ funil }: { funil: Analitico["funil"] }) {
             </div>
           );
         })}
-      </CardContent>
-    </Card>
-  );
-}
-
-function FollowupCard({ f }: { f: Analitico["followup"] }) {
-  const maxTaxa = Math.max(1, ...f.por_passo.map((p) => pct(p.responderam, p.enviados)));
-  return (
-    <Card className="lg:col-span-5 border-none shadow-soft bg-white overflow-hidden">
-      <CardHeader className="py-4 px-5 border-b border-slate-50">
-        <CardTitle className="text-sm font-bold flex items-center gap-2"><Repeat className="h-3.5 w-3.5 text-violet-500" /> Follow-up automático</CardTitle>
-        <CardDescription className="text-saas-xs">O que o robô fez com os leads que entraram nele no período.</CardDescription>
-      </CardHeader>
-      <CardContent className="p-5 space-y-5">
-        <div className="grid grid-cols-2 gap-3">
-          {[
-            ["Entraram no robô", fmtInt(f.iniciados), `${fmtInt(f.mensagens)} mensagens enviadas`],
-            ["Responderam", `${pct(f.respondeu, f.iniciados)}%`, `${fmtInt(f.respondeu)} leads`],
-            ["Corretor assumiu", fmtInt(f.corretor_assumiu), "antes do fim da sequência"],
-            ["Descartados no fim", fmtInt(f.descartados), f.erros ? `${fmtInt(f.erros)} travaram por erro` : `${fmtInt(f.rodando)} ainda rodando`],
-          ].map(([rot, val, det]) => (
-            <div key={rot} className="rounded-lg border border-slate-100 p-3">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{rot}</div>
-              <div className="text-lg font-bold text-slate-900 tabular-nums">{val}</div>
-              <div className="text-[10.5px] text-slate-500 truncate">{det}</div>
-            </div>
-          ))}
-        </div>
-        <div>
-          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Em qual mensagem o cliente responde</div>
-          {f.por_passo.length === 0 && <p className="text-[11px] text-slate-400">Nenhuma mensagem enviada no período.</p>}
-          <div className="space-y-1.5">
-            {f.por_passo.map((p) => {
-              const taxa = pct(p.responderam, p.enviados);
-              return (
-                <div key={p.passo} className="grid grid-cols-[64px_1fr_92px] items-center gap-2">
-                  <span className="text-[11px] font-semibold text-slate-600">{p.passo}ª msg</span>
-                  <div className="h-2.5 rounded-full bg-slate-100 overflow-hidden">
-                    <div className="h-full rounded-full bg-violet-500" style={{ width: `${(100 * taxa) / maxTaxa}%` }} />
-                  </div>
-                  <span className="text-[10.5px] text-slate-500 text-right tabular-nums">{taxa}% de {fmtInt(p.enviados)}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
       </CardContent>
     </Card>
   );

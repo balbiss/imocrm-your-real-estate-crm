@@ -44,6 +44,7 @@ type CalendarEvent = {
   status_visita?: string;
   favorito: boolean;
   compromisso?: Compromisso; // só pra type === "compromisso" (reunião/treinamento da equipe)
+  motivoRobo?: string; // tarefa que nasceu do fim do follow-up automático (pedido do dono 06/10)
 };
 
 function AgendaPage() {
@@ -84,7 +85,7 @@ function AgendaPage() {
 
       let query = supabase
         .from("leads")
-        .select("*, corretor:perfis!leads_corretor_id_fkey(nome), coluna:colunas_kanban!leads_coluna_kanban_id_fkey(nome)")
+        .select("*, corretor:perfis!leads_corretor_id_fkey(nome), coluna:colunas_kanban!leads_coluna_kanban_id_fkey(nome), followups:followup_execucoes(status, motivo_parada, inscrito_em, finalizado_em)")
         .eq("imobiliaria_id", profile.imobiliaria_id)
         .is("descartado_em", null)
         .eq("descarte_pendente_aprovacao", false)
@@ -201,8 +202,28 @@ function AgendaPage() {
       // tarefa"). Quando o follow-up termina o card volta pra TAREFAS com
       // próximo contato pra hoje e aparece aqui normalmente. Visita continua.
       const noFollowupAutomatico = (lead as any).coluna?.nome === "FOLLOW-UP AUTOMÁTICO";
+      // Pedido do dono (06/10): "follow-up automático entrando em atrasado" --
+      // eram leads em que o robô JÁ PAROU (cliente respondeu / corretor
+      // assumiu) e voltaram pra Tarefas pro corretor dar sequência. A
+      // etiqueta deixa claro por que a tarefa está ali.
+      const ultimoFollowup = ((lead as any).followups || [])
+        .slice()
+        .sort((a: any, b: any) => (a.inscrito_em < b.inscrito_em ? 1 : -1))[0];
+      const MOTIVO_ROBO: Record<string, string> = {
+        respondeu: "Cliente respondeu o robô",
+        pausado_corretor: "Robô parou: corretor assumiu",
+        concluido: "Robô terminou sem resposta",
+        erro: "Robô não conseguiu enviar",
+      };
+      // Só quando a tarefa foi criada PELO fim do follow-up (o trigger põe o
+      // próximo contato = momento em que o robô parou). Se o corretor já
+      // marcou outro contato depois, a etiqueta não aparece.
+      const tarefaDoRobo = ultimoFollowup?.finalizado_em && lead.lembrete_follow_up &&
+        Math.abs(new Date(lead.lembrete_follow_up).getTime() - new Date(ultimoFollowup.finalizado_em).getTime()) < 5 * 60 * 1000;
+      const motivoRobo = tarefaDoRobo ? MOTIVO_ROBO[ultimoFollowup.status] : undefined;
       if (lead.lembrete_follow_up && !noFollowupAutomatico) {
         events.push({
+          motivoRobo,
           id: `${lead.id}-followup`,
           lead_id: lead.id,
           nome: lead.nome,
@@ -552,6 +573,11 @@ function AgendaPage() {
                                     <Badge className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md ${typeBadgeColor}`}>
                                       {event.type === 'compromisso' ? TIPO_COMPROMISSO_LABEL[event.compromisso!.tipo] + " · equipe" : event.type === 'follow_up' ? 'Follow-up' : event.type === 'fid' ? 'FID' : 'Visita'}
                                     </Badge>
+                                    {event.type === 'follow_up' && event.motivoRobo && (
+                                      <Badge className="text-[9px] font-bold px-1.5 py-0 rounded-md bg-violet-50 text-violet-700 border border-violet-200">
+                                        🤖 {event.motivoRobo}
+                                      </Badge>
+                                    )}
                                     {isVisita && event.status_visita && (
                                       <Badge variant="outline" className="text-[9px] font-bold px-1.5 py-0">
                                         {event.status_visita}

@@ -129,6 +129,29 @@ whatsappRouter.get("/status", async (req, res) => {
       }
     }
 
+    // Baileys: o QR chega por webhook e fica guardado. Se a sessão parou de
+    // gerar QR (expirou as tentativas, ou o baileys-api reiniciou), o CRM
+    // mostrava o QR velho pra sempre e a leitura não funcionava ("fica só
+    // aguardando", caso Mariaan 06/10). Com a janela de QR aberta
+    // (?renovar_qr=1), QR sem atualização há mais de 90s -> pede outro.
+    // updated_at muda a cada QR novo (trigger set_whatsapp_instances_updated_at).
+    if (
+      req.query.renovar_qr === "1" &&
+      instance.provider === "baileys" &&
+      !instance.connected &&
+      instance.phone_number &&
+      Date.now() - new Date(instance.updated_at).getTime() > 90_000
+    ) {
+      await supabaseAdmin
+        .from("whatsapp_instances")
+        .update({ qr_code: null })
+        .eq("user_id", req.userId);
+      qrCode = null;
+      providerFor(instance)
+        .createConnection(buildWebhookUrl(instance.provider, instance.phone_number))
+        .catch((e) => console.warn("Erro ao renovar QR do baileys:", e.message));
+    }
+
     res.json({
       hasInstance: true,
       provider: instance.provider,

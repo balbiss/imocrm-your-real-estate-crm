@@ -220,6 +220,14 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
     }
 
     const nomeColunaLower = nomeColuna.toLowerCase();
+    // Coluna VENDA só via registro de venda (valor/empreendimento + aprovação).
+    // Mover direto deixava o card na coluna sem venda registrada: sem data de
+    // fechamento, fora dos relatórios e com tarefa "atrasada" (caso EDI, 06/10).
+    if (nomeColunaLower.includes("venda")) {
+      toast.info("Pra levar o card pra VENDA, registre a venda (valor e empreendimento) — ela vai pra aprovação.");
+      setShowFechamentoModal(true);
+      return;
+    }
     const ehAgendadoOuFid = nomeColunaLower.includes("agendado") || nomeColunaLower.includes("fid");
     if (ehAgendadoOuFid) {
       // Agendado/FID continua exigindo Data e Horário do compromisso via

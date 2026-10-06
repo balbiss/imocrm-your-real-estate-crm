@@ -32,6 +32,7 @@ import { useAuth } from "@/context/AuthContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { LeadDetailsModal } from "@/components/leads/LeadDetailsModal";
 import { PainelAnalitico } from "@/components/dashboard/PainelAnalitico";
+import { FollowupDesempenho } from "@/components/dashboard/FollowupDesempenho";
 import { Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/dashboard")({
@@ -451,6 +452,9 @@ function DashboardPage() {
           ))}
         </div>
         )}
+
+        {/* Corretor vê o follow-up automático só dos leads dele (pedido do dono 06/10) */}
+        {!isManager && <FollowupDesempenho dataInicio={dataInicio} dataFim={dataFim} isManager={false} />}
 
         <div className="flex items-center gap-2">
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />

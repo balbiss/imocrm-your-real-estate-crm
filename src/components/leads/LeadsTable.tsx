@@ -103,6 +103,11 @@ export function LeadsTable({ leads, isLoading, colunas, role }: LeadsTableProps)
       if (lead.venda_pendente_aprovacao) {
         throw new Error("Venda aguardando aprovação — não é possível mudar a coluna agora.");
       }
+      // Coluna VENDA só via registro de venda no card (valor + aprovação) --
+      // ver handleMoveColuna em LeadDetailsModal.tsx.
+      if (coluna.nome.toLowerCase().includes("venda")) {
+        throw new Error('Pra levar pra VENDA, abra o card e use o botão "VENDA" (registra valor e vai pra aprovação).');
+      }
       const status = getRetrocompatibleStatus(coluna.nome, coluna.posicao, colunas?.length || 1);
       const payload: any = { coluna_kanban_id: coluna.id, status };
       // followUpDate vem de <input type="datetime-local"> (sem timezone) —

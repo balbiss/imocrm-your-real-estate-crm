@@ -46,8 +46,10 @@ export function connectWhatsapp(phoneNumber: string, provider: WhatsappProvider 
   });
 }
 
-export function getWhatsappStatus(): Promise<WhatsappStatus> {
-  return call("/api/whatsapp/status");
+// renovarQr: só a janela "Ler QR Code" pede -- o backend gera um QR novo se o
+// guardado estiver velho (sessão do baileys parou de mandar QR).
+export function getWhatsappStatus(opts?: { renovarQr?: boolean }): Promise<WhatsappStatus> {
+  return call(opts?.renovarQr ? "/api/whatsapp/status?renovar_qr=1" : "/api/whatsapp/status");
 }
 
 // Desloga do WhatsApp mas mantem o numero salvo — reconectar so pede um novo QR.
