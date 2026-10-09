@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Plus, Repeat, Trash2, Edit, ArrowUp, ArrowDown, Copy, UserX, Image as ImageIcon, Video, FileText as FileIcon, X, Megaphone } from "lucide-react";
+import { Plus, Repeat, Trash2, Archive, ArchiveRestore,Edit, ArrowUp, ArrowDown, Copy, UserX, Image as ImageIcon, Video, FileText as FileIcon, X, Megaphone } from "lucide-react";
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -260,17 +260,25 @@ function FollowupsPage() {
     onError: (e: any) => toast.error("Erro ao salvar: " + (e?.message || "erro desconhecido")),
   });
 
-  const remover = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("followup_fluxos" as any).delete().eq("id", id);
+  // "Remover" não apaga mais (dono 09/10: fluxo do Vitor apagado sem querer
+  // levou junto passos e histórico). Arquiva + desativa; dá pra restaurar.
+  const arquivar = useMutation({
+    mutationFn: async ({ id, restaurar }: { id: string; restaurar: boolean }) => {
+      const patch = restaurar
+        ? { arquivado_em: null }
+        : { arquivado_em: new Date().toISOString(), ativo: false, e_geral: false };
+      const { error } = await supabase.from("followup_fluxos" as any).update(patch).eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_d, { restaurar }) => {
       queryClient.invalidateQueries({ queryKey: ["followup-fluxos"] });
-      toast.success("Fluxo removido!");
+      toast.success(restaurar ? "Fluxo restaurado! Ele volta desativado — ative quando quiser." : "Fluxo arquivado. Dá pra restaurar em \"Ver arquivados\".");
     },
-    onError: (e: any) => toast.error("Erro ao remover: " + (e?.message || "erro")),
+    onError: (e: any) => toast.error("Erro: " + (e?.message || "erro")),
   });
+  const [verArquivados, setVerArquivados] = useState(false);
+  const qtdArquivados = (fluxos || []).filter((f: any) => f.arquivado_em).length;
+  const fluxosVisiveis = (fluxos || []).filter((f: any) => (verArquivados ? !!f.arquivado_em : !f.arquivado_em));
 
   function moverPasso(idx: number, dir: -1 | 1) {
     setPassos((prev) => {
@@ -300,9 +308,16 @@ function FollowupsPage() {
               A 1ª mensagem sai na hora; as seguintes saem na leva da manhã (a partir de 9h30) ou das 16h.
             </p>
           </div>
-          <Button onClick={abrirNovo} className="h-9 text-[11px] font-bold uppercase tracking-wider px-6">
-            <Plus className="mr-1.5 h-3.5 w-3.5" /> Novo Fluxo
-          </Button>
+          <div className="flex items-center gap-2">
+            {(qtdArquivados > 0 || verArquivados) && (
+              <Button variant="outline" onClick={() => setVerArquivados((v) => !v)} className="h-9 text-[11px] font-bold uppercase tracking-wider">
+                <Archive className="mr-1.5 h-3.5 w-3.5" /> {verArquivados ? "Voltar pros fluxos" : `Ver arquivados (${qtdArquivados})`}
+              </Button>
+            )}
+            <Button onClick={abrirNovo} className="h-9 text-[11px] font-bold uppercase tracking-wider px-6">
+              <Plus className="mr-1.5 h-3.5 w-3.5" /> Novo Fluxo
+            </Button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -310,8 +325,8 @@ function FollowupsPage() {
             Array(3).fill(0).map((_, i) => (
               <Card key={i} className="h-40 border-none shadow-soft bg-slate-50 animate-pulse" />
             ))
-          ) : fluxos && fluxos.length > 0 ? (
-            fluxos.map((f: any) => (
+          ) : fluxosVisiveis.length > 0 ? (
+            fluxosVisiveis.map((f: any) => (
               <Card key={f.id} className="border-none shadow-soft bg-white hover:shadow-md transition-all group overflow-hidden flex flex-col">
                 <CardHeader className="py-3 px-4 border-b border-slate-50">
                   <div className="flex items-center justify-between">
@@ -330,9 +345,15 @@ function FollowupsPage() {
                           <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-primary" onClick={() => abrirEdicao(f)}>
                             <Edit className="h-3.5 w-3.5" />
                           </Button>
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-red-500" onClick={() => remover.mutate(f.id)}>
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
+                          {f.arquivado_em ? (
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-emerald-600" title="Restaurar fluxo" onClick={() => arquivar.mutate({ id: f.id, restaurar: true })}>
+                              <ArchiveRestore className="h-3.5 w-3.5" />
+                            </Button>
+                          ) : (
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-red-500" title="Arquivar (dá pra restaurar depois)" onClick={() => arquivar.mutate({ id: f.id, restaurar: false })}>
+                              <Archive className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
                         </>
                       )}
                     </div>

@@ -187,6 +187,16 @@ function DashboardPage() {
       const firstError = totalRes.error || newRes.error || progressRes.error || concludedRes.error || overdueRes.error || campanhaRes.error;
       if (firstError) throw firstError;
 
+      // Gráfico "Horários dos Cadastros" segue o MESMO período (dono 09/10:
+      // filtrou "ontem" e o gráfico continuava mostrando hoje). Agrupa pela
+      // hora do dia somando todos os dias do período.
+      const cadastros: LeadMini[] = (campanhaRes.data || [])
+        .map((l: any) => ({ id: l.id, nome: l.nome, telefone: l.telefone, origem: l.origem, quando: l.created_at }))
+        .sort((a: LeadMini, b: LeadMini) => (a.quando < b.quando ? 1 : -1));
+      const porHoraMap = new Array(24).fill(0);
+      cadastros.forEach((l) => { porHoraMap[new Date(l.quando).getHours()]++; });
+      const porHora = porHoraMap.map((total, hora) => ({ hora, label: String(hora).padStart(2, "0") + "h", total }));
+
       const porCampanhaMap: Record<string, LeadMini[]> = {};
       (campanhaRes.data || []).forEach((l: any) => {
         const key = l.origem?.trim() || "Sem origem";
@@ -203,6 +213,8 @@ function DashboardPage() {
         concluded: concludedRes.count || 0,
         overdueFollowups: overdueRes.count || 0,
         porCampanha,
+        cadastros,
+        porHora,
       };
     },
     enabled: !!profile?.imobiliaria_id && !loadingPerms,
@@ -229,8 +241,15 @@ function DashboardPage() {
       const nomesCredito = (colunas || [])
         .filter((c: any) => /an[aá]lise|cr[eé]dito/i.test(c.nome))
         .map((c: any) => c.nome.replace(/[%,"]/g, ""));
+      // "Agendamento no Dia" (dono 09/10): antes contava lembrete_follow_up
+      // de hoje = TODAS as tarefas de contato (todo lead novo ganha lembrete
+      // pra hoje desde 30/09), não agendamento. Agora é igual ao card de
+      // Análise de Crédito: cards MOVIDOS hoje pra coluna de agendamento.
+      const nomesAgendado = (colunas || [])
+        .filter((c: any) => /agend/i.test(c.nome))
+        .map((c: any) => c.nome.replace(/[%,"]/g, ""));
 
-      const [novosRes, agendaRes, visitasRes, perfisRes, rebatidasRes] = await Promise.all([
+      const [novosRes, visitasRes, perfisRes, rebatidasRes] = await Promise.all([
         scope(
           supabase
             .from("leads")
@@ -239,15 +258,6 @@ function DashboardPage() {
             .gte("created_at", inicioIso)
             .lt("created_at", fimIso)
         ).order("created_at", { ascending: false }),
-        scope(
-          supabase
-            .from("leads")
-            .select("id, nome, telefone, origem, lembrete_follow_up")
-            .eq("imobiliaria_id", imobiliariaId)
-            .gte("lembrete_follow_up", inicioIso)
-            .lt("lembrete_follow_up", fimIso)
-            .is("descartado_em", null)
-        ).order("lembrete_follow_up", { ascending: true }),
         scope(
           supabase
             .from("leads")
@@ -276,25 +286,34 @@ function DashboardPage() {
       // PostgREST. RLS de leads_interacoes já escopa por imobiliária/lead
       // visível, então um SELECT amplo (só tipo='auto' + hoje) é seguro.
       let creditoHoje: (LeadMini & { corretorId: string | null })[] = [];
-      if (nomesCredito.length > 0) {
+      let agenda: LeadMini[] = [];
+      if (nomesCredito.length > 0 || nomesAgendado.length > 0) {
         const { data: interacoes } = await supabase
           .from("leads_interacoes")
           .select("id, lead_id, created_at, conteudo, leads!inner(nome, telefone, origem, corretor_id, imobiliaria_id)")
           .eq("tipo", "auto")
           .gte("created_at", inicioIso)
-          .lt("created_at", fimIso);
-        creditoHoje = (interacoes || [])
-          .filter((i: any) => nomesCredito.some((n) => i.conteudo?.includes(`coluna "${n}"`)))
-          .filter((i: any) => i.leads?.imobiliaria_id === imobiliariaId)
-          .filter((i: any) => role !== "corretor" || i.leads?.corretor_id === user?.id)
-          .map((i: any) => ({
-            id: i.lead_id,
-            nome: i.leads?.nome || "Sem nome",
-            telefone: i.leads?.telefone || "",
-            origem: i.leads?.origem ?? null,
-            quando: i.created_at,
-            corretorId: i.leads?.corretor_id ?? null,
-          }));
+          .lt("created_at", fimIso)
+          .order("created_at", { ascending: true });
+        const movidosPara = (nomes: string[]) => {
+          // Um card movido 2x pra mesma coluna no dia aparece 1x só.
+          const vistos = new Set<string>();
+          return (interacoes || [])
+            .filter((i: any) => nomes.some((n) => i.conteudo?.includes(`coluna "${n}"`)))
+            .filter((i: any) => i.leads?.imobiliaria_id === imobiliariaId)
+            .filter((i: any) => role !== "corretor" || i.leads?.corretor_id === user?.id)
+            .filter((i: any) => (vistos.has(i.lead_id) ? false : (vistos.add(i.lead_id), true)))
+            .map((i: any) => ({
+              id: i.lead_id,
+              nome: i.leads?.nome || "Sem nome",
+              telefone: i.leads?.telefone || "",
+              origem: i.leads?.origem ?? null,
+              quando: i.created_at,
+              corretorId: i.leads?.corretor_id ?? null,
+            }));
+        };
+        if (nomesCredito.length > 0) creditoHoje = movidosPara(nomesCredito);
+        if (nomesAgendado.length > 0) agenda = movidosPara(nomesAgendado);
       }
 
       const perfisPorId: Record<string, string> = {};
@@ -316,14 +335,9 @@ function DashboardPage() {
         .sort((a, b) => b.total - a.total);
 
       const novos: LeadMini[] = (novosRes.data || []).map((l: any) => ({ id: l.id, nome: l.nome, telefone: l.telefone, origem: l.origem, quando: l.created_at }));
-      const agenda: LeadMini[] = (agendaRes.data || []).map((l: any) => ({ id: l.id, nome: l.nome, telefone: l.telefone, origem: l.origem, quando: l.lembrete_follow_up }));
       const visitas: LeadMini[] = (visitasRes.data || []).map((l: any) => ({ id: l.id, nome: l.nome, telefone: l.telefone, origem: l.origem, quando: l.data_visita }));
 
-      const porHoraMap = new Array(24).fill(0);
-      novos.forEach((l) => { porHoraMap[new Date(l.quando).getHours()]++; });
-      const porHora = porHoraMap.map((total, hora) => ({ hora, label: String(hora).padStart(2, "0") + "h", total }));
-
-      return { novos, agenda, visitas, credito: creditoHoje, porHora, rebatidasPorCorretor };
+      return { novos, agenda, visitas, credito: creditoHoje, rebatidasPorCorretor };
     },
     enabled: !!profile?.imobiliaria_id && !loadingPerms,
   });
@@ -357,7 +371,12 @@ function DashboardPage() {
   }
 
   const isBroker = role === "corretor";
-  const maxHora = Math.max(1, ...(hojeData?.porHora.map((h) => h.total) ?? [1]));
+  const maxHora = Math.max(1, ...(dashboardData?.porHora.map((h) => h.total) ?? [1]));
+  const cadastrosDaHora = (dashboardData?.cadastros || []).filter((l) => new Date(l.quando).getHours() === horaSelecionada);
+  const periodoEhUmDia = dataInicio === dataFim;
+  const periodoTexto = periodoEhUmDia
+    ? `em ${format(new Date(`${dataInicio}T00:00:00`), "dd/MM/yyyy")}`
+    : `de ${format(new Date(`${dataInicio}T00:00:00`), "dd/MM")} a ${format(new Date(`${dataFim}T00:00:00`), "dd/MM/yyyy")}`;
   const maxCampanha = Math.max(1, ...(dashboardData?.porCampanha.map((c) => c.total) ?? [1]));
 
   return (
@@ -477,7 +496,7 @@ function DashboardPage() {
             icon={<PhoneCall className="h-3.5 w-3.5 text-blue-500" />}
             leads={hojeData?.agenda}
             loading={isLoadingHoje}
-            vazio="Nenhum contato agendado pra hoje."
+            vazio="Nenhum card movido pra Agendado hoje."
             colunaExtra="hora"
             onAbrirLead={setLeadSelecionadoId}
           />
@@ -505,12 +524,16 @@ function DashboardPage() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           <Card className={`${isManager ? "lg:col-span-12" : "lg:col-span-7"} border-none shadow-soft bg-white overflow-hidden`}>
             <CardHeader className="py-4 px-5 border-b border-slate-50">
-              <CardTitle className="text-sm font-bold">Horários dos Cadastros</CardTitle>
-              <CardDescription className="text-saas-xs">Leads que entraram hoje, por hora — clique numa barra pra ver quem foi.</CardDescription>
+              <CardTitle className="text-sm font-bold">
+                Horários dos Cadastros · {dashboardData?.cadastros.length ?? 0} leads {periodoTexto}
+              </CardTitle>
+              <CardDescription className="text-saas-xs">
+                Segue o período escolhido lá em cima (De/Até){periodoEhUmDia ? "" : ", somando todos os dias"} — clique numa barra pra ver quem foi.
+              </CardDescription>
             </CardHeader>
             <CardContent className="p-4 h-[240px]">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={hojeData?.porHora} margin={{ left: -20 }}>
+                <BarChart data={dashboardData?.porHora} margin={{ left: -20 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                   <XAxis dataKey="label" fontSize={9.5} axisLine={false} tickLine={false} interval={1} />
                   <YAxis fontSize={11} axisLine={false} tickLine={false} allowDecimals={false} />
@@ -521,7 +544,7 @@ function DashboardPage() {
                     className="cursor-pointer"
                     onClick={(entry: any) => entry?.total > 0 && setHoraSelecionada(entry.hora)}
                   >
-                    {hojeData?.porHora.map((h, i) => (
+                    {dashboardData?.porHora.map((h, i) => (
                       <Cell key={i} fill={h.total > 0 ? "#1d4ed8" : "#f1f5f9"} fillOpacity={h.total > 0 ? 0.85 : 1} />
                     ))}
                   </Bar>
@@ -598,12 +621,12 @@ function DashboardPage() {
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="text-sm font-bold uppercase">
-              {horaSelecionada !== null && String(horaSelecionada).padStart(2, "0") + "h"} · {hojeData?.novos.filter((l) => new Date(l.quando).getHours() === horaSelecionada).length || 0} leads
+              {horaSelecionada !== null && String(horaSelecionada).padStart(2, "0") + "h"} · {cadastrosDaHora.length} leads {periodoTexto}
             </DialogTitle>
           </DialogHeader>
           <ScrollArea className="max-h-[60vh]">
             <div className="space-y-1.5 pr-3">
-              {hojeData?.novos.filter((l) => new Date(l.quando).getHours() === horaSelecionada).map((lead) => (
+              {cadastrosDaHora.map((lead) => (
                 <LinhaLead key={lead.id} lead={lead} onClick={() => { setLeadSelecionadoId(lead.id); setHoraSelecionada(null); }} />
               ))}
             </div>
