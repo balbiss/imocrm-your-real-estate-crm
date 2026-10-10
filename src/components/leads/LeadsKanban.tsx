@@ -1,3 +1,4 @@
+import { lembreteVencido } from "@/lib/tarefas";
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -325,6 +326,8 @@ export function LeadsKanban({ leads: initialLeads, isLoading: initialLoading, im
                 const emAnaliseCredito = ehColunaAnaliseCredito(stage.title);
                 const aguardandoAuditoria = emAnaliseCredito && !lead.credito_aprovado_em;
                 const podeAuditar = aguardandoAuditoria && (role === "dono" || role === "gerente");
+                // Lead com o robô rodando não fica vermelho (pedido do dono 10/10).
+                const vencido = lembreteVencido(lead, stage.title);
                 return (
                 <Card
                   key={lead.id}
@@ -332,7 +335,7 @@ export function LeadsKanban({ leads: initialLeads, isLoading: initialLoading, im
                   className={`cursor-pointer hover:border-primary/50 hover:shadow-md transition-all group relative overflow-hidden hover-lift animate-fade-in-up ${podeAuditar ? "border-red-300 bg-red-50/60" : "border-slate-200"}`}
                 >
                   {/* Indicador de Lembrete */}
-                  {lead.lembrete_follow_up && new Date(lead.lembrete_follow_up) <= new Date() && (
+                  {vencido && (
                     <div className="absolute top-0 left-0 w-full h-0.5 bg-red-500 animate-pulse" />
                   )}
 
@@ -433,7 +436,7 @@ export function LeadsKanban({ leads: initialLeads, isLoading: initialLoading, im
                       
                       <div className="flex items-center gap-1.5">
                         {lead.lembrete_follow_up && (
-                          <div className={`h-5 w-5 rounded-full flex items-center justify-center ${new Date(lead.lembrete_follow_up) <= new Date() ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`} title="Possui follow-up agendado">
+                          <div className={`h-5 w-5 rounded-full flex items-center justify-center ${vencido ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`} title="Possui follow-up agendado">
                             <span className="text-[9px] font-bold">!</span>
                           </div>
                         )}

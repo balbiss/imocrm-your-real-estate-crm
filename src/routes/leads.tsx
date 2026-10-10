@@ -1,3 +1,4 @@
+import { lembreteVencido } from "@/lib/tarefas";
 import { createFileRoute } from "@tanstack/react-router";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { LeadsKanban } from "@/components/leads/LeadsKanban";
@@ -204,6 +205,8 @@ function LeadsPage() {
   }
 
 
+  const nomeColunaDe = (id?: string | null) => (colunas || []).find((c: any) => c.id === id)?.nome as string | undefined;
+
   const filteredLeads = leads?.filter(lead => {
     // Lead descartado / com descarte ou venda pendente de aprovação some das
     // duas visões (Kanban já escondia; a Lista mostrava e virava "lead
@@ -231,7 +234,7 @@ function LeadsPage() {
 
     const matchesCidade = cidadeFilter === 'todas' ? true : normalizarCidade(lead.bairro_interesse) === normalizarCidade(cidadeFilter);
 
-    const isOverdue = lead.lembrete_follow_up && new Date(lead.lembrete_follow_up) <= new Date() && !lead.data_fechamento;
+    const isOverdue = lembreteVencido(lead as any, nomeColunaDe(lead.coluna_kanban_id));
     const matchesOverdue = showOverdueOnly ? isOverdue : true;
 
     const dataLead = lead.created_at?.slice(0, 10);
@@ -243,9 +246,7 @@ function LeadsPage() {
 
   const cidadesDisponiveis = dedupCidades((leads || []).map(l => l.bairro_interesse));
 
-  const leadsVencidosCount = leads?.filter(l =>
-    l.lembrete_follow_up && new Date(l.lembrete_follow_up) <= new Date() && !l.data_fechamento
-  ).length || 0;
+  const leadsVencidosCount = leads?.filter(l => lembreteVencido(l as any, nomeColunaDe(l.coluna_kanban_id))).length || 0;
 
   const filtrosAtivos =
     (tempFilter ? 1 : 0) +

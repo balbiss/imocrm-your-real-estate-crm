@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Loader2, AlertTriangle, RefreshCw, Hand, MapPin } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { inicioDeHoje, tarefaAtrasada } from "@/lib/tarefas";
 import {
   Select,
   SelectContent,
@@ -34,14 +35,19 @@ export function BolsaoResgateDialog({ open, onOpenChange, imobiliariaId }: Bolsa
     queryKey: ["tarefas-atrasadas", user?.id],
     queryFn: async () => {
       if (!user) return [];
+      // Mesma regra da aba Tarefas (ver lib/tarefas.ts): venceu ANTES de hoje,
+      // sem lead com o robô rodando, descartado ou esperando aprovação.
       const { data } = await supabase
         .from("leads")
-        .select("id, nome, telefone, lembrete_follow_up, status")
+        .select("id, nome, telefone, lembrete_follow_up, status, data_fechamento, descartado_em, coluna:colunas_kanban!leads_coluna_kanban_id_fkey(nome)")
         .eq("corretor_id", user.id)
-        .lte("lembrete_follow_up", new Date().toISOString())
+        .lt("lembrete_follow_up", inicioDeHoje().toISOString())
         .is("data_fechamento", null)
+        .is("descartado_em", null)
+        .eq("descarte_pendente_aprovacao", false)
+        .eq("venda_pendente_aprovacao" as any, false)
         .order("lembrete_follow_up", { ascending: true });
-      return data || [];
+      return ((data || []) as any[]).filter((l) => tarefaAtrasada(l, l.coluna?.nome));
     },
     enabled: open && !!user,
     // Esse número trava a ação real (bloqueia +Mais Rebatidas). O staleTime
