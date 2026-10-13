@@ -6,6 +6,7 @@ import { whatsappRouter } from "./routes/whatsapp.js";
 import { webhookRouter } from "./routes/webhook.js";
 import { pushRouter } from "./routes/push.js";
 import { automacaoRouter } from "./routes/automacao.js";
+import { mcpRouter } from "./routes/mcp.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -35,6 +36,8 @@ app.use("/api/whatsapp", whatsappRouter);
 app.use("/api/push", pushRouter);
 app.use("/webhooks", webhookRouter);
 app.use("/automacao", automacaoRouter);
+// Conector do Claude (MCP + login OAuth) — ver routes/mcp.js
+app.use(mcpRouter);
 
 app.use((err, _req, res, _next) => {
   console.error("Erro nao tratado:", err);

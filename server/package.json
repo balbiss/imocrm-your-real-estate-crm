@@ -9,9 +9,11 @@
     "test": "node --test"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "@supabase/supabase-js": "^2.105.1",
     "cors": "^2.8.5",
     "express": "^4.21.1",
-    "web-push": "^3.6.7"
+    "web-push": "^3.6.7",
+    "zod": "^4.6.7"
   }
 }
