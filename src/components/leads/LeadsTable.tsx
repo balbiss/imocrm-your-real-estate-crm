@@ -119,6 +119,17 @@ export function LeadsTable({ leads, isLoading, colunas, role }: LeadsTableProps)
         .update(payload)
         .eq("id", lead.id);
       if (error) throw error;
+      // Mesmo registro do card (LeadDetailsModal.handleMoveColuna) -- o
+      // Dashboard analítico conta as etapas por esse histórico de colunas.
+      const { data: auth } = await supabase.auth.getUser();
+      if (auth.user) {
+        await supabase.from("leads_interacoes").insert({
+          lead_id: lead.id,
+          autor_id: auth.user.id,
+          tipo: "auto",
+          conteudo: `Moveu o card para a coluna "${coluna.nome}"${followUpDate ? " e agendou próximo contato" : ""}`,
+        });
+      }
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["leads"] });

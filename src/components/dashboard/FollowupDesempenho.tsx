@@ -73,7 +73,7 @@ export function FollowupDesempenho({
         <div>
           <CardTitle className="text-sm font-bold flex items-center gap-2"><Repeat className="h-3.5 w-3.5 text-violet-500" /> Follow-up automático</CardTitle>
           <CardDescription className="text-saas-xs mt-1">
-            {isManager ? "O que o robô fez com os leads que entraram nele no período." : "O que o robô fez com os SEUS leads que entraram nele no período."}
+            {isManager ? "O que o robô fez com os leads que entraram nele no período (inclui lead antigo puxado da rebatida — não é o mesmo grupo do Caminho do lead)." : "O que o robô fez com os SEUS leads que entraram nele no período."}
           </CardDescription>
         </div>
         {isManager && (
@@ -97,7 +97,7 @@ export function FollowupDesempenho({
               {[
                 ["Entraram no robô", fmt(f.iniciados), `${fmt(f.mensagens)} mensagens enviadas`],
                 ["Responderam", `${pct(f.respondeu, f.iniciados)}%`, `${fmt(f.respondeu)} leads`],
-                ["Corretor assumiu", fmt(f.corretor_assumiu), "antes do fim da sequência"],
+                ["Corretor parou o robô", fmt(f.corretor_assumiu), "antes do cliente responder"],
                 ["Descartados no fim", fmt(f.descartados), f.erros ? `${fmt(f.erros)} travaram por erro` : `${fmt(f.rodando)} ainda rodando`],
               ].map(([rot, val, det]) => (
                 <div key={rot} className="rounded-lg border border-slate-100 p-3">
@@ -137,7 +137,7 @@ export function FollowupDesempenho({
                         <th className="px-1 py-1.5">Corretor</th>
                         <th className="px-1 py-1.5 text-right">No robô</th>
                         <th className="px-1 py-1.5 text-right">Responderam</th>
-                        <th className="px-1 py-1.5 text-right">Assumiu</th>
+                        <th className="px-1 py-1.5 text-right" title="Corretor parou o robô antes do cliente responder">Corretor parou</th>
                         <th className="px-1 py-1.5 text-right">Descartados</th>
                       </tr>
                     </thead>

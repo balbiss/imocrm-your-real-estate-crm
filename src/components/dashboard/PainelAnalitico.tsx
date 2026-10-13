@@ -25,7 +25,7 @@ import {
 // numa chamada só. A comparação usa o período anterior de mesmo tamanho.
 
 type Resumo = {
-  entraram: number; recadastros: number; entraram_campanha?: number; entraram_whatsapp?: number; entraram_whatsapp_anuncio?: number; com_corretor: number; contatados: number; responderam: number;
+  entraram: number; recadastros: number; entraram_campanha?: number; entraram_whatsapp?: number; entraram_whatsapp_anuncio?: number; com_corretor: number; contatados: number; responderam: number; responderam_whatsapp?: number; cobrar_doc?: number;
   agendaram: number; visitaram: number; documentacao: number; aprovados: number; vendas_safra: number;
   primeiro_contato_mediana_min: number | null; pct_contato_5min: number | null;
   vendas_fechadas: number; valor_vendido: number; devolvidos: number; em_aberto_agora: number; sem_corretor_agora: number;
@@ -123,11 +123,11 @@ export function PainelAnalitico({
             ? `${fmtInt(r.entraram_campanha)} de campanha · ${fmtInt(r.entraram_whatsapp)} chamaram no WhatsApp${r.entraram_whatsapp_anuncio ? ` (${fmtInt(r.entraram_whatsapp_anuncio)} por anúncio)` : ""}${r.recadastros ? ` · + ${fmtInt(r.recadastros)} recadastros` : ""}`
             : r.recadastros ? `+ ${fmtInt(r.recadastros)} recadastros` : "no período"} />
         <Kpi icon={MessageCircleReply} rotulo="Responderam" valor={`${pct(r.responderam, r.entraram)}%`}
-          detalhe={`${fmtInt(r.responderam)} de ${fmtInt(r.entraram)} leads`} />
-        <Kpi icon={FileCheck2} rotulo="Documentação / crédito" valor={fmtInt(r.documentacao)}
-          detalhe={`${pct(r.documentacao, r.entraram)}% dos que entraram`} />
+          detalhe={`${fmtInt(r.responderam)} de ${fmtInt(r.entraram)} leads${r.responderam_whatsapp ? ` · ${fmtInt(r.responderam_whatsapp)} já chegaram chamando no WhatsApp` : ""}`} />
+        <Kpi icon={FileCheck2} rotulo="Análise de crédito" valor={fmtInt(r.documentacao)}
+          detalhe={`${pct(r.documentacao, r.entraram)}% dos que entraram${r.cobrar_doc != null ? ` · ${fmtInt(r.cobrar_doc)} passaram por cobrar doc` : ""}`} />
         <Kpi icon={BadgeCheck} rotulo="Crédito aprovado" valor={fmtInt(r.aprovados)}
-          detalhe={`${pct(r.aprovados, r.documentacao)}% da documentação`} />
+          detalhe={`${pct(r.aprovados, r.documentacao)}% das análises`} />
         <Kpi icon={Handshake} rotulo="Vendas fechadas" valor={fmtInt(r.vendas_fechadas)}
           detalhe={r.valor_vendido ? brl(Number(r.valor_vendido)) : "no período"} destaque />
         <Kpi icon={Clock} rotulo="1º contato (mediana)" valor={fmtMin(r.primeiro_contato_mediana_min)}
@@ -371,7 +371,7 @@ function TabelaCampanhas({ campanhas, onAbrirCampanha }: { campanhas: Campanha[]
               <th className="px-5 py-2.5">Campanha</th>
               <th className="px-3 py-2.5 text-right">Leads</th>
               <th className="px-3 py-2.5">Responderam</th>
-              <th className="px-3 py-2.5 text-right">Docs</th>
+              <th className="px-3 py-2.5 text-right" title="Leads que foram pra Análise de Crédito">Análise</th>
               <th className="px-3 py-2.5 text-right">Vendas</th>
               <th className="px-3 py-2.5 text-right">Lead ruim</th>
               <th className="px-3 py-2.5 text-right">Custo/lead</th>

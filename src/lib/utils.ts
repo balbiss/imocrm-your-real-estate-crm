@@ -45,23 +45,21 @@ export function getRetrocompatibleStatus(nomeColuna: string, posicao: number, to
   if (nomeNormalized.includes("novo") || nomeNormalized.includes("triagem") || nomeNormalized.includes("entrada")) return "novo";
   if (nomeNormalized.includes("rebatida")) return "rebatida";
   if (nomeNormalized.includes("tarefa") || nomeNormalized.includes("dia")) return "tarefas";
-  if (nomeNormalized.includes("agenda") || nomeNormalized.includes("reunião")) return "agendado";
+  if (nomeNormalized.includes("conversando") || nomeNormalized.includes("follow")) return "tarefas";
+  if (nomeNormalized.includes("agenda") || nomeNormalized.includes("reunião") || nomeNormalized === "fid") return "agendado";
   if (nomeNormalized.includes("visita")) return "visitou";
   if (nomeNormalized.includes("cobrar") || nomeNormalized.includes("document")) return "cobrar_doc";
-  if (nomeNormalized.includes("pendente")) return "pendente";
+  if (nomeNormalized.includes("pendente") || nomeNormalized.includes("análise") || nomeNormalized.includes("analise")) return "pendente";
   if (nomeNormalized.includes("aprovado") || nomeNormalized.includes("fechamento")) return "aprovado";
-  if (nomeNormalized.includes("reprovado") || nomeNormalized.includes("perdido")) return "reprovado";
-  if (nomeNormalized.includes("futuro") || nomeNormalized.includes("frio") || nomeNormalized.includes("arquivado")) return "futuros";
+  if (nomeNormalized.includes("reprovado") || nomeNormalized.includes("perdido") || nomeNormalized.includes("restri")) return "reprovado";
+  if (nomeNormalized.includes("futuro") || nomeNormalized.includes("frio") || nomeNormalized.includes("arquivado")
+    || nomeNormalized.includes("trabalho") || nomeNormalized.includes("parou") || nomeNormalized.includes("descart") || nomeNormalized.includes("descadastr")) return "futuros";
 
-  const ratio = posicao / Math.max(total - 1, 1);
-  if (ratio < 0.15) return "novo";
-  if (ratio < 0.3) return "rebatida";
-  if (ratio < 0.45) return "tarefas";
-  if (ratio < 0.6) return "agendado";
-  if (ratio < 0.7) return "visitou";
-  if (ratio < 0.8) return "cobrar_doc";
-  if (ratio < 0.9) return "pendente";
-  return "futuros";
+  // Coluna com nome desconhecido: status neutro de "em atendimento".
+  // Antes chutava pela POSIÇÃO da coluna -- CONVERSANDO virava "rebatida",
+  // ANÁLISE DE CRÉDITO "tarefas", RESTRIÇÃO "visitou" (dono, 13/10).
+  void posicao; void total;
+  return "tarefas";
 }
 
 // Normaliza nome de cidade/bairro pra comparação (remove acento, caixa e
