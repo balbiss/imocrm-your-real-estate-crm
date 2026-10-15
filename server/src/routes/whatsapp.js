@@ -4,6 +4,7 @@ import { supabaseAdmin } from "../supabase.js";
 import { providerFor } from "../whatsappProvider.js";
 import { toDigitsWithDDI } from "../lib/phone.js";
 import { sendMessageComRetry } from "../lib/sendComRetry.js";
+import * as oficial from "../lib/oficial.js";
 
 export const whatsappRouter = Router();
 whatsappRouter.use(requireUser);
@@ -94,10 +95,21 @@ whatsappRouter.post("/connect", async (req, res) => {
   }
 });
 
+// API oficial do usuário (resumo pra tela -- o chat libera o envio com ela mesmo sem a não oficial).
+async function resumoOficial(userId) {
+  const { data } = await supabaseAdmin
+    .from("whatsapp_oficial")
+    .select("ativa, numero, erro")
+    .eq("user_id", userId)
+    .maybeSingle();
+  return data || null;
+}
+
 whatsappRouter.get("/status", async (req, res) => {
   try {
     const instance = await getInstance(req.userId);
-    if (!instance) return res.json({ hasInstance: false });
+    const oficialResumo = await resumoOficial(req.userId);
+    if (!instance) return res.json({ hasInstance: false, oficial: oficialResumo });
 
     let connected = instance.connected;
     let qrCode = instance.qr_code;
@@ -159,6 +171,7 @@ whatsappRouter.get("/status", async (req, res) => {
       jid: instance.jid,
       qrCode,
       phoneNumber: instance.phone_number,
+      oficial: oficialResumo,
     });
   } catch (err) {
     console.error("Erro ao ler status:", err);
@@ -236,14 +249,57 @@ whatsappRouter.delete("/instance", async (req, res) => {
   }
 });
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Anexo do chat (base64) -> mídia da API oficial (sobe pra Meta e manda pelo id).
+async function midiaOficial(conexao, attachment) {
+  const pureBase64 = attachment.base64.includes(",") ? attachment.base64.split(",")[1] : attachment.base64;
+  const mimetype = (attachment.mimetype || "application/octet-stream").split(";")[0].trim();
+  const buffer = Buffer.from(pureBase64, "base64");
+  // Mesmos limites do WhatsApp: vídeo acima de 16mb vai como documento.
+  let tipo = "document";
+  if (mimetype.startsWith("image/")) tipo = "image";
+  else if (mimetype.startsWith("audio/")) tipo = "audio";
+  else if (mimetype.startsWith("video/") && buffer.length <= 16 * 1024 * 1024) tipo = "video";
+  const id = await oficial.subirMidia(conexao, buffer, mimetype, attachment.fileName);
+  return { tipo, id, fileName: attachment.fileName || "arquivo" };
+}
+
 whatsappRouter.post("/send", async (req, res) => {
   try {
     const { phone, text, attachment, quoted } = req.body || {};
     if (!phone) return res.status(400).json({ error: "phone obrigatorio" });
+    const leadId = UUID.test(String(req.body?.leadId || "")) ? req.body.leadId : null;
 
     const instance = await getInstance(req.userId);
-    if (!instance?.phone_number || !instance.connected) {
+    const naoOficialNoAr = !!(instance?.phone_number && instance.connected);
+    const conexaoOficial = await oficial.conexaoAtiva(req.userId);
+    if (!naoOficialNoAr && !conexaoOficial) {
       return res.status(409).json({ error: "WhatsApp nao conectado" });
+    }
+
+    // API oficial: só com a janela de 24h aberta (o cliente escreveu pra esse número). Fora dela
+    // a Meta só aceita modelo aprovado -- aí vai pela não oficial, se estiver no ar.
+    if (conexaoOficial) {
+      const janela = await oficial.janelaAberta(leadId, req.userId);
+      if (janela) {
+        try {
+          const midia = attachment?.base64 ? await midiaOficial(conexaoOficial, attachment) : null;
+          const messageId = await oficial.enviarOficial(conexaoOficial, phone, { texto: text || "", midia });
+          if (conexaoOficial.erro) await oficial.registrarErro(conexaoOficial, null);
+          return res.json({ success: true, jid: null, messageId, via: "oficial" });
+        } catch (e) {
+          console.error("oficial: envio falhou --", e.message);
+          await oficial.registrarErro(conexaoOficial, e.message);
+          if (!naoOficialNoAr) return res.status(502).json({ error: "A Meta recusou: " + e.message });
+          // segue pela não oficial
+        }
+      } else if (!naoOficialNoAr) {
+        return res.status(409).json({
+          error: "Faz mais de 24h que o cliente não escreve pra você. Pela API oficial, agora só dá pra mandar um modelo aprovado.",
+          codigo: "FORA_DA_JANELA",
+        });
+      }
     }
 
     const provider = providerFor(instance);
@@ -298,7 +354,7 @@ whatsappRouter.post("/send", async (req, res) => {
     const result = await sendMessageComRetry(provider, jid, messageContent, options);
     const messageId = result?.data?.key?.id || null;
 
-    res.json({ success: true, jid, messageId });
+    res.json({ success: true, jid, messageId, via: "nao_oficial" });
   } catch (err) {
     console.error("Erro ao enviar mensagem:", err);
     res.status(500).json({ error: err.message });

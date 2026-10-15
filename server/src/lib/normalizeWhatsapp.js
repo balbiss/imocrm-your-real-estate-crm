@@ -165,3 +165,71 @@ export function normalizeWahaMessage(payload) {
     raw: payload,
   };
 }
+
+// ============================ API OFICIAL ============================
+// Mensagem da Cloud API (webhook "messages" ou "smb_message_echoes" -- o eco do que o corretor
+// mandou pelo WhatsApp Business do celular). media.ref = id da mídia na Meta (baixa com o token).
+const TIPOS_IGNORADOS_OFICIAL = new Set(["system", "unsupported", "ephemeral", "request_welcome", "errors"]);
+const MIDIA_OFICIAL = { image: "image", video: "video", audio: "audio", document: "document", sticker: "sticker" };
+
+// Texto legível de mensagens sem mídia (botão de modelo, lista, localização, contato...).
+function textoOficial(msg) {
+  switch (msg?.type) {
+    case "text":
+      return msg.text?.body || "";
+    case "button":
+      return msg.button?.text || "";
+    case "interactive":
+      return msg.interactive?.button_reply?.title || msg.interactive?.list_reply?.title || "";
+    case "location": {
+      const l = msg.location || {};
+      const nome = [l.name, l.address].filter(Boolean).join(" — ");
+      const mapa = l.latitude != null ? `https://maps.google.com/?q=${l.latitude},${l.longitude}` : "";
+      return ["📍", nome, mapa].filter(Boolean).join(" ");
+    }
+    case "contacts":
+      return "👤 " + (msg.contacts || [])
+        .map((c) => [c.name?.formatted_name, c.phones?.[0]?.phone].filter(Boolean).join(" "))
+        .join(", ");
+    default:
+      return "";
+  }
+}
+
+export function normalizeOficialMessage(msg, { fromMe = false, nomes = {} } = {}) {
+  if (!msg?.id || TIPOS_IGNORADOS_OFICIAL.has(msg.type)) return null;
+
+  const contactPhone = String((fromMe ? msg.to : msg.from) || "").replace(/\D/g, "");
+  // Mesma rede de segurança dos outros motores: telefone BR tem no máx 13 dígitos.
+  if (contactPhone.length < 8 || contactPhone.length > 13) return null;
+
+  const reaction =
+    msg.type === "reaction"
+      ? { targetId: msg.reaction?.message_id || null, emoji: msg.reaction?.emoji || null }
+      : null;
+
+  let media = null;
+  const tipoMidia = MIDIA_OFICIAL[msg.type];
+  if (tipoMidia && msg[msg.type]?.id) {
+    const m = msg[msg.type];
+    media = {
+      tipo: tipoMidia,
+      mimetype: (m.mime_type || "application/octet-stream").split(";")[0].trim(),
+      fileName: m.filename || null,
+      caption: m.caption || null,
+      ref: m.id,
+    };
+  }
+
+  return {
+    sourceId: msg.id,
+    contactPhone,
+    fromMe,
+    pushName: fromMe ? null : nomes[msg.from] || null,
+    isGroup: false,
+    reaction,
+    text: media ? "" : textoOficial(msg),
+    media,
+    raw: msg,
+  };
+}

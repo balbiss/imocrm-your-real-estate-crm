@@ -9,6 +9,7 @@ import { providerFor } from "../whatsappProvider.js";
 import { checkSecret } from "../lib/webhookSecret.js";
 import { renderTemplate, primeiroNome } from "../lib/template.js";
 import { sendMessageComRetry } from "../lib/sendComRetry.js";
+import * as oficial from "../lib/oficial.js";
 
 export const automacaoRouter = Router();
 
@@ -71,13 +72,20 @@ automacaoRouter.post("/followup/enviar", async (req, res) => {
       .eq("user_id", corretor_id)
       .maybeSingle();
 
-    if (!instance?.phone_number || !instance.connected) {
+    // API oficial: só com a janela de 24h aberta (o cliente escreveu pro número do corretor) --
+    // aí é grátis e sem risco de bloqueio. Fora dela a Meta só aceita modelo pago, e follow-up
+    // automático NÃO manda modelo (decisão do dono): vai pela não oficial ou espera.
+    const naoOficialNoAr = !!(instance?.phone_number && instance.connected);
+    const conexaoOficial = await oficial.conexaoAtiva(corretor_id);
+    const usarOficial = !!conexaoOficial && (await oficial.janelaAberta(lead_id, corretor_id));
+
+    if (!naoOficialNoAr && !usarOficial) {
       // Não é erro -- a execução fica pra próxima passada do motor.
       await liberarReserva(execucao_id);
-      return res.json({ skipped: "sem_conexao" });
+      return res.json({ skipped: conexaoOficial ? "fora_da_janela" : "sem_conexao" });
     }
 
-    const provider = providerFor(instance);
+    const provider = naoOficialNoAr ? providerFor(instance) : null;
 
     // Imóvel casado pela referência do anúncio (mesmo texto de leads.origem) --
     // pedido do dono (12/09) pra não precisar subir a imagem do criativo na
@@ -114,11 +122,15 @@ automacaoRouter.post("/followup/enviar", async (req, res) => {
         })
       : "";
 
-    let jid = await provider.resolveJid(telefone);
-    if (!jid && telefone_alternativo) {
-      jid = await provider.resolveJid(telefone_alternativo);
+    // A oficial não precisa resolver o número (a Meta acha o contato); a não oficial sim.
+    let jid = null;
+    if (!usarOficial) {
+      jid = await provider.resolveJid(telefone);
+      if (!jid && telefone_alternativo) {
+        jid = await provider.resolveJid(telefone_alternativo);
+      }
     }
-    if (!jid) {
+    if (!usarOficial && !jid) {
       // Pode ser número fora do WhatsApp OU sessão WAHA momentaneamente fora
       // do ar -- por isso reaproveita o MESMO mecanismo de 3 tentativas do
       // erro de envio (followup_registrar_erro), em vez de escalar na
@@ -173,9 +185,27 @@ automacaoRouter.post("/followup/enviar", async (req, res) => {
       return res.json({ skipped: reivErr ? "reivindicacao_falhou" : reivindicacao });
     }
 
-    let result;
+    let messageId = null;
+    let via = "nao_oficial";
     try {
-      result = await sendMessageComRetry(provider, jid, messageContent);
+      if (usarOficial) {
+        // A oficial busca o anexo direto da URL pública (Storage) -- não precisa do base64.
+        const midia = campoWaha ? { tipo: campoWaha, link: urlAnexoFinal, fileName: nomeAnexoFinal || "arquivo" } : null;
+        try {
+          messageId = await oficial.enviarOficial(conexaoOficial, telefone, { texto, midia });
+          via = "oficial";
+        } catch (errOficial) {
+          await oficial.registrarErro(conexaoOficial, errOficial.message);
+          if (!naoOficialNoAr) throw errOficial;
+          console.warn("follow-up: oficial falhou, indo pela não oficial --", errOficial.message);
+          jid = (await provider.resolveJid(telefone)) || (telefone_alternativo ? await provider.resolveJid(telefone_alternativo) : null);
+          if (!jid) throw errOficial;
+        }
+      }
+      if (via !== "oficial") {
+        const result = await sendMessageComRetry(provider, jid, messageContent);
+        messageId = result?.data?.key?.id || null;
+      }
     } catch (sendErr) {
       // Falha de verdade no envio (ex: bug conhecido do WAHA/GOWS "no LID
       // found" -- https://github.com/devlikeapro/waha/issues/1714, sem fix
@@ -189,7 +219,6 @@ automacaoRouter.post("/followup/enviar", async (req, res) => {
       });
       return res.json({ erro_registrado: true, detail: sendErr.message });
     }
-    const messageId = result?.data?.key?.id || null;
 
     // Mesma convenção já usada pelo Chat manual pra anexo (WhatsAppChat.tsx):
     // "[Anexo]: <url>\n<legenda>" -- é isso que a tela de conversa procura
@@ -215,6 +244,8 @@ automacaoRouter.post("/followup/enviar", async (req, res) => {
             direcao: "outbound",
             status: "sent",
             whatsapp_message_id: messageId,
+            via,
+            conexao_user_id: corretor_id,
             tipo: tipoSalvo,
             canal: "followup",
             lida: true,

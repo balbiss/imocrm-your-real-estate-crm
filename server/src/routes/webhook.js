@@ -6,6 +6,7 @@ import { uploadWhatsappMedia } from "../lib/media.js";
 import { sendPushToUser } from "../push.js";
 import { normalizeBaileysMessage, normalizeWahaMessage } from "../lib/normalizeWhatsapp.js";
 import { checkSecret } from "../lib/webhookSecret.js";
+import { chaveDaMensagem, reservarChave, liberarChave } from "../lib/chave.js";
 
 export const webhookRouter = Router();
 
@@ -164,8 +165,25 @@ async function getInstanceBySession(sessionName) {
 }
 
 // ===================== PIPELINE COMUM =====================
-async function processInboundMessage(normalized, instance) {
+// Usado pelas três vias (Baileys, WAHA e API oficial -- routes/whatsappOficial.js).
+// opts.via: 'oficial' | 'nao_oficial'; opts.baixarMidia(ref) -> Buffer (a oficial baixa a mídia
+// com o token dela; as outras usam o providerFor da instância).
+export async function processInboundMessage(normalized, instance, opts = {}) {
   if (!normalized || normalized.isGroup) return;
+
+  // Híbrido: a mesma mensagem chega pela oficial e pela não oficial quase juntas, com ids
+  // diferentes mas a mesma chave. Só a primeira passa (o trigger do banco é a última barreira).
+  const chave = chaveDaMensagem(normalized.sourceId);
+  if (chave && !reservarChave(chave)) return;
+  try {
+    await processarInbound(normalized, instance, opts, chave);
+  } catch (e) {
+    if (chave) liberarChave(chave);
+    throw e;
+  }
+}
+
+async function processarInbound(normalized, instance, opts, chave) {
 
   const {
     sourceId,
@@ -184,16 +202,34 @@ async function processInboundMessage(normalized, instance) {
     .eq("whatsapp_message_id", sourceId)
     .maybeSingle();
   if (existing) return;
+  if (chave) {
+    const { data: mesmaChave } = await supabaseAdmin
+      .from("mensagens_whatsapp")
+      .select("id")
+      .eq("wa_chave", chave)
+      .limit(1);
+    if (mesmaChave?.length) return;
+  }
 
-  // Reacao (emoji em cima de uma mensagem) -- atualiza o metadata da original.
+  // Reacao (emoji em cima de uma mensagem) -- atualiza o metadata da original. A original pode
+  // ter sido gravada pela outra via (id diferente): procura pela chave também.
   if (reaction) {
     const { targetId, emoji } = reaction;
     if (targetId) {
-      const { data: targetMsg } = await supabaseAdmin
+      let { data: targetMsg } = await supabaseAdmin
         .from("mensagens_whatsapp")
         .select("id, metadata")
         .eq("whatsapp_message_id", targetId)
         .maybeSingle();
+      const chaveAlvo = targetMsg ? null : chaveDaMensagem(targetId);
+      if (chaveAlvo) {
+        const { data } = await supabaseAdmin
+          .from("mensagens_whatsapp")
+          .select("id, metadata")
+          .eq("wa_chave", chaveAlvo)
+          .limit(1);
+        targetMsg = data?.[0] || null;
+      }
       if (targetMsg) {
         await supabaseAdmin
           .from("mensagens_whatsapp")
@@ -254,8 +290,9 @@ async function processInboundMessage(normalized, instance) {
 
   if (media && instance) {
     try {
-      const provider = providerFor(instance);
-      const buffer = await provider.downloadMedia(media.ref);
+      const buffer = opts.baixarMidia
+        ? await opts.baixarMidia(media.ref)
+        : await providerFor(instance).downloadMedia(media.ref);
       const url = await uploadWhatsappMedia(buffer, media.mimetype, media.fileName);
       const caption = media.caption ? `\n${media.caption}` : "";
       text =
@@ -284,6 +321,9 @@ async function processInboundMessage(normalized, instance) {
         direcao: fromMe ? "outbound" : "inbound",
         status: fromMe ? "sent" : "delivered",
         whatsapp_message_id: sourceId,
+        wa_chave: chave,
+        via: opts.via || "nao_oficial",
+        conexao_user_id: instance?.user_id || null,
         tipo,
         lida: fromMe ? true : false,
         metadata: normalized.raw,

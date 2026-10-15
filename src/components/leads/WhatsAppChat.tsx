@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Send, Paperclip, Check, CheckCheck, Clock, X, Smile, User, Loader2, MessageSquare, FileText } from "lucide-react";
+import { Send, Paperclip, Check, CheckCheck, Clock, X, Smile, User, Loader2, MessageSquare, FileText, AlertCircle } from "lucide-react";
 import { format, isSameDay, isToday, isYesterday } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -20,7 +20,8 @@ function formatarDivisorData(data: string): string {
 }
 import { toast } from "sonner";
 import EmojiPicker, { EmojiClickData, Theme } from "emoji-picker-react";
-import { getWhatsappAvatar, getWhatsappStatus, sendWhatsappMessage } from "@/lib/baileys";
+import { ErroBackend, getWhatsappAvatar, getWhatsappStatus, sendWhatsappMessage } from "@/lib/baileys";
+import { AvisoJanelaOficial } from "./AvisoJanelaOficial";
 
 interface Message {
   id: string;
@@ -31,6 +32,7 @@ interface Message {
   status?: string;
   metadata?: any;
   canal?: string | null;
+  via?: "oficial" | "nao_oficial" | null;
 }
 
 interface WhatsAppChatProps {
@@ -107,6 +109,20 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, leadName, ful
           });
         }
       )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "mensagens_whatsapp",
+          filter: `lead_id=eq.${leadId}`,
+        },
+        (payload) => {
+          setMessages((current) =>
+            current.map((m) => (m.id === payload.new.id ? { ...m, ...(payload.new as Message) } : m))
+          );
+        }
+      )
       .subscribe();
 
     return () => {
@@ -122,6 +138,10 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, leadName, ful
   }, [messages]);
 
   const [whatsappConnected, setWhatsappConnected] = useState(false);
+  // API oficial ligada pro usuário (o dono/gerente liga em Integrações). Com ela dá pra conversar
+  // mesmo sem a conexão por QR Code -- dentro da janela de 24h ou por modelo.
+  const [oficialAtiva, setOficialAtiva] = useState(false);
+  const [modeloAberto, setModeloAberto] = useState(false);
   const [attachment, setAttachment] = useState<File | null>(null);
   const [leadAvatar, setLeadAvatar] = useState<string | null>(null);
   const [agentAvatar, setAgentAvatar] = useState<string | null>(null);
@@ -171,7 +191,8 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, leadName, ful
     const fetchStatus = async () => {
       try {
         const data = await getWhatsappStatus();
-        setWhatsappConnected(!!data.connected);
+        setWhatsappConnected(!!data.connected || !!data.oficial?.ativa);
+        setOficialAtiva(!!data.oficial?.ativa);
         if (!data.connected) return;
 
         // Buscar a foto do Lead e do Corretor em background
@@ -230,7 +251,7 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, leadName, ful
           base64,
           mimetype: blob.type,
           fileName: anexo.nome,
-        });
+        }, undefined, leadId);
 
         await supabase.from("mensagens_whatsapp" as any).insert({
           id: crypto.randomUUID(),
@@ -242,10 +263,16 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, leadName, ful
           direcao: "outbound",
           tipo: anexo.tipo === "imagem" ? "image" : anexo.tipo === "video" ? "video" : "document",
           status: "sent",
+          via: result?.via || null,
         });
       } catch (err) {
         console.error("Erro ao enviar anexo do template:", err);
         falhas++;
+        if (err instanceof ErroBackend && err.codigo === "FORA_DA_JANELA") {
+          toast.error(err.message);
+          setModeloAberto(true);
+          break;
+        }
       }
     }
     setSending(false);
@@ -319,18 +346,21 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, leadName, ful
       setMessages((prev) => [...prev, optimisticMessage]);
 
       let whatsappMessageId: string | null = null;
+      let via: "oficial" | "nao_oficial" | null = null;
       if (pendingAttachment && base64) {
         // O backend resolve o JID certo (com/sem nono dígito) e envia via baileys-api
         const result = await sendWhatsappMessage(phoneNumber, messageContent, {
           base64,
           mimetype,
           fileName: pendingAttachment.name,
-        }, quoted);
+        }, quoted, leadId);
         whatsappMessageId = result?.messageId || null;
+        via = result?.via || null;
       } else {
         // Envia apenas o texto — o backend resolve o JID e faz o envio
-        const result = await sendWhatsappMessage(phoneNumber, messageContent, undefined, quoted);
+        const result = await sendWhatsappMessage(phoneNumber, messageContent, undefined, quoted, leadId);
         whatsappMessageId = result?.messageId || null;
+        via = result?.via || null;
       }
 
       // 2. Salvar no banco (direção outbound)
@@ -358,6 +388,7 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, leadName, ful
           direcao: "outbound",
           tipo: typeSent,
           status: "sent",
+          via,
         },
         { onConflict: "whatsapp_message_id", ignoreDuplicates: true }
       );
@@ -367,6 +398,8 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, leadName, ful
       setMessages((prev) => prev.filter(m => m.id !== messageId));
       console.error("Erro no envio:", error);
       toast.error(`Falha ao enviar: ${error.message}`);
+      // API oficial fora da janela de 24h (e sem conexão por QR Code): só modelo aprovado.
+      if (error instanceof ErroBackend && error.codigo === "FORA_DA_JANELA") setModeloAberto(true);
       setNewMessage(messageContent); // Devolve o texto se falhar
       if (pendingAttachment) setAttachment(pendingAttachment); // Devolve o anexo tambem
       if (quoted) setRespondendoA(respondendoA); // Devolve a citação tambem
@@ -538,12 +571,20 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, leadName, ful
                       <span className="text-[11px] whitespace-nowrap">
                         {format(new Date(msg.created_at), "HH:mm", { locale: ptBR })}
                       </span>
+                      {msg.direcao === "outbound" && msg.via === "oficial" && (
+                        <span className="ml-1 text-[9px] font-bold uppercase tracking-wide text-emerald-700/70" title="Saiu pela API oficial">
+                          oficial
+                        </span>
+                      )}
                       {msg.direcao === "outbound" && (
                         <span className="ml-1 flex items-center">
                           {msg.status === "pending" && <Clock className="h-[10px] w-[10px]" />}
                           {(msg.status === "sent" || !msg.status) && <Check className="h-[14px] w-[14px]" />}
                           {msg.status === "delivered" && <CheckCheck className="h-[14px] w-[14px]" />}
                           {msg.status === "read" && <CheckCheck className="h-[14px] w-[14px] text-[#53BDEB]" />}
+                          {msg.status === "failed" && (
+                            <AlertCircle className="h-[14px] w-[14px] text-red-500" aria-label="Não entregue" />
+                          )}
                         </span>
                       )}
                     </div>
@@ -561,6 +602,14 @@ export function WhatsAppChat({ leadId, imobiliariaId, phoneNumber, leadName, ful
 
       {/* Input de Envio */}
       <div className="flex flex-col bg-[#F0F2F5] z-10 shrink-0 border-t border-[#D1D7DB]">
+        {oficialAtiva && (
+          <AvisoJanelaOficial
+            leadId={leadId}
+            qtdMensagens={messages.length}
+            abrirModelo={modeloAberto}
+            onAbrirModelo={setModeloAberto}
+          />
+        )}
         {respondendoA && (
           <div className="px-4 pt-3 pb-1 flex items-center gap-2 bg-[#F0F2F5]">
             <div className="flex-1 min-w-0 bg-[#E9EDEF] border-l-4 border-[#00A884] text-[13px] px-3 py-1.5 rounded-md flex items-center justify-between gap-2">

@@ -24,6 +24,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { WhatsAppIntegrationCard } from "@/components/integrations/WhatsAppIntegrationCard";
+import { WhatsAppOficialEquipe } from "@/components/integrations/WhatsAppOficialEquipe";
 import { useAuth } from "@/context/AuthContext";
 import { usePermissions } from "@/hooks/usePermissions";
 
@@ -294,6 +295,9 @@ function IntegrationsPage() {
         {/* Cards de integrações */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {user && <WhatsAppIntegrationCard userId={user.id} userName={userName} />}
+
+          {/* API oficial do WhatsApp de cada pessoa da equipe (só dono/gerente) */}
+          {can('configure_system') && <WhatsAppOficialEquipe />}
           
           {can('configure_system') && integrations.map((item) => (
             <Card

@@ -14,6 +14,9 @@ export interface WhatsappStatus {
   jid?: string | null;
   qrCode?: string | null;
   phoneNumber?: string | null;
+  // API oficial do usuário (ligada pelo dono/gerente). Com ela ativa dá pra conversar pelo chat
+  // mesmo sem a não oficial conectada (dentro da janela de 24h ou por modelo).
+  oficial?: { ativa: boolean; numero: string | null; erro: string | null } | null;
 }
 
 async function authHeaders(): Promise<Record<string, string>> {
@@ -25,7 +28,16 @@ async function authHeaders(): Promise<Record<string, string>> {
   };
 }
 
-async function call<T = any>(path: string, options: RequestInit = {}): Promise<T> {
+// Erro do backend com o código (ex.: "FORA_DA_JANELA") pra tela decidir o que mostrar.
+export class ErroBackend extends Error {
+  codigo?: string;
+  constructor(mensagem: string, codigo?: string) {
+    super(mensagem);
+    this.codigo = codigo;
+  }
+}
+
+export async function call<T = any>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = await authHeaders();
   const res = await fetch(`${BACKEND_URL}${path}`, {
     ...options,
@@ -34,7 +46,7 @@ async function call<T = any>(path: string, options: RequestInit = {}): Promise<T
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(data?.error || `Erro na API do WhatsApp (${res.status})`);
+    throw new ErroBackend(data?.error || `Erro na API do WhatsApp (${res.status})`, data?.codigo);
   }
   return data as T;
 }
@@ -75,12 +87,14 @@ export interface SendAttachment {
   fileName?: string;
 }
 
-export function sendWhatsappMessage(phone: string, text?: string, attachment?: SendAttachment, quoted?: any) {
-  return call<{ success: boolean; jid: string; messageId: string | null }>(
+// leadId: com a API oficial ligada, o backend usa pra saber se a janela de 24h está aberta.
+// via: por onde saiu ("oficial" | "nao_oficial") -- vai gravado na mensagem.
+export function sendWhatsappMessage(phone: string, text?: string, attachment?: SendAttachment, quoted?: any, leadId?: string) {
+  return call<{ success: boolean; jid: string | null; messageId: string | null; via?: "oficial" | "nao_oficial" }>(
     "/api/whatsapp/send",
     {
       method: "POST",
-      body: JSON.stringify({ phone, text, attachment, quoted }),
+      body: JSON.stringify({ phone, text, attachment, quoted, leadId }),
     }
   );
 }

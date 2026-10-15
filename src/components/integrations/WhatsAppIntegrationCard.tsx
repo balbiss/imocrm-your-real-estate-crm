@@ -16,6 +16,26 @@ import {
   WhatsappStatus,
 } from "@/lib/baileys";
 import { UserWhatsAppModal } from "./UserWhatsAppModal";
+import { formatarNumero } from "@/lib/oficial";
+
+// Situação da API oficial do usuário (quem liga/desliga é o dono ou gerente, em Integrações).
+function LinhaOficial({ oficial }: { oficial?: WhatsappStatus["oficial"] }) {
+  if (!oficial) return null;
+  return (
+    <div className={`rounded-lg px-3 py-2 text-[11px] leading-snug ${oficial.ativa ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+      {oficial.ativa ? (
+        <>
+          <b>API oficial ligada</b>{oficial.numero ? ` · ${formatarNumero(oficial.numero)}` : ""}. Se o cliente escreveu nas
+          últimas 24h, sua resposta sai pela oficial.
+        </>
+      ) : (
+        <>
+          <b>API oficial desligada</b>{oficial.erro ? `: ${oficial.erro}` : ""}. Fale com o dono ou gerente pra religar.
+        </>
+      )}
+    </div>
+  );
+}
 
 interface WhatsAppIntegrationCardProps {
   userId: string;
@@ -164,6 +184,7 @@ export function WhatsAppIntegrationCard({ userId, userName }: WhatsAppIntegratio
               </p>
             </div>
           </div>
+          <LinhaOficial oficial={status?.oficial} />
           <div className="mt-auto pt-2 space-y-2">
             <div className="space-y-1.5">
               <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Motor de conexão</span>
@@ -253,6 +274,7 @@ export function WhatsAppIntegrationCard({ userId, userName }: WhatsAppIntegratio
             </div>
           </div>
 
+          <LinhaOficial oficial={status?.oficial} />
           <div className="mt-auto pt-2 flex items-center gap-2">
             {!isConnected ? (
               <Button
