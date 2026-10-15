@@ -89,8 +89,6 @@ export function WhatsAppOficialEquipe() {
     }
   };
 
-  const algumaLigada = !!equipe?.some((m) => m.oficial?.ativa);
-
   return (
     <Card className="border-none shadow-soft bg-white md:col-span-2">
       <CardContent className="p-5 space-y-4">
@@ -116,7 +114,6 @@ export function WhatsAppOficialEquipe() {
             <Button
               variant="outline"
               className="h-8 text-[10px] font-bold uppercase tracking-wider border-slate-200"
-              disabled={!algumaLigada}
               onClick={() => setModelosAberto(true)}
             >
               <FileText className="h-3.5 w-3.5 mr-1.5" /> Modelos de mensagem
@@ -318,12 +315,19 @@ function ModelosDialog({ onClose }: { onClose: () => void }) {
             </div>
 
             {erro && <p className="text-xs text-red-600">{erro}</p>}
+            {dados && !dados.contas.length && (
+              <p className="text-xs text-amber-700 bg-amber-50 rounded-lg p-3 leading-relaxed">
+                Os modelos ficam guardados na conta de WhatsApp da Meta, que só existe depois que a API oficial é ligada.
+                Primeiro clique em <b>Ligar API oficial</b> no WhatsApp de pelo menos um corretor (lista da equipe, aqui em
+                Integrações). Depois volte aqui pra criar os modelos.
+              </p>
+            )}
             {!dados && !erro && (
               <div className="flex justify-center py-6">
                 <Loader2 className="h-5 w-5 text-slate-300 animate-spin" />
               </div>
             )}
-            {dados && !dados.modelos.length && (
+            {dados && dados.contas.length > 0 && !dados.modelos.length && (
               <p className="text-xs text-slate-400">
                 Nenhum modelo ainda. Exemplo de primeiro modelo: "Olá {"{{1}}"}! Aqui é da Hinode Imóveis. Recebemos seu
                 interesse no imóvel. Podemos conversar por aqui?"
