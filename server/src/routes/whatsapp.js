@@ -273,7 +273,7 @@ whatsappRouter.post("/send", async (req, res) => {
 
     const instance = await getInstance(req.userId);
     const naoOficialNoAr = !!(instance?.phone_number && instance.connected);
-    const conexaoOficial = await oficial.conexaoAtiva(req.userId);
+    const conexaoOficial = await oficial.conexaoUsavel(req.userId, instance);
     if (!naoOficialNoAr && !conexaoOficial) {
       return res.status(409).json({ error: "WhatsApp nao conectado" });
     }

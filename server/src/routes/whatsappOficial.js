@@ -178,18 +178,23 @@ async function leadAutorizado(leadId, perfil) {
   return data;
 }
 
+// Conexão oficial que o usuário pode usar no chat (+ o WhatsApp por QR Code dele).
+async function conexaoDoUsuario(userId) {
+  const { data: inst } = await supabaseAdmin
+    .from("whatsapp_instances")
+    .select("connected, phone_number")
+    .eq("user_id", userId)
+    .maybeSingle();
+  return { inst, conexao: await oficial.conexaoUsavel(userId, inst) };
+}
+
 // Situação da conversa pro chat: dá pra responder livre (janela aberta / não oficial no ar) ou
 // só por modelo?
 whatsappOficialRouter.get("/conversa/:leadId", async (req, res) => {
   const lead = await leadAutorizado(req.params.leadId, req.perfil);
   if (!lead) return res.status(404).json({ error: "Lead não encontrado" });
-  const conexao = await oficial.conexaoAtiva(req.userId);
+  const { inst, conexao } = await conexaoDoUsuario(req.userId);
   if (!conexao) return res.json({ oficial: false });
-  const { data: inst } = await supabaseAdmin
-    .from("whatsapp_instances")
-    .select("connected, phone_number")
-    .eq("user_id", req.userId)
-    .maybeSingle();
   res.json({
     oficial: true,
     janelaAberta: await oficial.janelaAberta(lead.id, req.userId),
@@ -202,7 +207,7 @@ whatsappOficialRouter.get("/conversa/:leadId", async (req, res) => {
 whatsappOficialRouter.get("/conversa/:leadId/modelos", async (req, res) => {
   const lead = await leadAutorizado(req.params.leadId, req.perfil);
   if (!lead) return res.status(404).json({ error: "Lead não encontrado" });
-  const conexao = await oficial.conexaoAtiva(req.userId);
+  const { conexao } = await conexaoDoUsuario(req.userId);
   if (!conexao) return res.json([]);
   try {
     res.json((await oficial.listarModelos(conexao)).filter((m) => m.status === "APPROVED"));
@@ -219,7 +224,7 @@ whatsappOficialRouter.post("/conversa/:leadId/modelo", async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: "Dados inválidos" });
   const lead = await leadAutorizado(req.params.leadId, req.perfil);
   if (!lead) return res.status(404).json({ error: "Lead não encontrado" });
-  const conexao = await oficial.conexaoAtiva(req.userId);
+  const { conexao } = await conexaoDoUsuario(req.userId);
   if (!conexao) return res.status(400).json({ error: "Sua API oficial não está ligada" });
   try {
     const { id, texto } = await oficial.enviarModelo(conexao, lead.telefone, parsed.data.nome, parsed.data.idioma, parsed.data.valores);
@@ -440,6 +445,7 @@ async function ligarOficial({ userId, imobiliariaId, token, wabaId, phoneNumberI
   }
   const numero = soDigitos(display);
 
+
   // Um número oficial só pode estar num corretor.
   const { data: outro } = await supabaseAdmin
     .from("whatsapp_oficial")
@@ -448,6 +454,19 @@ async function ligarOficial({ userId, imobiliariaId, token, wabaId, phoneNumberI
     .neq("user_id", userId)
     .maybeSingle();
   if (outro) return resp(409, { error: `Esse número já está ligado na conta de ${outro.perfis?.nome || "outro usuário"}.` });
+
+  // A oficial tem que ser o MESMO número do WhatsApp por QR Code da pessoa (se ela tiver um) --
+  // senão o cliente que escreveu pro número dela receberia a resposta de outro número.
+  const { data: inst } = await supabaseAdmin
+    .from("whatsapp_instances")
+    .select("phone_number, perfis!inner(nome)")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (inst?.phone_number && !oficial.mesmoNumero(inst.phone_number, numero)) {
+    return resp(409, {
+      error: `O número conectado na Meta (+${numero}) é diferente do WhatsApp por QR Code de ${inst.perfis?.nome || "essa pessoa"} (+${soDigitos(inst.phone_number)}). Ligue a oficial na linha de quem usa esse número, ou conecte o mesmo número na Meta.`,
+    });
+  }
 
   const noHub = await oficial.hubRegistrarNumero(pnid, wabaId, display, "oka:" + userId);
   if (noHub === "outro") return resp(409, { error: "Esse número já está conectado em outro sistema da InoovaWeb." });

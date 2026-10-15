@@ -229,6 +229,22 @@ export async function conexaoAtiva(userId) {
   return data || null;
 }
 
+// Mesmo número? (compara os 8 últimos dígitos: ignora DDI e o 9º dígito)
+export function mesmoNumero(a, b) {
+  const x = ultimos8(a || ""), y = ultimos8(b || "");
+  return x.length === 8 && x === y;
+}
+
+// Conexão oficial que pode ser usada pra falar pelo WhatsApp desse usuário. Se ele também tem
+// WhatsApp por QR Code, a oficial só vale quando é o MESMO número -- senão o cliente receberia a
+// resposta de outro número (caso real 15/10: oficial do dono ligada na linha de uma corretora).
+export async function conexaoUsavel(userId, instancia) {
+  const conexao = await conexaoAtiva(userId);
+  if (!conexao) return null;
+  if (instancia?.phone_number && !mesmoNumero(instancia.phone_number, conexao.numero)) return null;
+  return conexao;
+}
+
 export async function registrarErro(conexao, mensagem) {
   await supabaseAdmin
     .from("whatsapp_oficial")

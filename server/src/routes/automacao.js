@@ -76,7 +76,7 @@ automacaoRouter.post("/followup/enviar", async (req, res) => {
     // aí é grátis e sem risco de bloqueio. Fora dela a Meta só aceita modelo pago, e follow-up
     // automático NÃO manda modelo (decisão do dono): vai pela não oficial ou espera.
     const naoOficialNoAr = !!(instance?.phone_number && instance.connected);
-    const conexaoOficial = await oficial.conexaoAtiva(corretor_id);
+    const conexaoOficial = await oficial.conexaoUsavel(corretor_id, instance);
     const usarOficial = !!conexaoOficial && (await oficial.janelaAberta(lead_id, corretor_id));
 
     if (!naoOficialNoAr && !usarOficial) {
