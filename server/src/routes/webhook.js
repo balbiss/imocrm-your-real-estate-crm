@@ -274,6 +274,10 @@ async function processarInbound(normalized, instance, opts, chave) {
     // o lead normalmente.
     if (fromMe) return;
     if (!instance || !imobiliariaId) return; // nao da pra saber a imobiliaria dona
+    // WhatsApp do DONO nunca cria lead (pedido do dono 15/10): ele recebe de tudo ali --
+    // amigos, fornecedores, corretores de fora -- e isso virava card na roleta pros
+    // corretores. Quem ja e lead continua tendo a conversa gravada (caminho de cima).
+    if (instance.perfis?.role === "dono") return;
     const novoLead = await criarLeadDoWhatsapp(contactPhone, instance, imobiliariaId, pushName);
     if (!novoLead) return;
     lead = { id: novoLead.id, imobiliaria_id: novoLead.imobiliaria_id };
@@ -427,9 +431,8 @@ async function criarLeadDoWhatsapp(contactPhone, instance, imobiliariaId, pushNa
 
   // Pedido do dono (30/09): quem chama direto no WhatsApp de um corretor (ex.:
   // anúncio "clique pro WhatsApp" que abre o número dele) é lead DESSE
-  // corretor -- antes ia pra roleta e caía com outro. Exceção por enquanto:
-  // WhatsApp do próprio dono da imobiliária continua indo pra roleta
-  // (pendente de confirmação do dono), e conta bloqueada também.
+  // corretor -- antes ia pra roleta e caía com outro. Conta bloqueada vai pra
+  // roleta. (WhatsApp do dono nem chega aqui desde 15/10: não cria lead.)
   const donoDoWhatsapp = instance?.perfis;
   let corretorId = null;
   if (instance?.user_id && donoDoWhatsapp && donoDoWhatsapp.role !== "dono" && !donoDoWhatsapp.bloqueado) {
