@@ -65,6 +65,24 @@ automacaoRouter.post("/followup/enviar", async (req, res) => {
       return res.status(400).json({ error: "payload incompleto" });
     }
 
+    // Fluxo desligado (Inativo) ou arquivado: NÃO manda. Antes, desligar o fluxo só impedia
+    // follow-up novo -- quem já estava no meio da sequência continuava na fila e disparava
+    // assim que o WhatsApp do corretor voltasse (caso da Bárbara, 11/11). A execução fica
+    // parada no mesmo passo; se o fluxo for ligado de novo, continua de onde parou.
+    const { data: exec } = await supabaseAdmin
+      .from("followup_execucoes")
+      .select("status, fluxo:followup_fluxos(ativo, arquivado_em)")
+      .eq("id", execucao_id)
+      .maybeSingle();
+    if (!exec || exec.status !== "ativo" || !exec.fluxo?.ativo || exec.fluxo?.arquivado_em) {
+      await supabaseAdmin
+        .from("followup_execucoes")
+        .update({ reservado_em: null, proximo_envio_em: new Date(Date.now() + 60 * 60 * 1000).toISOString() })
+        .eq("id", execucao_id)
+        .eq("status", "ativo");
+      return res.json({ skipped: "fluxo_desligado" });
+    }
+
     // Instância do corretor dono do lead.
     const { data: instance } = await supabaseAdmin
       .from("whatsapp_instances")
