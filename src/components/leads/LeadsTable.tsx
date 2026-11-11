@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Table,
   TableBody,
@@ -17,7 +17,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MessageSquare, Phone, MoreVertical, Flame, Snowflake, Sun, Shuffle } from "lucide-react";
+import { MessageSquare, Phone, MoreVertical, Flame, Snowflake, Sun, Shuffle, ArrowLeftRight } from "lucide-react";
 import { LeadDetailsModal } from "./LeadDetailsModal";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -64,7 +64,26 @@ export function LeadsTable({ leads, isLoading, colunas, role }: LeadsTableProps)
   const [followUpDateTemp, setFollowUpDateTemp] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [confirmBolsao, setConfirmBolsao] = useState(false);
+  const [transferirAberto, setTransferirAberto] = useState(false);
+  const [transferirPara, setTransferirPara] = useState("");
+  const [modoTransferencia, setModoTransferencia] = useState<"manter" | "rebatida">("manter");
   const podeSelecionar = role === "dono" || role === "gerente";
+
+  // Quem pode receber a transferência em massa: todo mundo ativo da equipe
+  // (dono, gerente e corretores) -- mesma lista do "Transferir para" do card.
+  const { data: equipe } = useQuery({
+    queryKey: ["equipe-transferencia-massa"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("perfis")
+        .select("id, nome, role")
+        .is("removido_em" as any, null)
+        .order("nome", { ascending: true });
+      if (error) throw error;
+      return (data || []) as { id: string; nome: string; role: string }[];
+    },
+    enabled: podeSelecionar && transferirAberto,
+  });
 
   // Especificação do dono (04/08): mudar pra qualquer um desses status
   // exige agendar o próximo contato — não dá pra fechar sem preencher.
@@ -206,6 +225,61 @@ export function LeadsTable({ leads, isLoading, colunas, role }: LeadsTableProps)
     onError: (error: any) => toast.error("Erro ao mandar para o Bolsão: " + (error?.message || "erro desconhecido")),
   });
 
+  // Pedido do dono (11/11): selecionar vários leads na lista e transferir todos
+  // de uma vez pra alguém (ex: tirar tudo do "Oka corretor" e passar pro Oka
+  // dono). Dois jeitos:
+  //  - "manter" (padrão): só troca o dono do lead -- coluna, status, próximo
+  //    contato e visita continuam iguais (mesmo UPDATE direto que o SlaMonitor faz);
+  //  - "rebatida": a MESMA função do "Transferir para" do card
+  //    (distribuir_leads_massa), que joga quem já tinha corretor em REBATIDA
+  //    e limpa próximo contato/visita.
+  const bulkTransferMutation = useMutation({
+    mutationFn: async ({ ids, corretorId, modo }: { ids: string[]; corretorId: string; modo: "manter" | "rebatida" }) => {
+      const TAMANHO_LOTE = 150;
+      const { data: auth } = await supabase.auth.getUser();
+      const nomeDestino = equipe?.find((p) => p.id === corretorId)?.nome ?? "outro corretor";
+      for (let i = 0; i < ids.length; i += TAMANHO_LOTE) {
+        const lote = ids.slice(i, i + TAMANHO_LOTE);
+        if (modo === "rebatida") {
+          const { error } = await supabase.rpc("distribuir_leads_massa", {
+            p_lead_ids: lote,
+            p_corretor_id: corretorId,
+            p_tipo: "manual",
+          });
+          if (error) throw error;
+        } else {
+          const { error } = await supabase
+            .from("leads")
+            .update({ corretor_id: corretorId, data_atribuicao: new Date().toISOString() } as any)
+            .in("id", lote);
+          if (error) throw error;
+        }
+        // histórico do card (melhor esforço: se falhar, a transferência já valeu)
+        if (auth?.user?.id) {
+          await supabase.from("leads_interacoes").insert(
+            lote.map((id) => ({
+              lead_id: id,
+              autor_id: auth.user!.id,
+              tipo: "auto",
+              conteudo: "Transferido em massa para " + nomeDestino + (modo === "rebatida" ? " (recomeçou como Rebatida)" : " (mantida a etapa do funil)"),
+            })) as any,
+          );
+        }
+      }
+    },
+    onSuccess: (_data, { ids, corretorId }) => {
+      const nome = equipe?.find((p) => p.id === corretorId)?.nome ?? "o corretor";
+      queryClient.invalidateQueries({ queryKey: ["leads"] });
+      queryClient.invalidateQueries({ queryKey: ["leads-redistribution"] });
+      toast.success(`${ids.length} lead(s) transferidos para ${nome}.`);
+      setSelectedIds([]);
+      setTransferirAberto(false);
+      setTransferirPara("");
+      setModoTransferencia("manter");
+    },
+    onError: (error: any) => toast.error("Erro ao transferir: " + (error?.message || "erro desconhecido")),
+  });
+
   const toggleSelected = (id: string) => {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
@@ -241,6 +315,14 @@ export function LeadsTable({ leads, isLoading, colunas, role }: LeadsTableProps)
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="sm" className="h-7 text-[10px] font-bold uppercase" onClick={() => setSelectedIds([])}>
               Limpar
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-[10px] font-bold uppercase gap-1.5"
+              onClick={() => setTransferirAberto(true)}
+            >
+              <ArrowLeftRight className="h-3 w-3" /> Transferir para...
             </Button>
             <Button
               size="sm"
@@ -475,6 +557,54 @@ export function LeadsTable({ leads, isLoading, colunas, role }: LeadsTableProps)
               }}
             >
               Salvar e agendar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={transferirAberto} onOpenChange={(o) => { setTransferirAberto(o); if (!o) setTransferirPara(""); }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-sm font-bold">
+              Transferir {selectedIds.length} lead(s)
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-1.5 py-1">
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Para quem</label>
+            <select
+              value={transferirPara}
+              onChange={(e) => setTransferirPara(e.target.value)}
+              className="w-full h-9 rounded-md border border-slate-200 bg-white px-2 text-sm"
+            >
+              <option value="">Escolha…</option>
+              {(equipe || []).map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.nome}{p.role === "dono" ? " (Dono)" : p.role === "gerente" ? " (Gerente)" : ""}
+                </option>
+              ))}
+            </select>
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter block pt-2">Etapa do funil</label>
+            <label className="flex items-start gap-2 text-[12.5px] cursor-pointer">
+              <input type="radio" className="mt-0.5" checked={modoTransferencia === "manter"} onChange={() => setModoTransferencia("manter")} />
+              <span><strong>Manter onde estão</strong> — cada lead continua na mesma coluna, com o mesmo próximo contato e visita.</span>
+            </label>
+            <label className="flex items-start gap-2 text-[12.5px] cursor-pointer">
+              <input type="radio" className="mt-0.5" checked={modoTransferencia === "rebatida"} onChange={() => setModoTransferencia("rebatida")} />
+              <span><strong>Recomeçar como Rebatida</strong> — igual ao "Transferir para" do card: vai pra REBATIDA e limpa próximo contato/visita.</span>
+            </label>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="ghost" size="sm" className="text-saas-xs font-bold uppercase" onClick={() => setTransferirAberto(false)}>
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              className="text-saas-xs font-bold uppercase px-6 bg-primary"
+              disabled={!transferirPara || bulkTransferMutation.isPending}
+              onClick={() => bulkTransferMutation.mutate({ ids: selectedIds, corretorId: transferirPara, modo: modoTransferencia })}
+            >
+              {bulkTransferMutation.isPending ? "Transferindo..." : "Transferir"}
             </Button>
           </DialogFooter>
         </DialogContent>
