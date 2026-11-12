@@ -750,7 +750,15 @@ export function LeadDetailsModal({ leadId, open, onOpenChange, initialTab = "det
                         <div className="flex gap-2 items-center pt-1">
                           <span className="text-[10px] font-bold text-amber-600 uppercase shrink-0">2º nº (form):</span>
                           <span className="text-sm text-slate-600 flex-1">{lead.telefone_alternativo}</span>
-                          <Button size="sm" variant="outline" className="h-7 px-2 text-[10px] font-bold text-slate-500" onClick={() => { setEditTelefone(lead.telefone_alternativo!); handleUpdateField("telefone", lead.telefone_alternativo!); }}>
+                          {/* Troca os dois de lugar: o principal vira o 2º nº (antes só copiava e o outro sumia — dono 12/11) */}
+                          <Button size="sm" variant="outline" className="h-7 px-2 text-[10px] font-bold text-slate-500" onClick={() => {
+                            const alt = lead.telefone_alternativo!;
+                            setEditTelefone(alt);
+                            updateMutation.mutate({
+                              updates: { telefone: alt, telefone_alternativo: lead.telefone },
+                              descricao: `Telefone principal trocado: agora ${alt} (o anterior, ${lead.telefone}, ficou como 2º número)`,
+                            });
+                          }}>
                             Usar este
                           </Button>
                           <Button size="sm" variant="outline" className="h-7 px-2 text-green-600 border-green-100 bg-green-50" asChild>
